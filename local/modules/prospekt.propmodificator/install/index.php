@@ -1,19 +1,20 @@
 <?php
 /**
  * Установщик / деинсталлятор модуля prospekt.propmodificator
- *
- * Использование:
- *   /bitrix/admin/partner_modules.php — стандартный интерфейс Битрикс
  */
 
+use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
-use Bitrix\Main\Loader;
+use Bitrix\Main\Config\Option;
 use Bitrix\Main\EventManager;
-use Prospekt\PropModificator\Config;
+use Bitrix\Main\Loader;
+use Bitrix\Main\Application;
 
 if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
+
+Loc::loadMessages(__FILE__);
 
 class prospekt_propmodificator extends CModule
 {
@@ -26,6 +27,9 @@ class prospekt_propmodificator extends CModule
     public $PARTNER_NAME;
     public $PARTNER_URI;
 
+    /** @var string */
+    private $modulePath;
+
     public function __construct()
     {
         $arModuleVersion = [];
@@ -33,10 +37,11 @@ class prospekt_propmodificator extends CModule
 
         $this->MODULE_VERSION      = $arModuleVersion['VERSION'];
         $this->MODULE_VERSION_DATE = $arModuleVersion['VERSION_DATE'];
-        $this->MODULE_NAME         = 'Модификатор свойств ТП (Аспро: Премьер)';
-        $this->MODULE_DESCRIPTION  = 'Добавляет произвольный ввод формата и тиража на карточке товара с интерполяцией цены.';
-        $this->PARTNER_NAME        = 'Prospekt';
+        $this->MODULE_NAME         = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_MODULE_NAME');
+        $this->MODULE_DESCRIPTION  = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_MODULE_DESCRIPTION');
+        $this->PARTNER_NAME        = 'PROSPEKT-WEB';
         $this->PARTNER_URI         = 'https://prospektweb.ru';
+        $this->modulePath          = dirname(__DIR__);
     }
 
     // ─── Установка ────────────────────────────────────────────────────────────
@@ -45,36 +50,59 @@ class prospekt_propmodificator extends CModule
     {
         global $APPLICATION;
 
-        ModuleManager::registerModule($this->MODULE_ID);
-        Loader::includeModule($this->MODULE_ID);
+        if (!$this->checkDependencies()) {
+            return false;
+        }
 
-        $this->InstallDB();
-        $this->InstallFiles();
-        $this->InstallEvents();
+        $step = (int)($_REQUEST['step'] ?? 1);
 
-        $APPLICATION->IncludeAdminFile(
-            'Установка модуля ' . $this->MODULE_NAME,
-            __DIR__ . '/step.php'
-        );
+        switch ($step) {
+            case 2:
+                ModuleManager::registerModule($this->MODULE_ID);
+                Loader::includeModule($this->MODULE_ID);
+
+                $this->installDB();
+                $this->installFiles();
+                $this->installEvents();
+
+                $APPLICATION->IncludeAdminFile(
+                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    __DIR__ . '/step2.php'
+                );
+                break;
+
+            case 3:
+                $APPLICATION->IncludeAdminFile(
+                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    __DIR__ . '/step3.php'
+                );
+                break;
+
+            default:
+                $APPLICATION->IncludeAdminFile(
+                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    __DIR__ . '/step1.php'
+                );
+                break;
+        }
+
+        return true;
     }
 
-    public function InstallDB()
+    public function installDB(): bool
     {
-        // Определяем ID инфоблоков
-        $offersIblockId   = $this->detectOffersIblockId();
-        $productsIblockId = $this->detectProductsIblockId($offersIblockId);
+        $offersIblockId   = (int)($_REQUEST['OFFERS_IBLOCK_ID'] ?? $this->detectOffersIblockId());
+        $productsIblockId = (int)($_REQUEST['PRODUCTS_IBLOCK_ID'] ?? $this->detectProductsIblockId($offersIblockId));
 
         if ($offersIblockId) {
-            COption::SetOptionString($this->MODULE_ID, 'OFFERS_IBLOCK_ID', $offersIblockId);
+            Option::set($this->MODULE_ID, 'OFFERS_IBLOCK_ID', $offersIblockId);
         }
         if ($productsIblockId) {
-            COption::SetOptionString($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', $productsIblockId);
+            Option::set($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', $productsIblockId);
         }
 
-        // Проверяем свойства в инфоблоке ТП
         $this->validateOffersProperties($offersIblockId);
 
-        // Создаём свойства в инфоблоке товаров
         if ($productsIblockId) {
             $this->createProductProperties($productsIblockId);
         }
@@ -82,24 +110,23 @@ class prospekt_propmodificator extends CModule
         return true;
     }
 
-    public function InstallFiles()
+    public function installFiles(): bool
     {
-        // Копируем JS/CSS в публичную директорию Битрикс
-        $srcDir  = __DIR__ . '/js';
-        $destDir = $_SERVER['DOCUMENT_ROOT'] . '/bitrix/js/prospekt.propmodificator';
+        $srcDir  = __DIR__ . '/assets/js/prospekt.propmodificator';
+        $destDir = '/bitrix/js/prospekt.propmodificator';
 
-        if (is_dir($srcDir)) {
-            CopyDirFiles($srcDir, $destDir, true, true);
+        if (is_dir(Application::getDocumentRoot() . '/bitrix/js')) {
+            CopyDirFiles($srcDir, Application::getDocumentRoot() . $destDir, true, true);
         }
 
         return true;
     }
 
-    public function InstallEvents()
+    public function installEvents(): void
     {
         $eventManager = EventManager::getInstance();
 
-        $eventManager->registerEventHandlerCompatible(
+        $eventManager->registerEventHandler(
             'sale',
             'OnBeforeBasketAdd',
             $this->MODULE_ID,
@@ -107,15 +134,13 @@ class prospekt_propmodificator extends CModule
             'onBeforeBasketAdd'
         );
 
-        $eventManager->registerEventHandlerCompatible(
+        $eventManager->registerEventHandler(
             'sale',
             'OnBeforeSaleBasketItemSetFields',
             $this->MODULE_ID,
             'Prospekt\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
         );
-
-        return true;
     }
 
     // ─── Деинсталляция ────────────────────────────────────────────────────────
@@ -124,35 +149,61 @@ class prospekt_propmodificator extends CModule
     {
         global $APPLICATION;
 
-        $this->UnInstallEvents();
-        $this->UnInstallFiles();
-        $this->UnInstallDB();
+        $step = (int)($_REQUEST['step'] ?? 1);
 
-        ModuleManager::unRegisterModule($this->MODULE_ID);
+        switch ($step) {
+            case 2:
+                $saveData = (isset($_REQUEST['save_data']) && $_REQUEST['save_data'] === 'Y');
 
-        $APPLICATION->IncludeAdminFile(
-            'Деинсталляция модуля ' . $this->MODULE_NAME,
-            __DIR__ . '/unstep.php'
-        );
+                $this->uninstallEvents();
+                $this->uninstallFiles();
+                $this->uninstallDB($saveData);
+
+                ModuleManager::unRegisterModule($this->MODULE_ID);
+
+                $APPLICATION->IncludeAdminFile(
+                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNINSTALL_TITLE'),
+                    __DIR__ . '/unstep2.php'
+                );
+                break;
+
+            default:
+                $APPLICATION->IncludeAdminFile(
+                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNINSTALL_TITLE'),
+                    __DIR__ . '/unstep1.php'
+                );
+                break;
+        }
     }
 
-    public function UnInstallDB()
+    public function uninstallDB(bool $saveData = true): bool
     {
-        // Свойства товаров намеренно не удаляем — в них могут быть данные
-        return true;
-    }
-
-    public function UnInstallFiles()
-    {
-        $destDir = $_SERVER['DOCUMENT_ROOT'] . '/bitrix/js/prospekt.propmodificator';
-        if (is_dir($destDir)) {
-            DeleteDirFilesEx($destDir);
+        if (!$saveData) {
+            if (Loader::includeModule('iblock')) {
+                $productsIblockId = (int)Option::get($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', 0);
+                if ($productsIblockId > 0) {
+                    foreach (['SET_FORMAT', 'SET_VOLUME'] as $code) {
+                        $rsProp = CIBlockProperty::GetList(
+                            [],
+                            ['IBLOCK_ID' => $productsIblockId, 'CODE' => $code]
+                        );
+                        if ($arProp = $rsProp->Fetch()) {
+                            CIBlockProperty::Delete($arProp['ID']);
+                        }
+                    }
+                }
+            }
         }
 
         return true;
     }
 
-    public function UnInstallEvents()
+    public function uninstallFiles(): void
+    {
+        DeleteDirFilesEx('/bitrix/js/prospekt.propmodificator');
+    }
+
+    public function uninstallEvents(): void
     {
         $eventManager = EventManager::getInstance();
 
@@ -171,6 +222,29 @@ class prospekt_propmodificator extends CModule
             'Prospekt\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
         );
+    }
+
+    // ─── Проверка зависимостей ────────────────────────────────────────────────
+
+    public function checkDependencies(): bool
+    {
+        $errors = [];
+
+        if (!Loader::includeModule('iblock')) {
+            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_IBLOCK');
+        }
+        if (!Loader::includeModule('catalog')) {
+            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_CATALOG');
+        }
+        if (!Loader::includeModule('sale')) {
+            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_SALE');
+        }
+
+        if (!empty($errors)) {
+            global $APPLICATION;
+            $APPLICATION->ThrowException(implode('<br>', $errors));
+            return false;
+        }
 
         return true;
     }
@@ -179,12 +253,9 @@ class prospekt_propmodificator extends CModule
 
     /**
      * Автоопределение инфоблока торговых предложений.
-     * Сначала пробуем найти инфоблок типа aspro_premier_catalog,
-     * затем проверяем связь через CCatalogSKU.
      */
-    private function detectOffersIblockId(): int
+    public function detectOffersIblockId(): int
     {
-        // Пробуем найти через CCatalogSKU для известного ID товарного инфоблока
         if (Loader::includeModule('catalog')) {
             $arSku = CCatalogSKU::GetInfoByProductIBlock(14);
             if (!empty($arSku['IBLOCK_ID'])) {
@@ -192,25 +263,21 @@ class prospekt_propmodificator extends CModule
             }
         }
 
-        // Поиск по типу инфоблока Аспро
         $rsIblock = CIBlock::GetList(
             ['SORT' => 'ASC'],
             ['IBLOCK_TYPE_ID' => 'aspro_premier_catalog', 'ACTIVE' => 'Y']
         );
         if ($ar = $rsIblock->Fetch()) {
-            // Берём первый попавшийся инфоблок ТП в типе каталога Аспро
-            // Реальное определение зависит от структуры конкретного сайта
             return (int)$ar['ID'];
         }
 
-        // Фолбэк — значение по умолчанию
         return 15;
     }
 
     /**
      * Определяем инфоблок товаров по инфоблоку ТП.
      */
-    private function detectProductsIblockId(int $offersIblockId): int
+    public function detectProductsIblockId(int $offersIblockId): int
     {
         if (Loader::includeModule('catalog')) {
             $arSku = CCatalogSKU::GetInfoByOfferIBlock($offersIblockId);
@@ -226,14 +293,15 @@ class prospekt_propmodificator extends CModule
      * Проверяем наличие и валидность свойств CALC_PROP_FORMAT и CALC_PROP_VOLUME
      * в инфоблоке торговых предложений.
      */
-    private function validateOffersProperties(int $offersIblockId): void
+    public function validateOffersProperties(int $offersIblockId): array
     {
-        if (!Loader::includeModule('iblock')) {
-            return;
+        $issues = [];
+
+        if (!Loader::includeModule('iblock') || $offersIblockId <= 0) {
+            return $issues;
         }
 
         $propCodes = ['CALC_PROP_FORMAT', 'CALC_PROP_VOLUME'];
-        $issues    = [];
 
         foreach ($propCodes as $code) {
             $rsProp = CIBlockProperty::GetList(
@@ -247,7 +315,6 @@ class prospekt_propmodificator extends CModule
                 continue;
             }
 
-            // Проверяем значения перечисления
             $rsEnum = CIBlockPropertyEnum::GetList(
                 ['SORT' => 'ASC'],
                 ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code]
@@ -274,20 +341,17 @@ class prospekt_propmodificator extends CModule
             }
         }
 
-        // Сохраняем результат валидации для отображения в опциях
-        COption::SetOptionString(
-            $this->MODULE_ID,
-            'VALIDATION_ISSUES',
-            implode("\n", $issues)
-        );
+        Option::set($this->MODULE_ID, 'VALIDATION_ISSUES', implode("\n", $issues));
+
+        return $issues;
     }
 
     /**
      * Создаём SET_FORMAT и SET_VOLUME в инфоблоке товаров (если не существуют).
      */
-    private function createProductProperties(int $productsIblockId): void
+    public function createProductProperties(int $productsIblockId): void
     {
-        if (!Loader::includeModule('iblock')) {
+        if (!Loader::includeModule('iblock') || $productsIblockId <= 0) {
             return;
         }
 
@@ -323,7 +387,6 @@ class prospekt_propmodificator extends CModule
         $oProp = new CIBlockProperty();
 
         foreach ($propsToCreate as $arProp) {
-            // Проверяем, не существует ли свойство уже
             $rsProp = CIBlockProperty::GetList(
                 [],
                 ['IBLOCK_ID' => $productsIblockId, 'CODE' => $arProp['CODE']]

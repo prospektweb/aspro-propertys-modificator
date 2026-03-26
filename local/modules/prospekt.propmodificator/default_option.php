@@ -7,7 +7,7 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
 
-$arDefaultOptions = [
+$prospekt_propmodificator_default_option = [
     'OFFERS_IBLOCK_ID'      => '15',
     'PRODUCTS_IBLOCK_ID'    => '14',
     'FORMAT_PROP_CODE'      => 'CALC_PROP_FORMAT',

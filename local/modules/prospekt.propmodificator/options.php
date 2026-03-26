@@ -24,15 +24,15 @@ if (!$USER->IsAdmin()) {
     $APPLICATION->AuthForm('Нет доступа');
 }
 
-$APPLICATION->SetTitle('Настройки модуля «Модификатор свойств ТП»');
+$APPLICATION->SetTitle(Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TITLE'));
 
 require $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_admin_after.php';
 
 $tabControl = new CAdminTabControl('tabControl', [
     [
         'DIV'   => 'edit1',
-        'TAB'   => 'Основные настройки',
-        'TITLE' => 'Параметры инфоблоков и свойств',
+        'TAB'   => Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TAB_MAIN'),
+        'TITLE' => Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TAB_MAIN_TITLE'),
     ],
 ]);
 
@@ -63,14 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 require __DIR__ . '/default_option.php';
 
 $options = [];
-foreach ($arDefaultOptions as $key => $default) {
+foreach ($prospekt_propmodificator_default_option as $key => $default) {
     $options[$key] = COption::GetOptionString($moduleId, $key, $default);
 }
 ?>
 
 <?php if ($_GET['saved'] === 'Y'): ?>
     <div class="adm-info-message-wrap success">
-        <div class="adm-info-message">Настройки сохранены.</div>
+        <div class="adm-info-message"><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SAVED') ?></div>
     </div>
 <?php endif; ?>
 
@@ -82,8 +82,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td width="40%" class="adm-detail-content-cell-l">
-            <b>ID инфоблока торговых предложений</b><br>
-            <small>Инфоблок, где хранятся ТП (по умолчанию 15)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="OFFERS_IBLOCK_ID"
@@ -94,8 +94,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>ID инфоблока товаров</b><br>
-            <small>Инфоблок родительских товаров (по умолчанию 14)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="PRODUCTS_IBLOCK_ID"
@@ -106,8 +106,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>Код свойства ФОРМАТ в ТП</b><br>
-            <small>Символьный код свойства с форматами (по умолчанию CALC_PROP_FORMAT)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="FORMAT_PROP_CODE"
@@ -118,8 +118,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>Код свойства ТИРАЖ в ТП</b><br>
-            <small>Символьный код свойства с тиражами (по умолчанию CALC_PROP_VOLUME)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="VOLUME_PROP_CODE"
@@ -130,8 +130,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>Код свойства НАСТРОЙКИ ФОРМАТА в товаре</b><br>
-            <small>Multiple-string свойство товара (по умолчанию SET_FORMAT)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="SET_FORMAT_PROP_CODE"
@@ -142,8 +142,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>Код свойства НАСТРОЙКИ ТИРАЖА в товаре</b><br>
-            <small>Multiple-string свойство товара (по умолчанию SET_VOLUME)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="SET_VOLUME_PROP_CODE"
@@ -154,8 +154,8 @@ foreach ($arDefaultOptions as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b>ID типа цены для интерполяции</b><br>
-            <small>Тип цены из справочника (по умолчанию 1 — базовая)</small>
+            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="PRICE_TYPE_ID"
@@ -165,7 +165,7 @@ foreach ($arDefaultOptions as $key => $default) {
     </tr>
 
     <?php $tabControl->Buttons(); ?>
-    <input type="submit" name="save" value="Сохранить" class="adm-btn-save">
+    <input type="submit" name="save" value="<?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SAVE') ?>" class="adm-btn-save">
     <?php $tabControl->End(); ?>
 </form>
 
