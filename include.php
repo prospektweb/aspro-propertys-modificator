@@ -1,16 +1,16 @@
 <?php
 /**
- * Автозагрузка классов модуля prospekt.propmodificator
+ * Автозагрузка классов модуля prospektweb.propmodificator
  *
  * Этот файл подключается Битриксом при загрузке модуля.
- * Регистрирует классы Prospekt\PropModificator.
+ * Регистрирует классы Prospektweb\PropModificator.
  */
 
 use Bitrix\Main\Loader;
 
-Loader::registerAutoloadClasses('prospekt.propmodificator', [
-    'Prospekt\\PropModificator\\Config'            => 'lib/Config.php',
-    'Prospekt\\PropModificator\\PropertyValidator' => 'lib/PropertyValidator.php',
-    'Prospekt\\PropModificator\\PriceInterpolator' => 'lib/PriceInterpolator.php',
-    'Prospekt\\PropModificator\\BasketHandler'     => 'lib/BasketHandler.php',
+Loader::registerAutoloadClasses('prospektweb.propmodificator', [
+    'Prospektweb\\PropModificator\\Config'            => 'lib/Config.php',
+    'Prospektweb\\PropModificator\\PropertyValidator' => 'lib/PropertyValidator.php',
+    'Prospektweb\\PropModificator\\PriceInterpolator' => 'lib/PriceInterpolator.php',
+    'Prospektweb\\PropModificator\\BasketHandler'     => 'lib/BasketHandler.php',
 ]);

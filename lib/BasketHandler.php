@@ -1,13 +1,13 @@
 <?php
 /**
- * Обработчик корзины для модуля prospekt.propmodificator.
+ * Обработчик корзины для модуля prospektweb.propmodificator.
  *
  * Перехватывает добавление в корзину, если переданы произвольные значения
  * формата и/или тиража, пересчитывает цену на сервере и записывает
  * пользовательские свойства в позицию корзины.
  */
 
-namespace Prospekt\PropModificator;
+namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
 

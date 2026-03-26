@@ -18,25 +18,25 @@ $savedData = (isset($_REQUEST['save_data']) && $_REQUEST['save_data'] === 'Y');
 <?php if ($exception): ?>
     <div class="adm-info-message-wrap error">
         <div class="adm-info-message">
-            <?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNSTEP2_ERROR') ?><br>
+            <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_ERROR') ?><br>
             <?= htmlspecialchars($exception->GetString()) ?>
         </div>
     </div>
 <?php else: ?>
     <div class="adm-info-message-wrap success">
         <div class="adm-info-message">
-            <?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNSTEP2_SUCCESS') ?>
+            <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_SUCCESS') ?>
             <br>
             <?php if ($savedData): ?>
-                <?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNSTEP2_PROPS_SAVED') ?>
+                <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_SAVED') ?>
             <?php else: ?>
-                <?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNSTEP2_PROPS_DELETED') ?>
+                <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_DELETED') ?>
             <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>
 <p>
     <a href="/bitrix/admin/partner_modules.php?lang=<?= LANGUAGE_ID ?>">
-        <?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNSTEP2_LINK_MODULES') ?>
+        <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_LINK_MODULES') ?>
     </a>
 </p>

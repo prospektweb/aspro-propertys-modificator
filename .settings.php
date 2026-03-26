@@ -3,7 +3,7 @@ return [
     'controllers' => [
         'value' => [
             'namespaces' => [
-                '\\Prospekt\\PropModificator\\Controllers' => 'controllers',
+                '\\Prospektweb\\PropModificator\\Controllers' => 'controllers',
             ],
         ],
         'readonly' => true,
