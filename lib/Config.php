@@ -1,17 +1,17 @@
 <?php
 /**
- * Хелпер конфигурации модуля prospekt.propmodificator
+ * Хелпер конфигурации модуля prospektweb.propmodificator
  *
  * Централизованный доступ к настройкам модуля через COption.
  */
 
-namespace Prospekt\PropModificator;
+namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Config\Option;
 
 class Config
 {
-    private const MODULE_ID = 'prospekt.propmodificator';
+    private const MODULE_ID = 'prospektweb.propmodificator';
 
     private static array $cache = [];
 

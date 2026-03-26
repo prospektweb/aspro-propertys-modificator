@@ -1,6 +1,6 @@
 <?php
 /**
- * Версия модуля prospekt.propmodificator
+ * Версия модуля prospektweb.propmodificator
  */
 
 $arModuleVersion = [

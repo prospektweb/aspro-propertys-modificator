@@ -4,7 +4,7 @@
  *
  * Этот файл нужно вызвать из шаблона, например из footer.php:
  *
- *   include_once $_SERVER['DOCUMENT_ROOT'] . '/local/modules/prospekt.propmodificator/template_include.php';
+ *   include_once $_SERVER['DOCUMENT_ROOT'] . '/local/modules/prospektweb.propmodificator/template_include.php';
  *
  * Или через компонент bitrix:component в конце шаблона.
  *
@@ -17,12 +17,12 @@
 
 use Bitrix\Main\Loader;
 use Bitrix\Main\Page\Asset;
-use Prospekt\PropModificator\Config;
-use Prospekt\PropModificator\PropertyValidator;
+use Prospektweb\PropModificator\Config;
+use Prospektweb\PropModificator\PropertyValidator;
 use Bitrix\Catalog\PriceTable;
 
 // Загружаем модуль
-if (!Loader::includeModule('prospekt.propmodificator')) {
+if (!Loader::includeModule('prospektweb.propmodificator')) {
     return;
 }
 
@@ -203,7 +203,7 @@ $pmodConfig = [
 
 // ─── Подключаем ассеты ────────────────────────────────────────────────────────
 
-$jsDir = '/bitrix/js/prospekt.propmodificator/';
+$jsDir = '/bitrix/js/prospektweb.propmodificator/';
 
 $APPLICATION->AddHeadScript($jsDir . 'script.js');
 $APPLICATION->SetAdditionalCSS($jsDir . 'style.css');

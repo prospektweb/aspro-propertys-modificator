@@ -4,7 +4,7 @@
 
 **Версия:** 1.0.0
 **Разработчик:** [PROSPEKT-WEB](https://prospektweb.ru)
-**Идентификатор модуля:** `prospekt.propmodificator`
+**Идентификатор модуля:** `prospektweb.propmodificator`
 
 ### Описание
 
@@ -53,18 +53,18 @@
 
 ### Установка
 
-1. Скопировать модуль в `/local/modules/prospekt.propmodificator/`
+1. Скопировать модуль в `/local/modules/prospektweb.propmodificator/`
 2. Перейти в административную панель: **Marketplace → Устанoвленные решения**
 3. Найти модуль «Модификатор свойств ТП (Аспро: Премьер)» и нажать **Установить**
 4. В мастере установки указать (или подтвердить автоопределённые) ID инфоблоков товаров и торговых предложений
 5. Подключить в шаблоне (например, в `footer.php`):
    ```php
-   include_once $_SERVER['DOCUMENT_ROOT'] . '/local/modules/prospekt.propmodificator/template_include.php';
+   include_once $_SERVER['DOCUMENT_ROOT'] . '/local/modules/prospektweb.propmodificator/template_include.php';
    ```
 
 ### Настройка
 
-Страница настроек: `/bitrix/admin/settings.php?mid=prospekt.propmodificator`
+Страница настроек: `/bitrix/admin/settings.php?mid=prospektweb.propmodificator`
 
 | Параметр | По умолчанию | Описание |
 |---|---|---|

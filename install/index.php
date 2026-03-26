@@ -1,6 +1,6 @@
 <?php
 /**
- * Установщик / деинсталлятор модуля prospekt.propmodificator
+ * Установщик / деинсталлятор модуля prospektweb.propmodificator
  */
 
 use Bitrix\Main\Localization\Loc;
@@ -16,9 +16,9 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 
 Loc::loadMessages(__FILE__);
 
-class prospekt_propmodificator extends CModule
+class prospektweb_propmodificator extends CModule
 {
-    public $MODULE_ID          = 'prospekt.propmodificator';
+    public $MODULE_ID          = 'prospektweb.propmodificator';
     public $MODULE_VERSION;
     public $MODULE_VERSION_DATE;
     public $MODULE_NAME;
@@ -37,8 +37,8 @@ class prospekt_propmodificator extends CModule
 
         $this->MODULE_VERSION      = $arModuleVersion['VERSION'];
         $this->MODULE_VERSION_DATE = $arModuleVersion['VERSION_DATE'];
-        $this->MODULE_NAME         = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_MODULE_NAME');
-        $this->MODULE_DESCRIPTION  = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_MODULE_DESCRIPTION');
+        $this->MODULE_NAME         = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_MODULE_NAME');
+        $this->MODULE_DESCRIPTION  = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_MODULE_DESCRIPTION');
         $this->PARTNER_NAME        = 'PROSPEKT-WEB';
         $this->PARTNER_URI         = 'https://prospektweb.ru';
         $this->modulePath          = dirname(__DIR__);
@@ -66,21 +66,21 @@ class prospekt_propmodificator extends CModule
                 $this->installEvents();
 
                 $APPLICATION->IncludeAdminFile(
-                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_INSTALL_TITLE'),
                     __DIR__ . '/step2.php'
                 );
                 break;
 
             case 3:
                 $APPLICATION->IncludeAdminFile(
-                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_INSTALL_TITLE'),
                     __DIR__ . '/step3.php'
                 );
                 break;
 
             default:
                 $APPLICATION->IncludeAdminFile(
-                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_INSTALL_TITLE'),
+                    Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_INSTALL_TITLE'),
                     __DIR__ . '/step1.php'
                 );
                 break;
@@ -112,8 +112,8 @@ class prospekt_propmodificator extends CModule
 
     public function installFiles(): bool
     {
-        $srcDir  = __DIR__ . '/assets/js/prospekt.propmodificator';
-        $destDir = '/bitrix/js/prospekt.propmodificator';
+        $srcDir  = __DIR__ . '/assets/js/prospektweb.propmodificator';
+        $destDir = '/bitrix/js/prospektweb.propmodificator';
 
         if (is_dir(Application::getDocumentRoot() . '/bitrix/js')) {
             CopyDirFiles($srcDir, Application::getDocumentRoot() . $destDir, true, true);
@@ -130,7 +130,7 @@ class prospekt_propmodificator extends CModule
             'sale',
             'OnBeforeBasketAdd',
             $this->MODULE_ID,
-            'Prospekt\\PropModificator\\BasketHandler',
+            'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeBasketAdd'
         );
 
@@ -138,7 +138,7 @@ class prospekt_propmodificator extends CModule
             'sale',
             'OnBeforeSaleBasketItemSetFields',
             $this->MODULE_ID,
-            'Prospekt\\PropModificator\\BasketHandler',
+            'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
         );
     }
@@ -162,14 +162,14 @@ class prospekt_propmodificator extends CModule
                 ModuleManager::unRegisterModule($this->MODULE_ID);
 
                 $APPLICATION->IncludeAdminFile(
-                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNINSTALL_TITLE'),
+                    Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNINSTALL_TITLE'),
                     __DIR__ . '/unstep2.php'
                 );
                 break;
 
             default:
                 $APPLICATION->IncludeAdminFile(
-                    Loc::getMessage('PROSPEKT_PROPMODIFICATOR_UNINSTALL_TITLE'),
+                    Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_UNINSTALL_TITLE'),
                     __DIR__ . '/unstep1.php'
                 );
                 break;
@@ -200,7 +200,7 @@ class prospekt_propmodificator extends CModule
 
     public function uninstallFiles(): void
     {
-        DeleteDirFilesEx('/bitrix/js/prospekt.propmodificator');
+        DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
     }
 
     public function uninstallEvents(): void
@@ -211,7 +211,7 @@ class prospekt_propmodificator extends CModule
             'sale',
             'OnBeforeBasketAdd',
             $this->MODULE_ID,
-            'Prospekt\\PropModificator\\BasketHandler',
+            'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeBasketAdd'
         );
 
@@ -219,7 +219,7 @@ class prospekt_propmodificator extends CModule
             'sale',
             'OnBeforeSaleBasketItemSetFields',
             $this->MODULE_ID,
-            'Prospekt\\PropModificator\\BasketHandler',
+            'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
         );
     }
@@ -231,13 +231,13 @@ class prospekt_propmodificator extends CModule
         $errors = [];
 
         if (!Loader::includeModule('iblock')) {
-            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_IBLOCK');
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_IBLOCK');
         }
         if (!Loader::includeModule('catalog')) {
-            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_CATALOG');
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_CATALOG');
         }
         if (!Loader::includeModule('sale')) {
-            $errors[] = Loc::getMessage('PROSPEKT_PROPMODIFICATOR_DEP_ERROR_SALE');
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_SALE');
         }
 
         if (!empty($errors)) {

@@ -8,7 +8,7 @@
  *  - Оба параметра произвольны: билинейная интерполяция по 4 угловым точкам
  */
 
-namespace Prospekt\PropModificator;
+namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
 use Bitrix\Catalog\PriceTable;

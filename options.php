@@ -1,7 +1,7 @@
 <?php
 /**
- * Страница настроек модуля prospekt.propmodificator
- * Путь в панели администратора: /bitrix/admin/settings.php?mid=prospekt.propmodificator
+ * Страница настроек модуля prospektweb.propmodificator
+ * Путь в панели администратора: /bitrix/admin/settings.php?mid=prospektweb.propmodificator
  */
 
 use Bitrix\Main\Loader;
@@ -11,7 +11,7 @@ define('STOP_STATISTICS', true);
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_admin_before.php';
 
-$moduleId = 'prospekt.propmodificator';
+$moduleId = 'prospektweb.propmodificator';
 
 Loader::includeModule($moduleId);
 Loc::loadMessages(__FILE__);
@@ -24,15 +24,15 @@ if (!$USER->IsAdmin()) {
     $APPLICATION->AuthForm('Нет доступа');
 }
 
-$APPLICATION->SetTitle(Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TITLE'));
+$APPLICATION->SetTitle(Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TITLE'));
 
 require $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_admin_after.php';
 
 $tabControl = new CAdminTabControl('tabControl', [
     [
         'DIV'   => 'edit1',
-        'TAB'   => Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TAB_MAIN'),
-        'TITLE' => Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_TAB_MAIN_TITLE'),
+        'TAB'   => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN'),
+        'TITLE' => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN_TITLE'),
     ],
 ]);
 
@@ -63,14 +63,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 require __DIR__ . '/default_option.php';
 
 $options = [];
-foreach ($prospekt_propmodificator_default_option as $key => $default) {
+foreach ($prospektweb_propmodificator_default_option as $key => $default) {
     $options[$key] = COption::GetOptionString($moduleId, $key, $default);
 }
 ?>
 
 <?php if ($_GET['saved'] === 'Y'): ?>
     <div class="adm-info-message-wrap success">
-        <div class="adm-info-message"><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SAVED') ?></div>
+        <div class="adm-info-message"><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SAVED') ?></div>
     </div>
 <?php endif; ?>
 
@@ -82,8 +82,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td width="40%" class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="OFFERS_IBLOCK_ID"
@@ -94,8 +94,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="PRODUCTS_IBLOCK_ID"
@@ -106,8 +106,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="FORMAT_PROP_CODE"
@@ -118,8 +118,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="VOLUME_PROP_CODE"
@@ -130,8 +130,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="SET_FORMAT_PROP_CODE"
@@ -142,8 +142,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="SET_VOLUME_PROP_CODE"
@@ -154,8 +154,8 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
             <input type="text" name="PRICE_TYPE_ID"
@@ -165,7 +165,7 @@ foreach ($prospekt_propmodificator_default_option as $key => $default) {
     </tr>
 
     <?php $tabControl->Buttons(); ?>
-    <input type="submit" name="save" value="<?= Loc::getMessage('PROSPEKT_PROPMODIFICATOR_OPTIONS_SAVE') ?>" class="adm-btn-save">
+    <input type="submit" name="save" value="<?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SAVE') ?>" class="adm-btn-save">
     <?php $tabControl->End(); ?>
 </form>
 

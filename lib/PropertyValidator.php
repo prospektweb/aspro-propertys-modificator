@@ -6,7 +6,7 @@
  * имеют корректные XML_ID (формат «WxH» и числовой тираж соответственно).
  */
 
-namespace Prospekt\PropModificator;
+namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
 
