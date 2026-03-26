@@ -10,11 +10,7 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 use Bitrix\Main\Loader;
 use Bitrix\Main\Localization\Loc;
 
-/** @var prospektweb_propmodificator $module */
 global $APPLICATION;
-
-$offersIblockId   = $module->detectOffersIblockId();
-$productsIblockId = $module->detectProductsIblockId($offersIblockId);
 
 // Список инфоблоков для выпадающего списка
 $iblockList = [];
@@ -25,8 +21,77 @@ if (Loader::includeModule('iblock')) {
     }
 }
 
-// Проверяем свойства ТП
-$validationIssues = $module->validateOffersProperties($offersIblockId);
+// Автоопределение инфоблока торговых предложений
+$offersIblockId = 0;
+if (Loader::includeModule('catalog')) {
+    $rsCatalog = \Bitrix\Catalog\CatalogIblockTable::getList([
+        'select' => ['IBLOCK_ID', 'PRODUCT_IBLOCK_ID'],
+        'filter' => ['!=PRODUCT_IBLOCK_ID' => 0],
+        'limit'  => 1,
+    ]);
+    if ($arCatalog = $rsCatalog->fetch()) {
+        $offersIblockId = (int)$arCatalog['IBLOCK_ID'];
+    }
+}
+if (!$offersIblockId && Loader::includeModule('iblock')) {
+    $rsIblock = CIBlock::GetList(
+        ['SORT' => 'ASC'],
+        ['IBLOCK_TYPE_ID' => 'aspro_premier_catalog', 'ACTIVE' => 'Y']
+    );
+    if ($ar = $rsIblock->Fetch()) {
+        $offersIblockId = (int)$ar['ID'];
+    }
+}
+
+// Автоопределение инфоблока товаров по инфоблоку ТП
+$productsIblockId = 0;
+if ($offersIblockId > 0 && Loader::includeModule('catalog')) {
+    $arSku = CCatalogSKU::GetInfoByOfferIBlock($offersIblockId);
+    if (!empty($arSku['PRODUCT_IBLOCK_ID'])) {
+        $productsIblockId = (int)$arSku['PRODUCT_IBLOCK_ID'];
+    }
+}
+
+// Проверяем наличие свойств CALC_PROP_FORMAT и CALC_PROP_VOLUME в инфоблоке ТП
+$validationIssues = [];
+if (Loader::includeModule('iblock') && $offersIblockId > 0) {
+    foreach (['CALC_PROP_FORMAT', 'CALC_PROP_VOLUME'] as $code) {
+        $rsProp = CIBlockProperty::GetList(
+            [],
+            ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code, 'ACTIVE' => 'Y']
+        );
+        $prop = $rsProp->Fetch();
+
+        if (!$prop) {
+            $validationIssues[] = "Свойство {$code} не найдено в инфоблоке ТП (ID={$offersIblockId})";
+            continue;
+        }
+
+        $rsEnum = CIBlockPropertyEnum::GetList(
+            ['SORT' => 'ASC'],
+            ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code]
+        );
+        $valid = false;
+        while ($arEnum = $rsEnum->Fetch()) {
+            $xmlId = $arEnum['XML_ID'];
+            if ($code === 'CALC_PROP_FORMAT') {
+                if (preg_match('/^\d+x\d+$/i', $xmlId)) {
+                    $valid = true;
+                    break;
+                }
+            } else {
+                if (is_numeric($xmlId)) {
+                    $valid = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$valid) {
+            $validationIssues[] = "Свойство {$code}: не найдено ни одного значения с корректным XML_ID";
+        }
+    }
+}
 ?>
 <form method="post" action="<?= $APPLICATION->GetCurPage() ?>">
     <?= bitrix_sessid_post() ?>
