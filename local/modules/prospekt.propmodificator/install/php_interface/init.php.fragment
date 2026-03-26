@@ -1,0 +1,39 @@
+<?php
+/**
+ * Фрагмент для добавления в /bitrix/php_interface/init.php
+ *
+ * Скопируйте этот блок кода в init.php вашего сайта.
+ * Данный блок загружает модуль prospekt.propmodificator при инициализации Битрикс.
+ *
+ * ─────────────────────────────────────────────────────────────────
+ * BEGIN: prospekt.propmodificator
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+use Bitrix\Main\Loader;
+use Bitrix\Main\EventManager;
+
+// Загружаем модуль (регистрирует автозагрузку классов)
+if (Loader::includeModule('prospekt.propmodificator')) {
+
+    // Регистрируем обработчики событий корзины
+    $eventManager = EventManager::getInstance();
+
+    $eventManager->addEventHandler(
+        'sale',
+        'OnBeforeBasketAdd',
+        ['Prospekt\\PropModificator\\BasketHandler', 'onBeforeBasketAdd']
+    );
+
+    $eventManager->addEventHandler(
+        'sale',
+        'OnBeforeSaleBasketItemSetFields',
+        ['Prospekt\\PropModificator\\BasketHandler', 'onBeforeSaleBasketItemSetFields']
+    );
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────
+ * END: prospekt.propmodificator
+ * ─────────────────────────────────────────────────────────────────
+ */
