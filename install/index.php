@@ -63,6 +63,7 @@ class prospektweb_propmodificator extends CModule
 
                 $this->installDB();
                 $this->installFiles();
+                $this->installFooter();
                 $this->installEvents();
 
                 $APPLICATION->IncludeAdminFile(
@@ -122,6 +123,37 @@ class prospektweb_propmodificator extends CModule
         return true;
     }
 
+    public function installFooter(): bool
+    {
+        $docRoot    = Application::getDocumentRoot();
+        $footerPath = $docRoot . '/bitrix/templates/aspro-premier/footer.php';
+
+        if (!file_exists($footerPath)) {
+            return false;
+        }
+
+        $marker  = 'prospektweb.propmodificator/template_include.php';
+        $content = file_get_contents($footerPath);
+
+        if ($content === false) {
+            return false;
+        }
+
+        if (strpos($content, $marker) !== false) {
+            return true;
+        }
+
+        $line = "\ninclude_once \$_SERVER['DOCUMENT_ROOT'] . getLocalPath('modules/prospektweb.propmodificator/template_include.php');\n";
+
+        if (preg_match('/\?>\s*$/', $content)) {
+            $content = preg_replace('/(\?>\s*)$/', $line . '$1', $content);
+        } else {
+            $content .= $line;
+        }
+
+        return file_put_contents($footerPath, $content) !== false;
+    }
+
     public function installEvents(): void
     {
         $eventManager = EventManager::getInstance();
@@ -156,6 +188,7 @@ class prospektweb_propmodificator extends CModule
                 $saveData = (isset($_REQUEST['save_data']) && $_REQUEST['save_data'] === 'Y');
 
                 $this->uninstallEvents();
+                $this->uninstallFooter();
                 $this->uninstallFiles();
                 $this->uninstallDB($saveData);
 
@@ -201,6 +234,31 @@ class prospektweb_propmodificator extends CModule
     public function uninstallFiles(): void
     {
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
+    }
+
+    public function uninstallFooter(): void
+    {
+        $docRoot    = Application::getDocumentRoot();
+        $footerPath = $docRoot . '/bitrix/templates/aspro-premier/footer.php';
+
+        if (!file_exists($footerPath)) {
+            return;
+        }
+
+        $marker  = 'prospektweb.propmodificator/template_include.php';
+        $content = file_get_contents($footerPath);
+
+        if ($content === false || strpos($content, $marker) === false) {
+            return;
+        }
+
+        $content = preg_replace(
+            '/\n?[^\n]*' . preg_quote($marker, '/') . '[^\n]*\n?/',
+            '',
+            $content
+        );
+
+        file_put_contents($footerPath, $content);
     }
 
     public function uninstallEvents(): void
