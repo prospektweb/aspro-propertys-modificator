@@ -165,6 +165,35 @@ if ($volumePropCode) {
     }
 }
 
+// ─── Загружаем маппинги перечислений (enumId → VALUE_XML_ID) ─────────────────
+// Загружаем ДО цикла ТП, чтобы использовать как fallback когда Bitrix
+// не возвращает PROPERTY_{CODE}_VALUE_XML_ID для свойств типа «список» (L).
+
+$volumeEnumMap = [];
+if ($volumePropId) {
+    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $volumePropId]);
+    while ($arEnum = $rsEnum->Fetch()) {
+        $enumId = (int)$arEnum['ID'];
+        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+        if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
+            // Числовые XML_ID хранятся как int; 'X' (произвольный тираж) — как строка
+            $volumeEnumMap[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
+        }
+    }
+}
+
+$formatEnumMap = [];
+if ($formatPropId) {
+    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $formatPropId]);
+    while ($arEnum = $rsEnum->Fetch()) {
+        $enumId = (int)$arEnum['ID'];
+        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+        if ($enumId > 0 && $xmlId !== '') {
+            $formatEnumMap[$enumId] = $xmlId;
+        }
+    }
+}
+
 // ─── Загружаем ТП товара ──────────────────────────────────────────────────────
 
 $offers = [];
@@ -190,8 +219,23 @@ $rsOffers = CIBlockElement::GetList(
 while ($arOffer = $rsOffers->Fetch()) {
     $offerId = (int)$arOffer['ID'];
 
+    // Пробуем получить XML_ID напрямую; fallback — через enumMap, если Bitrix
+    // не вернул VALUE_XML_ID для свойства типа «список» (L).
     $formatXmlId = $arOffer["PROPERTY_{$formatPropCode}_VALUE_XML_ID"] ?? null;
+    if (empty($formatXmlId) && !empty($arOffer["PROPERTY_{$formatPropCode}_VALUE"])) {
+        $enumId = (int)$arOffer["PROPERTY_{$formatPropCode}_VALUE"];
+        $formatXmlId = $formatEnumMap[$enumId] ?? null;
+    }
+
     $volumeXmlId = $arOffer["PROPERTY_{$volumePropCode}_VALUE_XML_ID"] ?? null;
+    if (empty($volumeXmlId) && !empty($arOffer["PROPERTY_{$volumePropCode}_VALUE"])) {
+        $enumId = (int)$arOffer["PROPERTY_{$volumePropCode}_VALUE"];
+        $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
+        // volumeEnumMap хранит int|'X', приводим к строке для парсера
+        if ($volumeXmlId !== null) {
+            $volumeXmlId = (string)$volumeXmlId;
+        }
+    }
 
     $formatParsed = $formatXmlId ? PropertyValidator::parseFormatXmlId($formatXmlId) : null;
     $volumeParsed = $volumeXmlId ? PropertyValidator::parseVolumeXmlId($volumeXmlId) : null;
@@ -223,33 +267,6 @@ if (!empty($offerIds)) {
         $id = (int)$arPrice['PRODUCT_ID'];
         if (isset($offers[$id])) {
             $offers[$id]['price'] = (float)$arPrice['PRICE'];
-        }
-    }
-}
-
-// ─── Загружаем маппинги перечислений (enumId → VALUE_XML_ID) ─────────────────
-
-$volumeEnumMap = [];
-if ($volumePropId) {
-    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $volumePropId]);
-    while ($arEnum = $rsEnum->Fetch()) {
-        $enumId = (int)$arEnum['ID'];
-        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
-        if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
-            // Числовые XML_ID хранятся как int; 'X' (произвольный тираж) — как строка
-            $volumeEnumMap[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
-        }
-    }
-}
-
-$formatEnumMap = [];
-if ($formatPropId) {
-    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $formatPropId]);
-    while ($arEnum = $rsEnum->Fetch()) {
-        $enumId = (int)$arEnum['ID'];
-        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
-        if ($enumId > 0 && $xmlId !== '') {
-            $formatEnumMap[$enumId] = $xmlId;
         }
     }
 }
