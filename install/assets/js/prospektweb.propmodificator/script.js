@@ -597,24 +597,33 @@
                         innerEl._pmodProgrammaticChange = false;
                         return;
                     }
-                    // Клик по пресету FORMAT — обновляем поля ширины/высоты
                     var wInput = innerEl._pmodWidthInput;
                     var hInput = innerEl._pmodHeightInput;
-                    if (wInput && hInput) {
-                        var enumId   = btn.dataset.onevalue || '';
-                        var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
-                            ? state.formatEnumMap[enumId]
-                            : (btn.dataset.title || '');
-                        var parts = fmtXmlId.toLowerCase().split('x');
-                        if (parts.length === 2) {
-                            wInput.value = parseInt(parts[0], 10) || wInput.value;
-                            hInput.value = parseInt(parts[1], 10) || hInput.value;
+                    var enumId   = btn.dataset.onevalue || '';
+                    var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
+                        ? state.formatEnumMap[enumId]
+                        : (btn.dataset.title || '');
+
+                    if (fmtXmlId === 'X') {
+                        // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
+                        state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
+                        state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
+                        state.customMode   = true;
+                        PModificator.updatePriceDisplay(container, state);
+                    } else {
+                        // Клик по пресету FORMAT — обновляем поля ширины/высоты
+                        if (wInput && hInput) {
+                            var parts = fmtXmlId.toLowerCase().split('x');
+                            if (parts.length === 2) {
+                                wInput.value = parseInt(parts[0], 10) || wInput.value;
+                                hInput.value = parseInt(parts[1], 10) || hInput.value;
+                            }
                         }
+                        state.customMode   = false;
+                        state.customWidth  = null;
+                        state.customHeight = null;
+                        PModificator.hideCustomPrice(container);
                     }
-                    state.customMode   = false;
-                    state.customWidth  = null;
-                    state.customHeight = null;
-                    PModificator.hideCustomPrice(container);
 
                 } else if (String(propId) === String(volumePropId)) {
                     // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
@@ -622,20 +631,27 @@
                         innerEl._pmodProgrammaticChange = false;
                         return;
                     }
-                    // Клик по пресету VOLUME — обновляем поле тиража
                     var vInput = innerEl._pmodVolumeInput;
-                    if (vInput) {
-                        var enumId   = btn.dataset.onevalue || '';
-                        var volXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
-                            ? parseInt(state.volumeEnumMap[enumId], 10)
-                            : (parseInt(btn.dataset.title, 10) || NaN);
-                        if (!isNaN(volXmlId)) {
+                    var enumId     = btn.dataset.onevalue || '';
+                    var rawVolXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
+                        ? state.volumeEnumMap[enumId]
+                        : (btn.dataset.title || '');
+
+                    if (rawVolXmlId === 'X') {
+                        // Клик по «Произвольный тираж» — не обновлять инпут, включить custom mode
+                        state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
+                        state.customMode   = true;
+                        PModificator.updatePriceDisplay(container, state);
+                    } else {
+                        // Клик по пресету VOLUME — обновляем поле тиража
+                        var volXmlId = parseInt(rawVolXmlId, 10);
+                        if (vInput && !isNaN(volXmlId)) {
                             vInput.value = volXmlId;
                         }
+                        state.customMode   = false;
+                        state.customVolume = null;
+                        PModificator.hideCustomPrice(container);
                     }
-                    state.customMode   = false;
-                    state.customVolume = null;
-                    PModificator.hideCustomPrice(container);
                 }
                 // Если это другое свойство (красочность, бумага и т.д.) — ничего не делаем
 
@@ -772,30 +788,74 @@
         },
 
         showCustomPrice: function (container, price) {
-            var priceEl = container.querySelector('.pmod-custom-price');
+            if (typeof price !== 'number' || !isFinite(price)) return;
 
-            if (!priceEl) {
-                priceEl = document.createElement('div');
-                priceEl.className = 'pmod-custom-price';
+            var popupPrice = document.querySelector('.js-popup-price');
+            var cartEl     = document.querySelector('.catalog-detail__cart');
 
-                // Вставляем после блока .sku-props или перед кнопкой корзины
-                var buyBtn = document.querySelector('.detail-buy, .js-basket-btn, [data-entity="basket-button"]');
-                var insertTarget = buyBtn ? buyBtn.parentNode : container.parentNode;
-                if (insertTarget) {
-                    insertTarget.insertBefore(priceEl, buyBtn);
+            if (popupPrice) {
+                // Сохраняем оригинальное содержимое блока цены при первом вызове
+                if (popupPrice._pmodOriginalContent === undefined) {
+                    popupPrice._pmodOriginalContent = popupPrice.innerHTML;
                 }
+                var priceStr = price.toLocaleString('ru-RU', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+                popupPrice.innerHTML =
+                    '<div class="prices">' +
+                      '<div class="price color_dark price--current">' +
+                        '<div class="price__row">' +
+                          '<div class="price__new fw-500">' +
+                            '<span class="price__new-val font_24">' + priceStr + ' ₽/<span>тираж</span></span>' +
+                          '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</div>';
+            } else {
+                // Запасной вариант: собственный элемент модуля
+                var priceEl = container.querySelector('.pmod-custom-price');
+                if (!priceEl) {
+                    priceEl = document.createElement('div');
+                    priceEl.className = 'pmod-custom-price';
+                    var buyBtn = document.querySelector('.detail-buy, .js-basket-btn, [data-entity="basket-button"]');
+                    var insertTarget = buyBtn ? buyBtn.parentNode : container.parentNode;
+                    if (insertTarget) {
+                        insertTarget.insertBefore(priceEl, buyBtn);
+                    }
+                }
+                priceEl.innerHTML =
+                    '<span class="pmod-custom-price__label">Расчётная цена:</span> ' +
+                    '<span class="pmod-custom-price__value">' + formatPrice(price) + '</span>' +
+                    '<span class="pmod-custom-price__note"> (предварительный расчёт)</span>';
+                priceEl.style.display = '';
             }
 
-            priceEl.innerHTML =
-                '<span class="pmod-custom-price__label">Расчётная цена:</span> ' +
-                '<span class="pmod-custom-price__value">' + formatPrice(price) + '</span>' +
-                '<span class="pmod-custom-price__note"> (предварительный расчёт)</span>';
-            priceEl.style.display = '';
+            if (cartEl) {
+                // Запоминаем исходное состояние видимости кнопки корзины
+                if (cartEl._pmodWasHidden === undefined) {
+                    cartEl._pmodWasHidden = cartEl.classList.contains('hidden');
+                }
+                cartEl.classList.remove('hidden');
+            }
         },
 
         hideCustomPrice: function (container) {
-            var priceEl = document.querySelector('.pmod-custom-price');
-            if (priceEl) priceEl.style.display = 'none';
+            var popupPrice = document.querySelector('.js-popup-price');
+            var cartEl     = document.querySelector('.catalog-detail__cart');
+
+            if (popupPrice && popupPrice._pmodOriginalContent !== undefined) {
+                popupPrice.innerHTML = popupPrice._pmodOriginalContent;
+                delete popupPrice._pmodOriginalContent;
+            }
+
+            var legacyEl = document.querySelector('.pmod-custom-price');
+            if (legacyEl) legacyEl.style.display = 'none';
+
+            if (cartEl && cartEl._pmodWasHidden) {
+                cartEl.classList.add('hidden');
+                delete cartEl._pmodWasHidden;
+            }
         },
 
         // ── Перехват корзины ──────────────────────────────────────────────────
