@@ -125,33 +125,17 @@ class prospektweb_propmodificator extends CModule
 
     public function installFooter(): bool
     {
-        $docRoot    = Application::getDocumentRoot();
-        $footerPath = $docRoot . '/bitrix/templates/aspro-premier/footer.php';
+        $eventManager = EventManager::getInstance();
 
-        if (!file_exists($footerPath)) {
-            return false;
-        }
+        $eventManager->registerEventHandler(
+            'main',
+            'OnEpilogHtml',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\PageHandler',
+            'onEpilogHtml'
+        );
 
-        $marker  = 'prospektweb.propmodificator/template_include.php';
-        $content = file_get_contents($footerPath);
-
-        if ($content === false) {
-            return false;
-        }
-
-        if (strpos($content, $marker) !== false) {
-            return true;
-        }
-
-        $line = "\ninclude_once \$_SERVER['DOCUMENT_ROOT'] . getLocalPath('modules/prospektweb.propmodificator/template_include.php');\n";
-
-        if (preg_match('/\?>\s*$/', $content)) {
-            $content = preg_replace('/(\?>\s*)$/', $line . '$1', $content);
-        } else {
-            $content .= $line;
-        }
-
-        return file_put_contents($footerPath, $content) !== false;
+        return true;
     }
 
     public function installEvents(): void
@@ -238,27 +222,15 @@ class prospektweb_propmodificator extends CModule
 
     public function uninstallFooter(): void
     {
-        $docRoot    = Application::getDocumentRoot();
-        $footerPath = $docRoot . '/bitrix/templates/aspro-premier/footer.php';
+        $eventManager = EventManager::getInstance();
 
-        if (!file_exists($footerPath)) {
-            return;
-        }
-
-        $marker  = 'prospektweb.propmodificator/template_include.php';
-        $content = file_get_contents($footerPath);
-
-        if ($content === false || strpos($content, $marker) === false) {
-            return;
-        }
-
-        $content = preg_replace(
-            '/\n?[^\n]*' . preg_quote($marker, '/') . '[^\n]*\n?/',
-            '',
-            $content
+        $eventManager->unRegisterEventHandler(
+            'main',
+            'OnEpilogHtml',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\PageHandler',
+            'onEpilogHtml'
         );
-
-        file_put_contents($footerPath, $content);
     }
 
     public function uninstallEvents(): void

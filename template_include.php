@@ -2,21 +2,31 @@
 /**
  * Подключение модуля в шаблоне Аспро: Премьер
  *
- * Этот файл нужно вызвать из шаблона, например из footer.php:
+ * Рекомендуемый способ подключения — через событие OnEpilogHtml
+ * (регистрируется установщиком модуля автоматически).
  *
- *   include_once $_SERVER['DOCUMENT_ROOT'] . '/local/modules/prospektweb.propmodificator/template_include.php';
+ * Альтернативный способ — добавить в /local/php_interface/init.php:
  *
- * Или через компонент bitrix:component в конце шаблона.
+ *   \Bitrix\Main\EventManager::getInstance()->addEventHandler(
+ *       'main', 'OnEpilogHtml',
+ *       function () {
+ *           if (!\Bitrix\Main\Loader::includeModule('prospektweb.propmodificator')) return;
+ *           $f = \Bitrix\Main\Application::getDocumentRoot()
+ *               . getLocalPath('modules/prospektweb.propmodificator/template_include.php');
+ *           if (file_exists($f)) include_once $f;
+ *       }
+ *   );
  *
  * Файл:
- *  1. Подключает JS и CSS модуля
+ *  1. Подключает JS и CSS модуля через Asset API (совместимо с кешем/композитом)
  *  2. Читает свойства текущего товара (SET_FORMAT, SET_VOLUME)
  *  3. Читает все ТП с их свойствами и ценами
- *  4. Инжектирует конфигурационный объект window.pmodConfig в страницу
+ *  4. Инжектирует конфигурационный объект window.pmodConfig в <head> страницы
  */
 
 use Bitrix\Main\Loader;
 use Bitrix\Main\Page\Asset;
+use Bitrix\Main\Page\AssetLocation;
 use Prospektweb\PropModificator\Config;
 use Prospektweb\PropModificator\PropertyValidator;
 use Bitrix\Catalog\PriceTable;
@@ -29,9 +39,6 @@ if (!Loader::includeModule('prospektweb.propmodificator')) {
 if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
     return;
 }
-
-/** @global CMain $APPLICATION */
-global $APPLICATION;
 
 // ─── Определяем текущий товар ─────────────────────────────────────────────────
 
@@ -75,20 +82,23 @@ $formatPropId   = null;
 $volumePropId   = null;
 
 if ($arProduct) {
-    $arProps = $arProduct->GetProperties([], ['CODE' => [$setFormatCode, $setVolumeCode]]);
+    // Загружаем свойства по одному с фильтром по CODE (строка, не массив)
+    // чтобы избежать TypeError в старых версиях API и не загружать все свойства
+    $arFormatProps = $arProduct->GetProperties([], ['CODE' => $setFormatCode]);
+    $arVolumeProps = $arProduct->GetProperties([], ['CODE' => $setVolumeCode]);
 
-    if (!empty($arProps[$setFormatCode]['VALUE'])) {
-        foreach ((array)$arProps[$setFormatCode]['VALUE'] as $idx => $key) {
-            $val = $arProps[$setFormatCode]['DESCRIPTION'][$idx] ?? null;
+    if (!empty($arFormatProps[$setFormatCode]['VALUE'])) {
+        foreach ((array)$arFormatProps[$setFormatCode]['VALUE'] as $idx => $key) {
+            $val = $arFormatProps[$setFormatCode]['DESCRIPTION'][$idx] ?? null;
             if ($key && $val !== null) {
                 $formatSettings[strtoupper(trim($key))] = (int)$val;
             }
         }
     }
 
-    if (!empty($arProps[$setVolumeCode]['VALUE'])) {
-        foreach ((array)$arProps[$setVolumeCode]['VALUE'] as $idx => $key) {
-            $val = $arProps[$setVolumeCode]['DESCRIPTION'][$idx] ?? null;
+    if (!empty($arVolumeProps[$setVolumeCode]['VALUE'])) {
+        foreach ((array)$arVolumeProps[$setVolumeCode]['VALUE'] as $idx => $key) {
+            $val = $arVolumeProps[$setVolumeCode]['DESCRIPTION'][$idx] ?? null;
             if ($key && $val !== null) {
                 $volumeSettings[strtoupper(trim($key))] = (int)$val;
             }
@@ -201,15 +211,19 @@ $pmodConfig = [
     ],
 ];
 
-// ─── Подключаем ассеты ────────────────────────────────────────────────────────
+// ─── Подключаем ассеты через Asset API (совместимо с кешем и композитом) ───
 
 $jsDir = '/bitrix/js/prospektweb.propmodificator/';
 
-$APPLICATION->AddHeadScript($jsDir . 'script.js');
-$APPLICATION->SetAdditionalCSS($jsDir . 'style.css');
+Asset::getInstance()->addJs($jsDir . 'script.js');
+Asset::getInstance()->addCss($jsDir . 'style.css');
 
-// ─── Инжектируем конфиг ───────────────────────────────────────────────────────
+// ─── Инжектируем конфиг в <head> через Asset API ──────────────────────────
 
 $jsonConfig = json_encode($pmodConfig, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
-?>
-<script>window.pmodConfig = <?= $jsonConfig ?>;</script>
+
+Asset::getInstance()->addString(
+    '<script>window.pmodConfig = ' . $jsonConfig . ';</script>',
+    false,
+    AssetLocation::AFTER_CSS
+);

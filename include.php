@@ -13,4 +13,5 @@ Loader::registerAutoloadClasses('prospektweb.propmodificator', [
     'Prospektweb\\PropModificator\\PropertyValidator' => 'lib/PropertyValidator.php',
     'Prospektweb\\PropModificator\\PriceInterpolator' => 'lib/PriceInterpolator.php',
     'Prospektweb\\PropModificator\\BasketHandler'     => 'lib/BasketHandler.php',
+    'Prospektweb\\PropModificator\\PageHandler'       => 'lib/PageHandler.php',
 ]);
