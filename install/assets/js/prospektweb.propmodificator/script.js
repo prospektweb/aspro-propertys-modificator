@@ -394,7 +394,6 @@
             ].join('');
 
             valuesEl.parentNode.insertBefore(ui, valuesEl);
-            ui.appendChild(valuesEl);
 
             var volumeInput = ui.querySelector('.pmod-input-volume');
 
