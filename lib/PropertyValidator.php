@@ -32,6 +32,10 @@ class PropertyValidator
      */
     public static function parseFormatXmlId(string $xmlId): ?array
     {
+        if ($xmlId === 'X') {
+            return null; // Произвольный формат не парсится как размер
+        }
+
         if (!self::isValidFormatXmlId($xmlId)) {
             return null;
         }
@@ -61,6 +65,10 @@ class PropertyValidator
      */
     public static function parseVolumeXmlId(string $xmlId): ?int
     {
+        if ($xmlId === 'X') {
+            return null; // Произвольный тираж не парсится как число
+        }
+
         if (!self::isValidVolumeXmlId($xmlId)) {
             return null;
         }
