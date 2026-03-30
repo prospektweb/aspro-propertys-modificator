@@ -295,6 +295,9 @@
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
 
+            // Найти кнопку «Произвольный формат» (XML_ID="X")
+            var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
+
             function onFormatChange(isImmediate) {
                 var rawW = parseInt(widthInput.value, 10);
                 var rawH = parseInt(heightInput.value, 10);
@@ -328,11 +331,18 @@
                     state.customHeight = h;
                     state.customMode   = true;
 
-                    // Выбираем ближайший пресет
-                    var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
-                    if (nearest && !nearest.classList.contains('sku-props__value--active')) {
-                        inner._pmodProgrammaticChange = true;
-                        nearest.click();
+                    // Выбираем кнопку «Произвольный формат» или ближайший пресет
+                    if (customBtn) {
+                        if (!customBtn.classList.contains('sku-props__value--active')) {
+                            inner._pmodProgrammaticChange = true;
+                            customBtn.click();
+                        }
+                    } else {
+                        var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
+                        if (nearest && !nearest.classList.contains('sku-props__value--active')) {
+                            inner._pmodProgrammaticChange = true;
+                            nearest.click();
+                        }
                     }
                 }
 
@@ -413,8 +423,11 @@
             var initXmlId = minV;
             if (activeBtn) {
                 var ae = activeBtn.dataset.onevalue;
-                initXmlId = (volumeEnumMap && ae && volumeEnumMap[ae] !== undefined)
-                    ? parseInt(volumeEnumMap[ae], 10)
+                var aeXmlId = (volumeEnumMap && ae && volumeEnumMap[ae] !== undefined)
+                    ? volumeEnumMap[ae]
+                    : null;
+                initXmlId = (aeXmlId !== null && aeXmlId !== 'X')
+                    ? (parseInt(aeXmlId, 10) || minV)
                     : (parseInt(activeBtn.dataset.title, 10) || minV);
             }
 
@@ -447,6 +460,9 @@
                     : (parseInt(btn.dataset.title, 10) || 0);
                 if (xmlId) xmlIdToBtnMap[xmlId] = btn;
             });
+
+            // Найти кнопку «Произвольный тираж» (XML_ID="X")
+            var customBtn = PModificator.findCustomButton(valuesEl, volumeEnumMap);
 
             // ── Вспомогательная функция: найти кнопку пресета по VALUE_XML_ID ──
             function findBtnByXmlId(xmlId) {
@@ -501,10 +517,17 @@
                     state.customVolume = v;
                     state.customMode   = true;
 
-                    var nearest = PModificator.findNearestVolumePreset(valuesEl, v);
-                    if (nearest && !nearest.classList.contains('sku-props__value--active')) {
-                        inner._pmodProgrammaticChange = true;
-                        nearest.click();
+                    if (customBtn) {
+                        if (!customBtn.classList.contains('sku-props__value--active')) {
+                            inner._pmodProgrammaticChange = true;
+                            customBtn.click();
+                        }
+                    } else {
+                        var nearest = PModificator.findNearestVolumePreset(valuesEl, v);
+                        if (nearest && !nearest.classList.contains('sku-props__value--active')) {
+                            inner._pmodProgrammaticChange = true;
+                            nearest.click();
+                        }
                     }
                 }
 
@@ -620,6 +643,23 @@
         },
 
         // ── Поиск пресетов ────────────────────────────────────────────────────
+
+        /**
+         * Найти кнопку с XML_ID="X" (произвольное значение) в списке кнопок ТП.
+         * @param {Element} valuesEl
+         * @param {Object}  enumMap  — маппинг enumId → xmlId (строка)
+         * @returns {Element|null}
+         */
+        findCustomButton: function (valuesEl, enumMap) {
+            var found = null;
+            valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {
+                var eid = btn.dataset.onevalue || '';
+                if (enumMap && eid && enumMap[eid] === 'X') {
+                    found = btn;
+                }
+            });
+            return found;
+        },
 
         findFormatPreset: function (valuesEl, w, h, formatEnumMap) {
             var target = w + 'x' + h;

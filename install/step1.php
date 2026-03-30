@@ -74,6 +74,10 @@ if (Loader::includeModule('iblock') && $offersIblockId > 0) {
         $valid = false;
         while ($arEnum = $rsEnum->Fetch()) {
             $xmlId = $arEnum['XML_ID'];
+            if ($xmlId === 'X') {
+                // «X» — маркер произвольного значения, пропускаем
+                continue;
+            }
             if ($code === 'CALC_PROP_FORMAT') {
                 if (preg_match('/^\d+x\d+$/i', $xmlId)) {
                     $valid = true;

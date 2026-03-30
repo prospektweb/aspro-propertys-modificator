@@ -235,8 +235,9 @@ if ($volumePropId) {
     while ($arEnum = $rsEnum->Fetch()) {
         $enumId = (int)$arEnum['ID'];
         $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
-        if ($enumId > 0 && is_numeric($xmlId)) {
-            $volumeEnumMap[$enumId] = (int)$xmlId;
+        if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
+            // Числовые XML_ID хранятся как int; 'X' (произвольный тираж) — как строка
+            $volumeEnumMap[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
         }
     }
 }
