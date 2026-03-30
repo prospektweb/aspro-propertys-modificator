@@ -12,8 +12,12 @@
 
 /* ── Общая обёртка FORMAT UI / VOLUME UI ─────────────────────────────────── */
 
-.pmod-format-ui,
+.pmod-format-ui {
+    margin-bottom: 12px;
+}
+
 .pmod-volume-ui {
+    position: relative;
     margin-bottom: 12px;
 }
 
@@ -67,52 +71,22 @@
     flex-shrink: 0;
 }
 
-/* ── Селект тиража ────────────────────────────────────────────────────────── */
+/* ── Плавающие кнопки пресетов (показываются при фокусе на инпут тиража) ─── */
 
-.pmod-volume-select-wrap {
-    position: relative;
-    display: inline-block;
-}
-
-.pmod-volume-select-wrap::after {
-    content: '';
+.pmod-preset-buttons--floating {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 6px;
     position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid var(--secondary, #8D8D8D);
-    pointer-events: none;
-}
-
-.pmod-volume-select {
-    display: block;
-    height: 38px;
-    min-width: 140px;
-    padding: 0 32px 0 10px;
-    font-size: 14px;
-    color: var(--input_color, var(--white_text_black, #222228));
+    bottom: 100%;
+    left: 0;
+    z-index: 100;
     background: var(--input_bg_color, var(--black_bg_black, #fff));
     border: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     border-radius: 4px;
-    outline: none;
-    cursor: pointer;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    transition: border-color 0.15s;
-}
-
-.pmod-volume-select:hover {
-    border-color: var(--input_border_color-hover, var(--icon_on_card, #B8B8B9));
-}
-
-.pmod-volume-select:focus {
-    border-color: var(--input_border_color-focus, var(--secondary, #8D8D8D));
-    outline: none;
+    padding: 8px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+    margin-bottom: 4px;
 }
 
 /* ── Счётчик (кнопки − и + и поле ввода) ────────────────────────────────── */
@@ -120,7 +94,7 @@
 .pmod-counter {
     display: flex;
     align-items: center;
-    height: 38px;
+    height: var(--sku-height, 46px);
     border: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     border-radius: 4px;
     overflow: hidden;
@@ -131,7 +105,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
+    width: 42px;
     height: 100%;
     padding: 0;
     background: transparent;
@@ -162,7 +136,7 @@
     border-left: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     border-right: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     text-align: center;
-    font-size: 14px;
+    font-size: calc(1rem - 1px);
     color: var(--input_color, var(--white_text_black, #222228));
     background: var(--input_bg_color, var(--black_bg_black, #fff));
     -moz-appearance: textfield;
@@ -245,9 +219,5 @@
 
     .pmod-counter__input {
         width: 60px;
-    }
-
-    .pmod-volume-select {
-        min-width: 100%;
     }
 }
