@@ -78,15 +78,17 @@
     flex-wrap: wrap;
     gap: 6px;
     position: absolute;
-    bottom: 100%;
+    top: 100%;
     left: 0;
     z-index: 100;
     background: var(--input_bg_color, var(--black_bg_black, #fff));
     border: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     border-radius: 4px;
     padding: 8px;
-    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
-    margin-bottom: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    margin-top: 20px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* ── Счётчик (кнопки − и + и поле ввода) ────────────────────────────────── */
