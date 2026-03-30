@@ -295,17 +295,29 @@
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
 
-            function onFormatChange() {
-                var w = clamp(parseInt(widthInput.value, 10)  || minW, minW, maxW);
-                var h = clamp(parseInt(heightInput.value, 10) || minH, minH, maxH);
-                widthInput.value  = w;
-                heightInput.value = h;
+            function onFormatChange(isImmediate) {
+                var rawW = parseInt(widthInput.value, 10);
+                var rawH = parseInt(heightInput.value, 10);
+                var w, h;
+
+                if (isImmediate) {
+                    // Кнопки +/- или blur: применяем clamp сразу
+                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
+                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
+                    widthInput.value  = w;
+                    heightInput.value = h;
+                } else {
+                    // Ручной ввод: не перезаписываем инпут
+                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
+                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
+                }
 
                 // Ищем точное совпадение с пресетом
                 var matched = PModificator.findFormatPreset(valuesEl, w, h, state.formatEnumMap);
                 if (matched) {
                     // Кликаем на пресет — стандартная логика Аспро
                     if (!matched.classList.contains('sku-props__value--active')) {
+                        inner._pmodProgrammaticChange = true;
                         matched.click();
                     }
                     state.customWidth  = null;
@@ -319,6 +331,7 @@
                     // Выбираем ближайший пресет
                     var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
                     if (nearest && !nearest.classList.contains('sku-props__value--active')) {
+                        inner._pmodProgrammaticChange = true;
                         nearest.click();
                     }
                 }
@@ -326,10 +339,25 @@
                 PModificator.updatePriceDisplay(container, state);
             }
 
-            var debouncedChange = debounce(onFormatChange, DEBOUNCE_MS);
+            var debouncedChange = debounce(function () { onFormatChange(false); }, DEBOUNCE_MS);
 
             widthInput.addEventListener('input',  debouncedChange);
             heightInput.addEventListener('input', debouncedChange);
+
+            // Валидация при потере фокуса
+            [widthInput, heightInput].forEach(function (inp) {
+                inp.addEventListener('blur', function () {
+                    var raw = parseInt(inp.value, 10);
+                    var min = parseInt(inp.min, 10);
+                    var max = parseInt(inp.max, 10);
+                    var s   = parseInt(inp.step, 10) || 1;
+                    var v   = clamp(isNaN(raw) ? min : raw, min, max);
+                    v = Math.round(v / s) * s;
+                    v = clamp(v, min, max);
+                    inp.value = v;
+                    onFormatChange(true);
+                });
+            });
 
             // +/- кнопки
             ui.querySelectorAll('.pmod-counter__minus, .pmod-counter__plus').forEach(function (btn) {
@@ -339,8 +367,21 @@
                     var s       = parseInt(inp.step, 10) || 1;
                     var newVal  = btn.classList.contains('pmod-counter__plus') ? current + s : current - s;
                     inp.value   = clamp(newVal, parseInt(inp.min, 10), parseInt(inp.max, 10));
-                    inp.dispatchEvent(new Event('input'));
+                    onFormatChange(true);
                 });
+            });
+
+            // Колесико мыши
+            [widthInput, heightInput].forEach(function (inp) {
+                inp.addEventListener('wheel', function (e) {
+                    if (document.activeElement !== inp) return;
+                    e.preventDefault();
+                    var current = parseInt(inp.value, 10) || parseInt(inp.min, 10);
+                    var s       = parseInt(inp.step, 10) || 1;
+                    var newVal  = e.deltaY < 0 ? current + s : current - s;
+                    inp.value   = clamp(newVal, parseInt(inp.min, 10), parseInt(inp.max, 10));
+                    onFormatChange(true);
+                }, { passive: false });
             });
 
             // Сохраняем ссылки для обновления из обработчика кликов
@@ -434,13 +475,23 @@
             });
 
             // ── Обработчик изменения инпута ────────────────────────────────────
-            function onVolumeChange() {
-                var v = clamp(parseInt(volumeInput.value, 10) || minV, minV, maxV);
-                volumeInput.value = v;
+            function onVolumeChange(isImmediate) {
+                var raw = parseInt(volumeInput.value, 10);
+                var v;
+
+                if (isImmediate) {
+                    // Кнопки +/- или blur: применяем clamp сразу
+                    v = clamp(isNaN(raw) ? minV : raw, minV, maxV);
+                    volumeInput.value = v;
+                } else {
+                    // Ручной ввод: не перезаписываем инпут
+                    v = clamp(isNaN(raw) ? minV : raw, minV, maxV);
+                }
 
                 var matchedBtn = findBtnByXmlId(v);
                 if (matchedBtn) {
                     if (!matchedBtn.classList.contains('sku-props__value--active')) {
+                        inner._pmodProgrammaticChange = true;
                         matchedBtn.click();
                     }
                     state.customVolume = null;
@@ -452,6 +503,7 @@
 
                     var nearest = PModificator.findNearestVolumePreset(valuesEl, v);
                     if (nearest && !nearest.classList.contains('sku-props__value--active')) {
+                        inner._pmodProgrammaticChange = true;
                         nearest.click();
                     }
                 }
@@ -459,8 +511,19 @@
                 PModificator.updatePriceDisplay(container, state);
             }
 
-            var debouncedChange = debounce(onVolumeChange, DEBOUNCE_MS);
+            var debouncedChange = debounce(function () { onVolumeChange(false); }, DEBOUNCE_MS);
             volumeInput.addEventListener('input', debouncedChange);
+
+            // Валидация при потере фокуса
+            volumeInput.addEventListener('blur', function () {
+                var raw  = parseInt(volumeInput.value, 10);
+                var s    = parseInt(volumeInput.step, 10) || 1;
+                var v    = clamp(isNaN(raw) ? minV : raw, minV, maxV);
+                v = Math.round(v / s) * s;
+                v = clamp(v, minV, maxV);
+                volumeInput.value = v;
+                onVolumeChange(true);
+            });
 
             ui.querySelectorAll('.pmod-counter__minus, .pmod-counter__plus').forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -469,9 +532,20 @@
                     var s      = parseInt(inp.step, 10) || 1;
                     var newVal = btn.classList.contains('pmod-counter__plus') ? curr + s : curr - s;
                     inp.value  = clamp(newVal, parseInt(inp.min, 10), parseInt(inp.max, 10));
-                    inp.dispatchEvent(new Event('input'));
+                    onVolumeChange(true);
                 });
             });
+
+            // Колесико мыши
+            volumeInput.addEventListener('wheel', function (e) {
+                if (document.activeElement !== volumeInput) return;
+                e.preventDefault();
+                var current = parseInt(volumeInput.value, 10) || parseInt(volumeInput.min, 10);
+                var s       = parseInt(volumeInput.step, 10) || 1;
+                var newVal  = e.deltaY < 0 ? current + s : current - s;
+                volumeInput.value = clamp(newVal, parseInt(volumeInput.min, 10), parseInt(volumeInput.max, 10));
+                onVolumeChange(true);
+            }, { passive: false });
 
             // Сохраняем ссылку для обновления из обработчика кликов
             inner._pmodVolumeInput = volumeInput;
@@ -495,6 +569,11 @@
 
                 // Обрабатываем только клики на кнопки FORMAT или VOLUME свойств
                 if (String(propId) === String(formatPropId)) {
+                    // Если клик был вызван программно из onFormatChange — не перезаписываем инпуты и не трогаем state
+                    if (innerEl._pmodProgrammaticChange) {
+                        innerEl._pmodProgrammaticChange = false;
+                        return;
+                    }
                     // Клик по пресету FORMAT — обновляем поля ширины/высоты
                     var wInput = innerEl._pmodWidthInput;
                     var hInput = innerEl._pmodHeightInput;
@@ -515,6 +594,11 @@
                     PModificator.hideCustomPrice(container);
 
                 } else if (String(propId) === String(volumePropId)) {
+                    // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
+                    if (innerEl._pmodProgrammaticChange) {
+                        innerEl._pmodProgrammaticChange = false;
+                        return;
+                    }
                     // Клик по пресету VOLUME — обновляем поле тиража
                     var vInput = innerEl._pmodVolumeInput;
                     if (vInput) {
