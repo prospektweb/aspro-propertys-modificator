@@ -175,6 +175,12 @@
             var containers = document.querySelectorAll('.sku-props');
             if (!containers.length) return;
 
+            // Добавляем класс обрезки к h1 на детальной странице товара
+            var h1 = document.querySelector('h1');
+            if (h1) {
+                h1.classList.add('pmod-title-clamp');
+            }
+
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
