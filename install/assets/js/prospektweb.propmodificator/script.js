@@ -354,7 +354,7 @@
             var valuesEl = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
 
-            var volCfg       = state.volumeCfg;
+            var volCfg        = state.volumeCfg;
             var volumeEnumMap = state.volumeEnumMap; // enumId → xmlIdNumber
             var minV   = volCfg.MIN  || 10;
             var maxV   = volCfg.MAX  || 100000;
@@ -377,47 +377,25 @@
                     : (parseInt(activeBtn.dataset.title, 10) || minV);
             }
 
-            // Строим HTML селекта
-            var optionsHtml = '';
-            presetBtns.forEach(function (btn) {
-                var enumId = btn.dataset.onevalue || '';
-                var xmlId  = (volumeEnumMap && enumId && volumeEnumMap[enumId] !== undefined)
-                    ? parseInt(volumeEnumMap[enumId], 10)
-                    : (parseInt(btn.dataset.title, 10) || 0);
-                var label  = btn.dataset.title || String(xmlId);
-                var sel    = (xmlId === initXmlId) ? ' selected' : '';
-                optionsHtml += '<option value="' + xmlId + '" data-enum-id="' + enumId + '"' + sel + '>' + label + '</option>';
-            });
-
             var ui = document.createElement('div');
             ui.className = 'pmod-volume-ui';
             ui.innerHTML = [
                 '<div class="pmod-volume-row">',
-                  '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Тираж, шт</label>',
-                    '<div class="pmod-volume-select-wrap">',
-                      '<select class="pmod-volume-select" aria-label="Выбрать тираж">' + optionsHtml + '</select>',
-                    '</div>',
-                  '</div>',
-                  '<div class="pmod-input-group">',
-                    '<label class="pmod-label" for="pmod-custom-volume-' + inner.dataset.id + '">Или введите тираж</label>',
-                    '<div class="pmod-counter">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить тираж">&#8722;</button>',
-                      '<input type="number" id="pmod-custom-volume-' + inner.dataset.id + '"',
-                             ' class="pmod-counter__input pmod-input-volume pmod-input--inactive"',
-                             ' min="' + minV + '" max="' + maxV + '" step="' + step + '"',
-                             ' value="' + initXmlId + '" autocomplete="off"',
-                             ' aria-label="Ввести произвольный тираж">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить тираж">+</button>',
-                    '</div>',
+                  '<div class="pmod-counter">',
+                    '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить тираж">&#8722;</button>',
+                    '<input type="number"',
+                           ' class="pmod-counter__input pmod-input-volume"',
+                           ' min="' + minV + '" max="' + maxV + '" step="' + step + '"',
+                           ' value="' + initXmlId + '" autocomplete="off"',
+                           ' aria-label="Тираж">',
+                    '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить тираж">+</button>',
                   '</div>',
                 '</div>',
             ].join('');
 
             valuesEl.parentNode.insertBefore(ui, valuesEl);
 
-            var volumeSelect = ui.querySelector('.pmod-volume-select');
-            var volumeInput  = ui.querySelector('.pmod-input-volume');
+            var volumeInput = ui.querySelector('.pmod-input-volume');
 
             // ── Предварительно строим карту xmlId → кнопка для быстрого поиска ──
             var xmlIdToBtnMap = {};
@@ -434,11 +412,6 @@
                 return xmlIdToBtnMap[xmlId] || null;
             }
 
-            // ── Синхронизировать select по VALUE_XML_ID ────────────────────────
-            function syncSelectToXmlId(xmlId) {
-                volumeSelect.value = String(xmlId);
-            }
-
             // ── Клик по скрытой кнопке пресета (фоново) ────────────────────────
             function clickPresetByXmlId(xmlId) {
                 var btn = findBtnByXmlId(xmlId);
@@ -447,40 +420,17 @@
                 }
             }
 
-            // ── Обработчик изменения select ────────────────────────────────────
-            volumeSelect.addEventListener('change', function () {
-                var xmlId = parseInt(volumeSelect.value, 10);
-
-                // Подставляем VALUE_XML_ID в инпут
-                volumeInput.value = xmlId;
-
-                // Инпут — неактивен (значение управляется селектом)
-                volumeInput.classList.add('pmod-input--inactive');
-                volumeInput.classList.remove('pmod-input--active');
-                volumeInput.blur();
-
-                // Фоновый клик по скрытой кнопке
-                clickPresetByXmlId(xmlId);
-
-                state.customVolume = null;
-                state.customMode   = !!state.customWidth;
-
-                PModificator.updatePriceDisplay(container, state);
-            });
-
-            // ── Активация инпута по фокусу ────────────────────────────────────
+            // ── Показать/скрыть кнопки пресетов при фокусе/потере фокуса ────────
             volumeInput.addEventListener('focus', function () {
-                volumeInput.classList.add('pmod-input--active');
-                volumeInput.classList.remove('pmod-input--inactive');
+                valuesEl.classList.remove('pmod-preset-buttons--hidden');
+                valuesEl.classList.add('pmod-preset-buttons--floating');
             });
 
-            // ── При потере фокуса: неактивен только если значение — пресет ─────
             volumeInput.addEventListener('blur', function () {
-                volumeInput.classList.remove('pmod-input--active');
-                if (!state.customVolume) {
-                    // Значение соответствует пресету — управляется селектом
-                    volumeInput.classList.add('pmod-input--inactive');
-                }
+                setTimeout(function () {
+                    valuesEl.classList.add('pmod-preset-buttons--hidden');
+                    valuesEl.classList.remove('pmod-preset-buttons--floating');
+                }, 200);
             });
 
             // ── Обработчик изменения инпута ────────────────────────────────────
@@ -495,7 +445,6 @@
                     }
                     state.customVolume = null;
                     state.customMode   = !!state.customWidth;
-                    syncSelectToXmlId(v);
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
@@ -524,32 +473,33 @@
                 });
             });
 
-            // Сохраняем ссылки для обновления из обработчика кликов
-            inner._pmodVolumeInput  = volumeInput;
-            inner._pmodVolumeSelect = volumeSelect;
+            // Сохраняем ссылку для обновления из обработчика кликов
+            inner._pmodVolumeInput = volumeInput;
         },
 
         // ── Слежение за кликами по стандартным пресетам ───────────────────────
 
         watchPresetClicks: function (container, state) {
+            var productCfg = window.pmodConfig && window.pmodConfig.products && window.pmodConfig.products[state.productId];
+            var formatPropId = productCfg && productCfg.formatPropId;
+            var volumePropId = productCfg && productCfg.volumePropId;
+
             container.addEventListener('click', function (e) {
                 var btn = e.target.closest('.sku-props__value');
                 if (!btn) return;
 
-                var enumId = btn.dataset.onevalue || '';
+                // Определяем, к какому свойству относится кнопка
+                var innerEl = btn.closest('.sku-props__inner');
+                if (!innerEl) return;
+                var propId = innerEl.dataset.id;
 
-                // Обновляем поля ввода FORMAT через formatEnumMap → VALUE_XML_ID типа "210x297"
-                var formatInner = container.querySelector(
-                    '[data-id="' + (window.pmodConfig &&
-                    window.pmodConfig.products &&
-                    window.pmodConfig.products[state.productId] &&
-                    window.pmodConfig.products[state.productId].formatPropId) + '"]'
-                );
-                if (formatInner) {
-                    var wInput = formatInner._pmodWidthInput;
-                    var hInput = formatInner._pmodHeightInput;
+                // Обрабатываем только клики на кнопки FORMAT или VOLUME свойств
+                if (String(propId) === String(formatPropId)) {
+                    // Клик по пресету FORMAT — обновляем поля ширины/высоты
+                    var wInput = innerEl._pmodWidthInput;
+                    var hInput = innerEl._pmodHeightInput;
                     if (wInput && hInput) {
-                        // Предпочитаем VALUE_XML_ID из formatEnumMap, fallback — data-title
+                        var enumId   = btn.dataset.onevalue || '';
                         var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
                             ? state.formatEnumMap[enumId]
                             : (btn.dataset.title || '');
@@ -559,39 +509,29 @@
                             hInput.value = parseInt(parts[1], 10) || hInput.value;
                         }
                     }
-                }
+                    state.customMode   = false;
+                    state.customWidth  = null;
+                    state.customHeight = null;
+                    PModificator.hideCustomPrice(container);
 
-                // Обновляем поле ввода VOLUME через volumeEnumMap → VALUE_XML_ID (число)
-                var volumeInner = container.querySelector(
-                    '[data-id="' + (window.pmodConfig &&
-                    window.pmodConfig.products &&
-                    window.pmodConfig.products[state.productId] &&
-                    window.pmodConfig.products[state.productId].volumePropId) + '"]'
-                );
-                if (volumeInner) {
-                    var vInput = volumeInner._pmodVolumeInput;
-                    var vSelect = volumeInner._pmodVolumeSelect;
+                } else if (String(propId) === String(volumePropId)) {
+                    // Клик по пресету VOLUME — обновляем поле тиража
+                    var vInput = innerEl._pmodVolumeInput;
                     if (vInput) {
+                        var enumId   = btn.dataset.onevalue || '';
                         var volXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
                             ? parseInt(state.volumeEnumMap[enumId], 10)
                             : (parseInt(btn.dataset.title, 10) || NaN);
                         if (!isNaN(volXmlId)) {
                             vInput.value = volXmlId;
-                            // Синхронизируем select через встроенный API
-                            if (vSelect) {
-                                vSelect.value = String(volXmlId);
-                            }
                         }
                     }
+                    state.customMode   = false;
+                    state.customVolume = null;
+                    PModificator.hideCustomPrice(container);
                 }
+                // Если это другое свойство (красочность, бумага и т.д.) — ничего не делаем
 
-                // Кнопка пресета нажата — стандартное ТП, сбрасываем кастом
-                state.customMode   = false;
-                state.customWidth  = null;
-                state.customHeight = null;
-                state.customVolume = null;
-
-                PModificator.hideCustomPrice(container);
             }, true); // capture — срабатывает до skuAction.js
         },
 
@@ -689,16 +629,14 @@
                 price = linearInterp(volPoints, v);
             }
 
-            if (window.pmodDebugPrice) {
-                console.log('[pmod price debug]', {
-                    productId: state.productId,
-                    width: w,
-                    height: h,
-                    volume: v,
-                    offersCount: offers.length,
-                    calculatedPrice: price,
-                });
-            }
+            console.log('[pmod price]', {
+                productId: state.productId,
+                width: w,
+                height: h,
+                volume: v,
+                offersCount: offers.length,
+                calculatedPrice: price,
+            });
 
             if (price === null) {
                 PModificator.hideCustomPrice(container);
