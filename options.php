@@ -49,12 +49,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         'SET_FORMAT_PROP_CODE',
         'SET_VOLUME_PROP_CODE',
         'PRICE_TYPE_ID',
+        'CATALOG_PATH_FILTER',
     ];
 
     foreach ($fields as $key) {
         $val = trim($_POST[$key] ?? '');
         COption::SetOptionString($moduleId, $key, $val);
     }
+
+    // Checkbox: absent in POST means unchecked
+    COption::SetOptionString($moduleId, 'DEBUG', isset($_POST['DEBUG']) ? 'Y' : 'N');
 
     LocalRedirect($APPLICATION->GetCurPage() . '?mid=' . urlencode($moduleId) . '&saved=Y');
 }
@@ -161,6 +165,28 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
             <input type="text" name="PRICE_TYPE_ID"
                    value="<?= htmlspecialchars($options['PRICE_TYPE_ID']) ?>"
                    size="10" maxlength="10">
+        </td>
+    </tr>
+
+    <tr>
+        <td class="adm-detail-content-cell-l">
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CATALOG_PATH_FILTER') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CATALOG_PATH_FILTER_HINT') ?></small>
+        </td>
+        <td class="adm-detail-content-cell-r">
+            <input type="text" name="CATALOG_PATH_FILTER"
+                   value="<?= htmlspecialchars($options['CATALOG_PATH_FILTER']) ?>"
+                   size="40" maxlength="255">
+        </td>
+    </tr>
+
+    <tr>
+        <td class="adm-detail-content-cell-l">
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_DEBUG') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_DEBUG_HINT') ?></small>
+        </td>
+        <td class="adm-detail-content-cell-r">
+            <input type="checkbox" name="DEBUG" value="Y"<?= ($options['DEBUG'] === 'Y' ? ' checked' : '') ?>>
         </td>
     </tr>
 

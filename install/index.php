@@ -129,11 +129,13 @@ class prospektweb_propmodificator extends CModule
 
         $eventManager->registerEventHandler(
             'main',
-            'OnEpilogHtml',
+            'OnEpilog',
             $this->MODULE_ID,
             'Prospektweb\\PropModificator\\PageHandler',
-            'onEpilogHtml'
+            'onEpilog'
         );
+
+        $this->installIncludeFile();
 
         return true;
     }
@@ -226,11 +228,74 @@ class prospektweb_propmodificator extends CModule
 
         $eventManager->unRegisterEventHandler(
             'main',
+            'OnEpilog',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\PageHandler',
+            'onEpilog'
+        );
+
+        // Also clean up the old OnEpilogHtml handler if it was registered by a previous install
+        $eventManager->unRegisterEventHandler(
+            'main',
             'OnEpilogHtml',
             $this->MODULE_ID,
             'Prospektweb\\PropModificator\\PageHandler',
             'onEpilogHtml'
         );
+
+        $this->uninstallIncludeFile();
+    }
+
+    public function installIncludeFile(): bool
+    {
+        $includeDir  = Application::getDocumentRoot() . '/bitrix/php_interface/include';
+        $includeFile = $includeDir . '/prospektweb_propmodificator.php';
+
+        if (!is_dir($includeDir)) {
+            @mkdir($includeDir, 0755, true);
+        }
+
+        if (!is_dir($includeDir)) {
+            return false;
+        }
+
+        $content = <<<'PHP'
+<?php
+// Auto-created by prospektweb.propmodificator installer. Do not edit manually.
+// Registers the page-handler event so the module works without init.php.
+if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
+    return;
+}
+
+\Bitrix\Main\EventManager::getInstance()->addEventHandler(
+    'main',
+    'OnEpilog',
+    static function () {
+        if (!\Bitrix\Main\Loader::includeModule('prospektweb.propmodificator')) {
+            return;
+        }
+        $f = \Bitrix\Main\Application::getDocumentRoot()
+            . \getLocalPath('modules/prospektweb.propmodificator/template_include.php');
+        if (file_exists($f)) {
+            include_once $f;
+        }
+    }
+);
+PHP;
+
+        $result = file_put_contents($includeFile, $content);
+
+        return $result !== false;
+    }
+
+    public function uninstallIncludeFile(): void
+    {
+        $includeFile = Application::getDocumentRoot()
+            . '/bitrix/php_interface/include/prospektweb_propmodificator.php';
+
+        if (file_exists($includeFile)) {
+            @unlink($includeFile);
+        }
     }
 
     public function uninstallEvents(): void

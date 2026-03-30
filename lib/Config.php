@@ -26,12 +26,12 @@ class Config
     {
         if (!array_key_exists($key, self::$cache)) {
             // Загружаем defaults из файла
-            $arDefaultOptions = [];
+            $prospektweb_propmodificator_default_option = [];
             $defaultFile = __DIR__ . '/../default_option.php';
             if (file_exists($defaultFile)) {
                 include $defaultFile;
             }
-            $fallback = $arDefaultOptions[$key] ?? $default;
+            $fallback = $prospektweb_propmodificator_default_option[$key] ?? $default;
 
             self::$cache[$key] = \COption::GetOptionString(self::MODULE_ID, $key, $fallback);
         }
@@ -110,5 +110,22 @@ class Config
     public static function getModuleId(): string
     {
         return self::MODULE_ID;
+    }
+
+    /**
+     * Фильтр по пути URL для активации модуля.
+     * Пустая строка — отключает фильтр (срабатывает на всех страницах).
+     */
+    public static function getCatalogPathFilter(): string
+    {
+        return self::get('CATALOG_PATH_FILTER', '/catalog/');
+    }
+
+    /**
+     * Режим отладки: 'Y' — писать в лог, 'N' — тихий режим.
+     */
+    public static function isDebug(): bool
+    {
+        return self::get('DEBUG', 'N') === 'Y';
     }
 }
