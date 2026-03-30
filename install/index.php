@@ -387,6 +387,7 @@ PHP;
     /**
      * Проверяем наличие и валидность свойств CALC_PROP_FORMAT и CALC_PROP_VOLUME
      * в инфоблоке торговых предложений.
+     * Если значение-маркер «X» отсутствует в перечислении свойства — создаём его автоматически.
      */
     public function validateOffersProperties(int $offersIblockId): array
     {
@@ -410,33 +411,48 @@ PHP;
                 continue;
             }
 
+            $propId = (int)$prop['ID'];
+
             $rsEnum = CIBlockPropertyEnum::GetList(
                 ['SORT' => 'ASC'],
                 ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code]
             );
 
-            $valid = false;
+            $valid    = false;
+            $hasXmark = false;
             while ($arEnum = $rsEnum->Fetch()) {
                 $xmlId = $arEnum['XML_ID'];
                 if ($xmlId === 'X') {
-                    // «X» — маркер произвольного значения, пропускаем
-                    continue;
-                }
-                if ($code === 'CALC_PROP_FORMAT') {
+                    $hasXmark = true;
+                } elseif ($code === 'CALC_PROP_FORMAT') {
                     if (preg_match('/^\d+x\d+$/i', $xmlId)) {
                         $valid = true;
-                        break;
                     }
                 } else {
                     if (is_numeric($xmlId)) {
                         $valid = true;
-                        break;
                     }
+                }
+                // Прерываем перебор как только нашли оба флага
+                if ($valid && $hasXmark) {
+                    break;
                 }
             }
 
             if (!$valid) {
                 $issues[] = "Свойство {$code}: не найдено ни одного значения с корректным XML_ID";
+            }
+
+            // Если маркер произвольного значения «X» отсутствует — создаём его
+            if (!$hasXmark && $propId > 0) {
+                $oEnum = new CIBlockPropertyEnum();
+                $oEnum->Add([
+                    'PROPERTY_ID' => $propId,
+                    'VALUE'       => 'Произвольное',
+                    'XML_ID'      => 'X',
+                    'SORT'        => 999,
+                    'DEF'         => 'N',
+                ]);
             }
         }
 

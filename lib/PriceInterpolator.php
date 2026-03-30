@@ -86,6 +86,55 @@ class PriceInterpolator
         $formatCode = Config::getFormatPropCode();
         $volumeCode = Config::getVolumePropCode();
 
+        // Загружаем ID свойств для построения fallback-маппинга enumId → XML_ID.
+        // Это нужно потому, что Bitrix может не возвращать PROPERTY_{CODE}_VALUE_XML_ID
+        // для свойств типа «список» (L) в зависимости от версии и способа запроса.
+        $formatPropId = null;
+        $volumePropId = null;
+        if ($formatCode) {
+            $rsProp = \CIBlockProperty::GetList(
+                [],
+                ['IBLOCK_ID' => $this->offersIblockId, 'CODE' => $formatCode, 'ACTIVE' => 'Y']
+            );
+            if ($arProp = $rsProp->Fetch()) {
+                $formatPropId = (int)$arProp['ID'];
+            }
+        }
+        if ($volumeCode) {
+            $rsProp = \CIBlockProperty::GetList(
+                [],
+                ['IBLOCK_ID' => $this->offersIblockId, 'CODE' => $volumeCode, 'ACTIVE' => 'Y']
+            );
+            if ($arProp = $rsProp->Fetch()) {
+                $volumePropId = (int)$arProp['ID'];
+            }
+        }
+
+        // Загружаем маппинги enumId → XML_ID для fallback
+        $volumeEnumMap = [];
+        if ($volumePropId) {
+            $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $volumePropId]);
+            while ($arEnum = $rsEnum->Fetch()) {
+                $enumId = (int)$arEnum['ID'];
+                $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+                if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
+                    $volumeEnumMap[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
+                }
+            }
+        }
+
+        $formatEnumMap = [];
+        if ($formatPropId) {
+            $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $formatPropId]);
+            while ($arEnum = $rsEnum->Fetch()) {
+                $enumId = (int)$arEnum['ID'];
+                $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+                if ($enumId > 0 && $xmlId !== '') {
+                    $formatEnumMap[$enumId] = $xmlId;
+                }
+            }
+        }
+
         // Все ТП данного товара
         $rsOffers = \CIBlockElement::GetList(
             ['ID' => 'ASC'],
@@ -105,9 +154,22 @@ class PriceInterpolator
         while ($arOffer = $rsOffers->Fetch()) {
             $offerId = (int)$arOffer['ID'];
 
-            // Разбираем XML_ID значений свойств
+            // Разбираем XML_ID значений свойств; fallback — через enumMap
             $formatXmlId = $arOffer["PROPERTY_{$formatCode}_VALUE_XML_ID"] ?? null;
+            if (empty($formatXmlId) && !empty($arOffer["PROPERTY_{$formatCode}_VALUE"])) {
+                $enumId = (int)$arOffer["PROPERTY_{$formatCode}_VALUE"];
+                $formatXmlId = $formatEnumMap[$enumId] ?? null;
+            }
+
             $volumeXmlId = $arOffer["PROPERTY_{$volumeCode}_VALUE_XML_ID"] ?? null;
+            if (empty($volumeXmlId) && !empty($arOffer["PROPERTY_{$volumeCode}_VALUE"])) {
+                $enumId = (int)$arOffer["PROPERTY_{$volumeCode}_VALUE"];
+                $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
+                // volumeEnumMap хранит int|'X', приводим к строке для парсера
+                if ($volumeXmlId !== null) {
+                    $volumeXmlId = (string)$volumeXmlId;
+                }
+            }
 
             $formatParsed = $formatXmlId ? PropertyValidator::parseFormatXmlId($formatXmlId) : null;
             $volumeParsed = $volumeXmlId ? PropertyValidator::parseVolumeXmlId($volumeXmlId) : null;
