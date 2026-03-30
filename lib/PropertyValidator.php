@@ -21,7 +21,7 @@ class PropertyValidator
      */
     public static function isValidFormatXmlId(string $xmlId): bool
     {
-        return (bool)preg_match('/^\d+x\d+$/i', $xmlId);
+        return $xmlId === 'X' || (bool)preg_match('/^\d+x\d+$/i', $xmlId);
     }
 
     /**
@@ -50,7 +50,7 @@ class PropertyValidator
      */
     public static function isValidVolumeXmlId(string $xmlId): bool
     {
-        return is_numeric($xmlId) && (int)$xmlId > 0;
+        return $xmlId === 'X' || (is_numeric($xmlId) && (int)$xmlId > 0);
     }
 
     /**
@@ -96,6 +96,11 @@ class PropertyValidator
         while ($arEnum = $rsEnum->Fetch()) {
             $xmlId = $arEnum['XML_ID'];
 
+            if ($xmlId === 'X') {
+                // «X» — маркер произвольного значения, валиден, но не парсится как размер
+                continue;
+            }
+
             if (!self::isValidFormatXmlId($xmlId)) {
                 $issues[] = "Некорректный XML_ID «{$xmlId}» (ожидается формат ШxВ, например «210x297»)";
                 continue;
@@ -139,6 +144,11 @@ class PropertyValidator
 
         while ($arEnum = $rsEnum->Fetch()) {
             $xmlId = $arEnum['XML_ID'];
+
+            if ($xmlId === 'X') {
+                // «X» — маркер произвольного значения, валиден, но не парсится как число
+                continue;
+            }
 
             if (!self::isValidVolumeXmlId($xmlId)) {
                 $issues[] = "Некорректный XML_ID «{$xmlId}» (ожидается число, например «1000»)";
