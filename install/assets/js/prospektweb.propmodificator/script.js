@@ -200,6 +200,8 @@
                 offers:       productCfg.offers || [],
                 formatCfg:    productCfg.formatSettings || {},
                 volumeCfg:    productCfg.volumeSettings || {},
+                volumeEnumMap: productCfg.volumeEnumMap || {},
+                formatEnumMap: productCfg.formatEnumMap || {},
                 customWidth:  null,
                 customHeight: null,
                 customVolume: null,
@@ -247,7 +249,12 @@
             var initW = minW, initH = minH;
 
             if (activeBtn) {
-                var parts = (activeBtn.dataset.title || '').toLowerCase().split('x');
+                // Предпочитаем VALUE_XML_ID из formatEnumMap (вида "210x297"), fallback — data-title
+                var afmtEnumId = activeBtn.dataset.onevalue || '';
+                var afmtXmlId  = (state.formatEnumMap && afmtEnumId && state.formatEnumMap[afmtEnumId] !== undefined)
+                    ? state.formatEnumMap[afmtEnumId]
+                    : (activeBtn.dataset.title || '');
+                var parts = afmtXmlId.toLowerCase().split('x');
                 if (parts.length === 2) {
                     initW = parseInt(parts[0], 10) || minW;
                     initH = parseInt(parts[1], 10) || minH;
@@ -295,7 +302,7 @@
                 heightInput.value = h;
 
                 // Ищем точное совпадение с пресетом
-                var matched = PModificator.findFormatPreset(valuesEl, w, h);
+                var matched = PModificator.findFormatPreset(valuesEl, w, h, state.formatEnumMap);
                 if (matched) {
                     // Кликаем на пресет — стандартная логика Аспро
                     if (!matched.classList.contains('sku-props__value--active')) {
@@ -310,7 +317,7 @@
                     state.customMode   = true;
 
                     // Выбираем ближайший пресет
-                    var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h);
+                    var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
                     if (nearest && !nearest.classList.contains('sku-props__value--active')) {
                         nearest.click();
                     }
@@ -347,29 +354,60 @@
             var valuesEl = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
 
-            var volCfg = state.volumeCfg;
+            var volCfg       = state.volumeCfg;
+            var volumeEnumMap = state.volumeEnumMap; // enumId → xmlIdNumber
             var minV   = volCfg.MIN  || 10;
             var maxV   = volCfg.MAX  || 100000;
             var step   = volCfg.STEP || 1;
 
-            var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
-                            valuesEl.querySelector('.sku-props__value');
-            var initV = minV;
+            // Скрываем стандартные кнопки пресетов (остаются в DOM)
+            valuesEl.classList.add('pmod-preset-buttons--hidden');
 
+            // Собираем пресеты из скрытых кнопок
+            var presetBtns = valuesEl.querySelectorAll('.sku-props__value');
+            var activeBtn  = valuesEl.querySelector('.sku-props__value--active') ||
+                             valuesEl.querySelector('.sku-props__value');
+
+            // Начальное значение через VALUE_XML_ID из enumMap
+            var initXmlId = minV;
             if (activeBtn) {
-                initV = parseInt(activeBtn.dataset.title, 10) || minV;
+                var ae = activeBtn.dataset.onevalue;
+                initXmlId = (volumeEnumMap && ae && volumeEnumMap[ae] !== undefined)
+                    ? parseInt(volumeEnumMap[ae], 10)
+                    : (parseInt(activeBtn.dataset.title, 10) || minV);
             }
+
+            // Строим HTML селекта
+            var optionsHtml = '';
+            presetBtns.forEach(function (btn) {
+                var enumId = btn.dataset.onevalue || '';
+                var xmlId  = (volumeEnumMap && enumId && volumeEnumMap[enumId] !== undefined)
+                    ? parseInt(volumeEnumMap[enumId], 10)
+                    : (parseInt(btn.dataset.title, 10) || 0);
+                var label  = btn.dataset.title || String(xmlId);
+                var sel    = (xmlId === initXmlId) ? ' selected' : '';
+                optionsHtml += '<option value="' + xmlId + '" data-enum-id="' + enumId + '"' + sel + '>' + label + '</option>';
+            });
 
             var ui = document.createElement('div');
             ui.className = 'pmod-volume-ui';
             ui.innerHTML = [
-                '<div class="pmod-volume-inputs">',
+                '<div class="pmod-volume-row">',
                   '<div class="pmod-input-group">',
+                    '<label class="pmod-label">Тираж, шт</label>',
+                    '<div class="pmod-volume-select-wrap">',
+                      '<select class="pmod-volume-select" aria-label="Выбрать тираж">' + optionsHtml + '</select>',
+                    '</div>',
+                  '</div>',
+                  '<div class="pmod-input-group">',
+                    '<label class="pmod-label" for="pmod-custom-volume-' + inner.dataset.id + '">Или введите тираж</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить тираж">&#8722;</button>',
-                      '<input type="number" class="pmod-counter__input pmod-input-volume"',
+                      '<input type="number" id="pmod-custom-volume-' + inner.dataset.id + '"',
+                             ' class="pmod-counter__input pmod-input-volume pmod-input--inactive"',
                              ' min="' + minV + '" max="' + maxV + '" step="' + step + '"',
-                             ' value="' + initV + '" autocomplete="off">',
+                             ' value="' + initXmlId + '" autocomplete="off"',
+                             ' aria-label="Ввести произвольный тираж">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить тираж">+</button>',
                     '</div>',
                   '</div>',
@@ -378,20 +416,88 @@
 
             valuesEl.parentNode.insertBefore(ui, valuesEl);
 
-            var volumeInput = ui.querySelector('.pmod-input-volume');
+            var volumeSelect = ui.querySelector('.pmod-volume-select');
+            var volumeInput  = ui.querySelector('.pmod-input-volume');
 
+            // ── Предварительно строим карту xmlId → кнопка для быстрого поиска ──
+            var xmlIdToBtnMap = {};
+            presetBtns.forEach(function (btn) {
+                var eid = btn.dataset.onevalue || '';
+                var xmlId = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
+                    ? parseInt(volumeEnumMap[eid], 10)
+                    : (parseInt(btn.dataset.title, 10) || 0);
+                if (xmlId) xmlIdToBtnMap[xmlId] = btn;
+            });
+
+            // ── Вспомогательная функция: найти кнопку пресета по VALUE_XML_ID ──
+            function findBtnByXmlId(xmlId) {
+                return xmlIdToBtnMap[xmlId] || null;
+            }
+
+            // ── Синхронизировать select по VALUE_XML_ID ────────────────────────
+            function syncSelectToXmlId(xmlId) {
+                volumeSelect.value = String(xmlId);
+            }
+
+            // ── Клик по скрытой кнопке пресета (фоново) ────────────────────────
+            function clickPresetByXmlId(xmlId) {
+                var btn = findBtnByXmlId(xmlId);
+                if (btn && !btn.classList.contains('sku-props__value--active')) {
+                    btn.click();
+                }
+            }
+
+            // ── Обработчик изменения select ────────────────────────────────────
+            volumeSelect.addEventListener('change', function () {
+                var xmlId = parseInt(volumeSelect.value, 10);
+
+                // Подставляем VALUE_XML_ID в инпут
+                volumeInput.value = xmlId;
+
+                // Инпут — неактивен (значение управляется селектом)
+                volumeInput.classList.add('pmod-input--inactive');
+                volumeInput.classList.remove('pmod-input--active');
+                volumeInput.blur();
+
+                // Фоновый клик по скрытой кнопке
+                clickPresetByXmlId(xmlId);
+
+                state.customVolume = null;
+                state.customMode   = !!state.customWidth;
+
+                PModificator.updatePriceDisplay(container, state);
+            });
+
+            // ── Активация инпута по фокусу ────────────────────────────────────
+            volumeInput.addEventListener('focus', function () {
+                volumeInput.classList.add('pmod-input--active');
+                volumeInput.classList.remove('pmod-input--inactive');
+            });
+
+            // ── При потере фокуса: неактивен только если значение — пресет ─────
+            volumeInput.addEventListener('blur', function () {
+                volumeInput.classList.remove('pmod-input--active');
+                if (!state.customVolume) {
+                    // Значение соответствует пресету — управляется селектом
+                    volumeInput.classList.add('pmod-input--inactive');
+                }
+            });
+
+            // ── Обработчик изменения инпута ────────────────────────────────────
             function onVolumeChange() {
                 var v = clamp(parseInt(volumeInput.value, 10) || minV, minV, maxV);
                 volumeInput.value = v;
 
-                var matched = PModificator.findVolumePreset(valuesEl, v);
-                if (matched) {
-                    if (!matched.classList.contains('sku-props__value--active')) {
-                        matched.click();
+                var matchedBtn = findBtnByXmlId(v);
+                if (matchedBtn) {
+                    if (!matchedBtn.classList.contains('sku-props__value--active')) {
+                        matchedBtn.click();
                     }
                     state.customVolume = null;
-                    state.customMode   = !state.customWidth;
+                    state.customMode   = !!state.customWidth;
+                    syncSelectToXmlId(v);
                 } else {
+                    // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
                     state.customMode   = true;
 
@@ -405,7 +511,6 @@
             }
 
             var debouncedChange = debounce(onVolumeChange, DEBOUNCE_MS);
-
             volumeInput.addEventListener('input', debouncedChange);
 
             ui.querySelectorAll('.pmod-counter__minus, .pmod-counter__plus').forEach(function (btn) {
@@ -419,7 +524,9 @@
                 });
             });
 
-            inner._pmodVolumeInput = volumeInput;
+            // Сохраняем ссылки для обновления из обработчика кликов
+            inner._pmodVolumeInput  = volumeInput;
+            inner._pmodVolumeSelect = volumeSelect;
         },
 
         // ── Слежение за кликами по стандартным пресетам ───────────────────────
@@ -429,9 +536,9 @@
                 var btn = e.target.closest('.sku-props__value');
                 if (!btn) return;
 
-                var title = btn.dataset.title || '';
+                var enumId = btn.dataset.onevalue || '';
 
-                // Обновляем поле ввода FORMAT
+                // Обновляем поля ввода FORMAT через formatEnumMap → VALUE_XML_ID типа "210x297"
                 var formatInner = container.querySelector(
                     '[data-id="' + (window.pmodConfig &&
                     window.pmodConfig.products &&
@@ -442,7 +549,11 @@
                     var wInput = formatInner._pmodWidthInput;
                     var hInput = formatInner._pmodHeightInput;
                     if (wInput && hInput) {
-                        var parts = title.toLowerCase().split('x');
+                        // Предпочитаем VALUE_XML_ID из formatEnumMap, fallback — data-title
+                        var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
+                            ? state.formatEnumMap[enumId]
+                            : (btn.dataset.title || '');
+                        var parts = fmtXmlId.toLowerCase().split('x');
                         if (parts.length === 2) {
                             wInput.value = parseInt(parts[0], 10) || wInput.value;
                             hInput.value = parseInt(parts[1], 10) || hInput.value;
@@ -450,7 +561,7 @@
                     }
                 }
 
-                // Обновляем поле ввода VOLUME
+                // Обновляем поле ввода VOLUME через volumeEnumMap → VALUE_XML_ID (число)
                 var volumeInner = container.querySelector(
                     '[data-id="' + (window.pmodConfig &&
                     window.pmodConfig.products &&
@@ -459,9 +570,18 @@
                 );
                 if (volumeInner) {
                     var vInput = volumeInner._pmodVolumeInput;
+                    var vSelect = volumeInner._pmodVolumeSelect;
                     if (vInput) {
-                        var v = parseInt(title, 10);
-                        if (!isNaN(v)) vInput.value = v;
+                        var volXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
+                            ? parseInt(state.volumeEnumMap[enumId], 10)
+                            : (parseInt(btn.dataset.title, 10) || NaN);
+                        if (!isNaN(volXmlId)) {
+                            vInput.value = volXmlId;
+                            // Синхронизируем select через встроенный API
+                            if (vSelect) {
+                                vSelect.value = String(volXmlId);
+                            }
+                        }
                     }
                 }
 
@@ -477,24 +597,31 @@
 
         // ── Поиск пресетов ────────────────────────────────────────────────────
 
-        findFormatPreset: function (valuesEl, w, h) {
+        findFormatPreset: function (valuesEl, w, h, formatEnumMap) {
             var target = w + 'x' + h;
             var btns = valuesEl.querySelectorAll('.sku-props__value');
             for (var i = 0; i < btns.length; i++) {
-                var xmlId = (btns[i].dataset.onevalue || '').toLowerCase();
-                var title = (btns[i].dataset.title   || '').toLowerCase().replace(/[^0-9x]/g, '');
-                if (xmlId === target.toLowerCase() || title === target.toLowerCase()) {
+                var eid    = btns[i].dataset.onevalue || '';
+                var xmlId  = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
+                    ? formatEnumMap[eid]
+                    : (btns[i].dataset.onevalue || btns[i].dataset.title || '');
+                var title  = (btns[i].dataset.title || '').toLowerCase().replace(/[^0-9x]/g, '');
+                if (xmlId.toLowerCase() === target.toLowerCase() || title === target.toLowerCase()) {
                     return btns[i];
                 }
             }
             return null;
         },
 
-        findNearestFormatPreset: function (valuesEl, w, h) {
+        findNearestFormatPreset: function (valuesEl, w, h, formatEnumMap) {
             var area = w * h;
             var best = null, bestDist = Infinity;
             valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {
-                var parts = (btn.dataset.title || '').toLowerCase().split('x');
+                var eid   = btn.dataset.onevalue || '';
+                var xmlId = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
+                    ? formatEnumMap[eid]
+                    : (btn.dataset.title || '');
+                var parts = xmlId.toLowerCase().split('x');
                 if (parts.length !== 2) return;
                 var bw = parseInt(parts[0], 10);
                 var bh = parseInt(parts[1], 10);
@@ -505,11 +632,14 @@
             return best;
         },
 
-        findVolumePreset: function (valuesEl, v) {
+        findVolumePreset: function (valuesEl, v, volumeEnumMap) {
             var btns = valuesEl.querySelectorAll('.sku-props__value');
             for (var i = 0; i < btns.length; i++) {
-                var title = parseInt(btns[i].dataset.title, 10);
-                if (title === v) return btns[i];
+                var eid = btns[i].dataset.onevalue || '';
+                var xmlId = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
+                    ? parseInt(volumeEnumMap[eid], 10)
+                    : parseInt(btns[i].dataset.title, 10);
+                if (xmlId === v) return btns[i];
             }
             return null;
         },
@@ -557,6 +687,17 @@
                     .map(function (o) { return { key: o.volume, price: o.price }; })
                     .sort(function (a, b) { return a.key - b.key; });
                 price = linearInterp(volPoints, v);
+            }
+
+            if (window.pmodDebugPrice) {
+                console.log('[pmod price debug]', {
+                    productId: state.productId,
+                    width: w,
+                    height: h,
+                    volume: v,
+                    offersCount: offers.length,
+                    calculatedPrice: price,
+                });
             }
 
             if (price === null) {

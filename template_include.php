@@ -227,6 +227,32 @@ if (!empty($offerIds)) {
     }
 }
 
+// ─── Загружаем маппинги перечислений (enumId → VALUE_XML_ID) ─────────────────
+
+$volumeEnumMap = [];
+if ($volumePropId) {
+    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $volumePropId]);
+    while ($arEnum = $rsEnum->Fetch()) {
+        $enumId = (int)$arEnum['ID'];
+        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+        if ($enumId > 0 && is_numeric($xmlId)) {
+            $volumeEnumMap[$enumId] = (int)$xmlId;
+        }
+    }
+}
+
+$formatEnumMap = [];
+if ($formatPropId) {
+    $rsEnum = CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $formatPropId]);
+    while ($arEnum = $rsEnum->Fetch()) {
+        $enumId = (int)$arEnum['ID'];
+        $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
+        if ($enumId > 0 && $xmlId !== '') {
+            $formatEnumMap[$enumId] = $xmlId;
+        }
+    }
+}
+
 // ─── Формируем конфиг для JS ──────────────────────────────────────────────────
 
 $pmodConfig = [
@@ -237,6 +263,8 @@ $pmodConfig = [
             'formatSettings'  => $formatSettings,
             'volumeSettings'  => $volumeSettings,
             'offers'          => array_values($offers),
+            'volumeEnumMap'   => $volumeEnumMap,
+            'formatEnumMap'   => $formatEnumMap,
         ],
     ],
 ];
