@@ -365,7 +365,6 @@
             ui.innerHTML = [
                 '<div class="pmod-volume-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Тираж, шт</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить тираж">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-volume"',
