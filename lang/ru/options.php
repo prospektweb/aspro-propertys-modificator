@@ -19,3 +19,7 @@ $MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE']   = 'Код с
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE_HINT'] = 'Multiple-string свойство товара (по умолчанию SET_VOLUME)';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID']          = 'ID типа цены для интерполяции';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID_HINT']     = 'Тип цены из справочника (по умолчанию 1 — базовая)';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CATALOG_PATH_FILTER']    = 'Фильтр URL для активации модуля';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CATALOG_PATH_FILTER_HINT'] = 'Подстрока, которая должна присутствовать в URL для срабатывания модуля (по умолчанию /catalog/). Оставьте пустым, чтобы модуль срабатывал на всех страницах.';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_DEBUG']                  = 'Режим отладки';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_DEBUG_HINT']             = 'Если включено — модуль записывает причину неактивации в /bitrix/logs/prospektweb.propmodificator.log';

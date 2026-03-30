@@ -2,13 +2,13 @@
 /**
  * Подключение модуля в шаблоне Аспро: Премьер
  *
- * Рекомендуемый способ подключения — через событие OnEpilogHtml
+ * Рекомендуемый способ подключения — через событие OnEpilog
  * (регистрируется установщиком модуля автоматически).
  *
  * Альтернативный способ — добавить в /local/php_interface/init.php:
  *
  *   \Bitrix\Main\EventManager::getInstance()->addEventHandler(
- *       'main', 'OnEpilogHtml',
+ *       'main', 'OnEpilog',
  *       function () {
  *           if (!\Bitrix\Main\Loader::includeModule('prospektweb.propmodificator')) return;
  *           $f = \Bitrix\Main\Application::getDocumentRoot()
@@ -28,6 +28,7 @@ use Bitrix\Main\Loader;
 use Bitrix\Main\Page\Asset;
 use Bitrix\Main\Page\AssetLocation;
 use Prospektweb\PropModificator\Config;
+use Prospektweb\PropModificator\PageHandler;
 use Prospektweb\PropModificator\PropertyValidator;
 use Bitrix\Catalog\PriceTable;
 
@@ -40,27 +41,6 @@ if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
     return;
 }
 
-// ─── Определяем текущий товар ─────────────────────────────────────────────────
-
-$productId = (int)(
-    $GLOBALS['ELEMENT_ID']
-    ?? $GLOBALS['arResult']['ID']
-    ?? $GLOBALS['arParams']['ELEMENT_ID']
-    ?? 0
-);
-
-if (!$productId) {
-    // Попытка определить товар по переменным шаблона Аспро
-    if (!empty($GLOBALS['arResult']['OFFERS'])) {
-        $firstOffer = reset($GLOBALS['arResult']['OFFERS']);
-        $productId  = (int)($firstOffer['PROPERTY_CML2_LINK_VALUE'] ?? 0);
-    }
-}
-
-if (!$productId) {
-    return;
-}
-
 // ─── Конфигурация ─────────────────────────────────────────────────────────────
 
 $offersIblockId   = Config::getOffersIblockId();
@@ -70,6 +50,55 @@ $volumePropCode   = Config::getVolumePropCode();
 $setFormatCode    = Config::getSetFormatPropCode();
 $setVolumeCode    = Config::getSetVolumePropCode();
 $priceTypeId      = Config::getPriceTypeId();
+
+// ─── Определяем текущий товар ─────────────────────────────────────────────────
+
+$productId = (int)(
+    $GLOBALS['ELEMENT_ID']
+    ?? $GLOBALS['arResult']['ID']
+    ?? $GLOBALS['arParams']['ELEMENT_ID']
+    ?? 0
+);
+
+// Попытка определить товар по переменным шаблона Аспро
+if (!$productId && !empty($GLOBALS['arResult']['OFFERS'])) {
+    $firstOffer = reset($GLOBALS['arResult']['OFFERS']);
+    $productId  = (int)($firstOffer['PROPERTY_CML2_LINK_VALUE'] ?? 0);
+}
+
+// Пробуем получить ID из query-параметров запроса
+if (!$productId) {
+    foreach (['id', 'element_id', 'product_id'] as $param) {
+        $val = (int)($_GET[$param] ?? 0);
+        if ($val > 0) {
+            $productId = $val;
+            break;
+        }
+    }
+}
+
+// oid / offer_id — ID торгового предложения → ищем родительский товар
+if (!$productId) {
+    $oidParam = (int)($_GET['oid'] ?? $_GET['offer_id'] ?? 0);
+    if ($oidParam > 0 && $offersIblockId > 0) {
+        $rsOff = CIBlockElement::GetList(
+            [],
+            ['IBLOCK_ID' => $offersIblockId, 'ID' => $oidParam, 'ACTIVE' => 'Y'],
+            false,
+            false,
+            ['ID', 'PROPERTY_CML2_LINK']
+        );
+        if ($arOff = $rsOff->Fetch()) {
+            $productId = (int)($arOff['PROPERTY_CML2_LINK_VALUE'] ?? 0);
+        }
+        PageHandler::debugLog('oid=' . $oidParam . ' resolved to productId=' . $productId);
+    }
+}
+
+if (!$productId) {
+    PageHandler::debugLog('No productId found, skipping. GET=' . json_encode($_GET));
+    return;
+}
 
 // ─── Читаем настройки товара (SET_FORMAT, SET_VOLUME) ─────────────────────────
 
@@ -108,6 +137,7 @@ if ($arProduct) {
 
 // Если нет настроек — модуль не нужен для этого товара
 if (empty($formatSettings) && empty($volumeSettings)) {
+    PageHandler::debugLog('No SET_FORMAT/SET_VOLUME settings for productId=' . $productId . ', skipping');
     return;
 }
 
@@ -227,3 +257,6 @@ Asset::getInstance()->addString(
     false,
     AssetLocation::AFTER_CSS
 );
+
+PageHandler::debugLog('pmodConfig injected for productId=' . $productId . ', offers=' . count($offers));
+

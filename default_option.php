@@ -15,4 +15,6 @@ $prospektweb_propmodificator_default_option = [
     'SET_FORMAT_PROP_CODE'  => 'SET_FORMAT',
     'SET_VOLUME_PROP_CODE'  => 'SET_VOLUME',
     'PRICE_TYPE_ID'         => '1',
+    'CATALOG_PATH_FILTER'   => '/catalog/',
+    'DEBUG'                 => 'N',
 ];
