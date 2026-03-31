@@ -40,10 +40,37 @@
     }
 
     function formatPrice(price) {
+        var isInt = price % 1 === 0;
         return price.toLocaleString('ru-RU', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
+            minimumFractionDigits: isInt ? 0 : 2,
+            maximumFractionDigits: isInt ? 0 : 2,
         }) + ' ₽';
+    }
+
+    /**
+     * Применяет правила округления Bitrix к цене.
+     * Выбирается правило с наибольшим порогом price, не превышающим текущую цену.
+     *
+     * @param {number} price
+     * @param {Array<{price: number, type: number, precision: number}>} rules
+     * @returns {number}
+     */
+    function applyBitrixRounding(price, rules) {
+        if (!rules || !rules.length) return price;
+        var rule = null;
+        for (var i = 0; i < rules.length; i++) {
+            if (price >= rules[i].price && (!rule || rules[i].price >= rule.price)) {
+                rule = rules[i];
+            }
+        }
+        if (!rule) return price;
+        var precision = rule.precision;
+        switch (rule.type) {
+            case 1: return Math.floor(price / precision) * precision;  // ROUND_DOWN
+            case 2: return Math.round(price / precision) * precision;  // ROUND_MATH
+            case 3: return Math.ceil(price / precision) * precision;   // ROUND_UP
+            default: return price;
+        }
     }
 
     // ── Интерполяция цен (клиентская сторона, только для отображения) ─────────
@@ -224,6 +251,7 @@
                 formatEnumMap:    productCfg.formatEnumMap || {},
                 catalogGroups:    catalogGroups,
                 allPropIds:       allPropIds,
+                roundingRules:    productCfg.roundingRules || {},
                 activeOtherProps: initialOtherProps,
                 customWidth:      null,
                 customHeight:     null,
@@ -799,11 +827,12 @@
          * Результат: {groupId: [{from, to, price}, ...]}
          * Использует только предложения с числовым volume (исключает X-ТП и плейсхолдеры ≤ 0).
          *
-         * @param {Array}  offers  — предложения (уже отфильтрованные по props)
-         * @param {number} volume  — запрошенный тираж
+         * @param {Array}  offers        — предложения (уже отфильтрованные по props)
+         * @param {number} volume        — запрошенный тираж
+         * @param {Object} roundingRules — {groupId: [{price, type, precision}, ...]} (опционально)
          * @returns {Object}
          */
-        interpolateAllPrices: function (offers, volume) {
+        interpolateAllPrices: function (offers, volume, roundingRules) {
             // Берём только ТП с реальным числовым тиражом и ценами
             // (volume === null у X-ТП, > 0 исключает потенциальные нулевые цены)
             var validOffers = offers.filter(function (o) {
@@ -846,6 +875,11 @@
 
                     var price = linearInterp(pts, volume);
                     if (price !== null) {
+                        // Применяем правила округления Bitrix, если заданы для группы
+                        var gidRules = roundingRules && roundingRules[gid];
+                        if (gidRules) {
+                            price = applyBitrixRounding(price, gidRules);
+                        }
                         ranges.push({ from: range.from, to: range.to, price: price });
                     }
                 });
@@ -878,7 +912,7 @@
             var filteredOffers = PModificator.filterOffersByProps(state.offers, state.activeOtherProps);
 
             // Интерполируем все группы × диапазоны
-            var interpolated = PModificator.interpolateAllPrices(filteredOffers, v);
+            var interpolated = PModificator.interpolateAllPrices(filteredOffers, v, state.roundingRules);
 
             console.log('[pmod price]', {
                 productId:         state.productId,
@@ -1108,15 +1142,17 @@
             }
 
             // ── 4. Позиционная замена цен ─────────────────────────────────────
+            var DEFAULT_UNIT_SPAN = '<span>тираж</span>';
+
             function replacePriceInEl(el, price) {
+                var isInt = price % 1 === 0;
                 var priceStr = price.toLocaleString('ru-RU', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: isInt ? 0 : 2,
+                    maximumFractionDigits: isInt ? 0 : 2,
                 });
-                var replaced = el.innerHTML.replace(/[\d\u00a0\s]+[.,]\d{2}/, priceStr);
-                el.innerHTML = (replaced !== el.innerHTML)
-                    ? replaced
-                    : priceStr + '\u00a0₽/<span>тираж</span>';
+                var unitSpan = el.querySelector('span');
+                var unitText = unitSpan ? unitSpan.outerHTML : DEFAULT_UNIT_SPAN;
+                el.innerHTML = priceStr + '\u00a0₽/' + unitText;
             }
 
             popupValEls.forEach(function (el, idx) {
@@ -1125,22 +1161,23 @@
 
             // ── 5. Обновляем главную видимую цену (снаружи template) ──────────
             var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            var mainPriceUpdated = false;
             if (mainPrice !== null) {
-                var toggleBtn = popupPrice.querySelector('.price__popup-toggle');
-                if (toggleBtn) {
-                    // Все .price__new-val внутри кнопки, доступные через обычный querySelector,
-                    // НЕ включают элементы внутри нативного <template> — это нам и нужно.
-                    toggleBtn.querySelectorAll('.price__new-val').forEach(function (el) {
+                var allPriceVals = popupPrice.querySelectorAll('.price__new-val');
+                allPriceVals.forEach(function (el) {
+                    if (!el.closest('template')) {
                         replacePriceInEl(el, mainPrice);
-                    });
-                }
+                        mainPriceUpdated = true;
+                    }
+                });
             }
 
-            // Если ни popup-цены, ни main-кнопки не найдено — fallback: перестраиваем блок
-            if (!popupValEls.length && mainPrice !== null && !popupPrice.querySelector('.price__popup-toggle')) {
+            // Если ни popup-цены, ни главная цена не были обновлены — fallback: перестраиваем блок
+            if (!popupValEls.length && !mainPriceUpdated && mainPrice !== null) {
+                var isInt = mainPrice % 1 === 0;
                 var priceStr = mainPrice.toLocaleString('ru-RU', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: isInt ? 0 : 2,
+                    maximumFractionDigits: isInt ? 0 : 2,
                 });
                 popupPrice.innerHTML =
                     '<div class="prices">' +
@@ -1148,7 +1185,7 @@
                         '<div class="price__row">' +
                           '<div class="price__new fw-500">' +
                             '<span class="price__new-val font_24">' +
-                              priceStr + ' ₽/<span>тираж</span>' +
+                              priceStr + '\u00a0₽/' + DEFAULT_UNIT_SPAN +
                             '</span>' +
                           '</div>' +
                         '</div>' +
