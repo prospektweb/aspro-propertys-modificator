@@ -940,7 +940,14 @@
          * @param {Object}  state
          */
         showCustomPrice: function (container, interpolated, state) {
-            var popupPrice = document.querySelector('.js-popup-price');
+            // Ищем видимый .js-popup-price (на странице их может быть несколько —
+            // один скрытый от предыдущего ТП, один видимый от X-ТП)
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
             var cartEl     = document.querySelector('.catalog-detail__cart');
 
             // Делаем кнопку корзины видимой (X-ТП с 0.01 может иметь её)
@@ -1034,51 +1041,103 @@
         /**
          * Применяет интерполированные цены в DOM блока .js-popup-price.
          *
-         * Стратегия:
-         *  1. Пытаемся найти элементы с data-catalog-group-id и price value elements
-         *  2. Если не найдено — перестраиваем innerHTML целиком (с базовой ценой)
+         * Стратегия (Aspro Premier DOM):
+         *  1. Определяем порядок групп из data-price-config (PRICE_CODE) или по числовому ключу
+         *  2. Строим плоский список цен: [g1_range1, g1_range2, ..., g2_range1, ...]
+         *  3. Находим все .price__new-val внутри template.xpopover-template → popup-таблица
+         *  4. Обновляем их позиционно
+         *  5. Обновляем главную видимую цену (снаружи template, внутри .price__popup-toggle)
          */
         applyPricesToDom: function (popupPrice, interpolated, state) {
-            // Пробуем обновить существующие price-элементы через атрибут группы
-            var handled = false;
-            var priceGroupEls = popupPrice.querySelectorAll('[data-catalog-group-id]');
-            if (priceGroupEls.length) {
-                priceGroupEls.forEach(function (groupEl) {
-                    var gid = String(groupEl.dataset.catalogGroupId);
-                    var ranges = interpolated[gid];
-                    if (!ranges) return;
+            // ── 1. Определяем порядок групп ──────────────────────────────────
+            var priceCodeOrder = null;
+            try {
+                var priceConfigAttr = popupPrice.getAttribute('data-price-config');
+                if (priceConfigAttr) {
+                    var cfg = JSON.parse(priceConfigAttr);
+                    priceCodeOrder = (cfg && cfg.PRICE_CODE) || null;
+                }
+            } catch (e) {}
 
-                    // Находим числовые элементы цены внутри блока группы
-                    var valEls = groupEl.querySelectorAll(
-                        '.price__new-val, .price__num, .price__val, [data-price-value]'
-                    );
-                    if (!valEls.length) return;
+            // Сопоставление name → gid из catalogGroups
+            var nameToGid = {};
+            Object.keys(state.catalogGroups || {}).forEach(function (gid) {
+                var g = state.catalogGroups[gid];
+                if (g && g.name) nameToGid[g.name] = gid;
+            });
 
-                    // Если в блоке несколько элементов цены и несколько диапазонов —
-                    // сопоставляем по порядку
-                    valEls.forEach(function (el, idx) {
-                        var range = ranges[idx] || ranges[0];
-                        if (!range) return;
-                        var priceStr = range.price.toLocaleString('ru-RU', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                        });
-                        // Заменяем первое вхождение числа с разделителями и 2 знаками после запятой
-                        // Паттерн покрывает: "9 636,63", "9636.63", "0,01", "0.01"
-                        var replaced = el.innerHTML.replace(
-                            /[\d\u00a0\s]+[.,]\d{2}/,
-                            priceStr
-                        );
-                        el.innerHTML = replaced !== el.innerHTML ? replaced : priceStr + '\u00a0₽';
-                    });
-                    handled = true;
+            // Упорядоченный список group IDs
+            var orderedGids;
+            if (priceCodeOrder && priceCodeOrder.length) {
+                orderedGids = [];
+                priceCodeOrder.forEach(function (name) {
+                    var gid = nameToGid[name];
+                    if (gid) orderedGids.push(gid);
+                });
+            }
+            if (!orderedGids || !orderedGids.length) {
+                // Fallback: числовой порядок ключей interpolated
+                orderedGids = Object.keys(interpolated).sort(function (a, b) {
+                    return parseInt(a, 10) - parseInt(b, 10);
                 });
             }
 
-            if (!handled) {
-                // Fallback: перестраиваем весь блок, показываем главную цену
-                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
-                if (mainPrice === null) return;
+            // ── 2. Плоский список цен ─────────────────────────────────────────
+            var flatPrices = [];
+            orderedGids.forEach(function (gid) {
+                var ranges = interpolated[gid];
+                if (!ranges) return;
+                ranges.forEach(function (range) {
+                    flatPrices.push(range.price);
+                });
+            });
+
+            if (!flatPrices.length) return;
+
+            // ── 3. Обновляем цены в popup-таблице ────────────────────────────
+            // Popup-контент находится внутри template.xpopover-template.
+            // Нативный <template> хранит содержимое в .content (DocumentFragment),
+            // поэтому обычный querySelectorAll не проникает внутрь.
+            var templateEl = popupPrice.querySelector('template.xpopover-template');
+            var popupValEls = [];
+            if (templateEl) {
+                var root = (templateEl.content && templateEl.content.querySelectorAll)
+                    ? templateEl.content
+                    : templateEl;
+                popupValEls = Array.prototype.slice.call(root.querySelectorAll('.price__new-val'));
+            }
+
+            // ── 4. Позиционная замена цен ─────────────────────────────────────
+            function replacePriceInEl(el, price) {
+                var priceStr = price.toLocaleString('ru-RU', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                });
+                var replaced = el.innerHTML.replace(/[\d\u00a0\s]+[.,]\d{2}/, priceStr);
+                el.innerHTML = (replaced !== el.innerHTML)
+                    ? replaced
+                    : priceStr + '\u00a0₽/<span>тираж</span>';
+            }
+
+            popupValEls.forEach(function (el, idx) {
+                if (idx < flatPrices.length) replacePriceInEl(el, flatPrices[idx]);
+            });
+
+            // ── 5. Обновляем главную видимую цену (снаружи template) ──────────
+            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            if (mainPrice !== null) {
+                var toggleBtn = popupPrice.querySelector('.price__popup-toggle');
+                if (toggleBtn) {
+                    // Все .price__new-val внутри кнопки, доступные через обычный querySelector,
+                    // НЕ включают элементы внутри нативного <template> — это нам и нужно.
+                    toggleBtn.querySelectorAll('.price__new-val').forEach(function (el) {
+                        replacePriceInEl(el, mainPrice);
+                    });
+                }
+            }
+
+            // Если ни popup-цены, ни main-кнопки не найдено — fallback: перестраиваем блок
+            if (!popupValEls.length && mainPrice !== null && !popupPrice.querySelector('.price__popup-toggle')) {
                 var priceStr = mainPrice.toLocaleString('ru-RU', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -1099,14 +1158,13 @@
         },
 
         hideCustomPrice: function (container) {
-            var popupPrice = document.querySelector('.js-popup-price');
+            // Очищаем все .js-popup-price (скрытые и видимые)
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                PModificator.cancelPendingPriceUpdate(el);
+                el.classList.remove('pmod-price-loading');
+                delete el._pmodUpdating;
+            });
             var cartEl     = document.querySelector('.catalog-detail__cart');
-
-            if (popupPrice) {
-                PModificator.cancelPendingPriceUpdate(popupPrice);
-                popupPrice.classList.remove('pmod-price-loading');
-                delete popupPrice._pmodUpdating;
-            }
 
             var legacyEl = document.querySelector('.pmod-custom-price');
             if (legacyEl) legacyEl.style.display = 'none';
