@@ -31,6 +31,7 @@ use Prospektweb\PropModificator\Config;
 use Prospektweb\PropModificator\PageHandler;
 use Prospektweb\PropModificator\PropertyValidator;
 use Bitrix\Catalog\PriceTable;
+use Bitrix\Catalog\GroupTable;
 
 // Загружаем модуль
 if (!Loader::includeModule('prospektweb.propmodificator')) {
@@ -194,10 +195,44 @@ if ($formatPropId) {
     }
 }
 
+// ─── Загружаем "прочие" свойства типа "Список" инфоблока ТП ─────────────────
+// Это все свойства-списки ТП кроме VOLUME, FORMAT и CML2_LINK.
+// Используются для фильтрации предложений при интерполяции (красочность, бумага и т.п.)
+// и для отслеживания активного выбора на фронте.
+
+$otherProps = []; // [propId => code]
+$rsPropList = CIBlockProperty::GetList(['SORT' => 'ASC'], [
+    'IBLOCK_ID'     => $offersIblockId,
+    'PROPERTY_TYPE' => 'L',
+    'ACTIVE'        => 'Y',
+]);
+while ($arProp = $rsPropList->Fetch()) {
+    $code   = (string)$arProp['CODE'];
+    $propId = (int)$arProp['ID'];
+    if (
+        $propId > 0
+        && $code !== $volumePropCode
+        && $code !== $formatPropCode
+        && $code !== 'CML2_LINK'
+    ) {
+        $otherProps[$propId] = $code;
+    }
+}
+
 // ─── Загружаем ТП товара ──────────────────────────────────────────────────────
 
 $offers = [];
 $offerIds = [];
+
+$selectFields = [
+    'ID',
+    'NAME',
+    "PROPERTY_{$formatPropCode}",
+    "PROPERTY_{$volumePropCode}",
+];
+foreach ($otherProps as $propId => $code) {
+    $selectFields[] = "PROPERTY_{$code}";
+}
 
 $rsOffers = CIBlockElement::GetList(
     ['ID' => 'ASC'],
@@ -208,32 +243,32 @@ $rsOffers = CIBlockElement::GetList(
     ],
     false,
     false,
-    [
-        'ID',
-        'NAME',
-        "PROPERTY_{$formatPropCode}",
-        "PROPERTY_{$volumePropCode}",
-    ]
+    $selectFields
 );
 
 while ($arOffer = $rsOffers->Fetch()) {
     $offerId = (int)$arOffer['ID'];
 
-    // Пробуем получить XML_ID напрямую; fallback — через enumMap, если Bitrix
-    // не вернул VALUE_XML_ID для свойства типа «список» (L).
+    // Пробуем получить XML_ID напрямую; fallback — через enumMap по ENUM_ID.
+    // Bitrix для свойств типа «список» (L) в GetList возвращает PROPERTY_{CODE}_ENUM_ID
+    // (числовой ID значения перечисления), а НЕ PROPERTY_{CODE}_VALUE_XML_ID.
     $formatXmlId = $arOffer["PROPERTY_{$formatPropCode}_VALUE_XML_ID"] ?? null;
-    if (empty($formatXmlId) && !empty($arOffer["PROPERTY_{$formatPropCode}_VALUE"])) {
-        $enumId = (int)$arOffer["PROPERTY_{$formatPropCode}_VALUE"];
-        $formatXmlId = $formatEnumMap[$enumId] ?? null;
+    if (empty($formatXmlId)) {
+        $enumId = (int)($arOffer["PROPERTY_{$formatPropCode}_ENUM_ID"] ?? 0);
+        if ($enumId > 0) {
+            $formatXmlId = $formatEnumMap[$enumId] ?? null;
+        }
     }
 
     $volumeXmlId = $arOffer["PROPERTY_{$volumePropCode}_VALUE_XML_ID"] ?? null;
-    if (empty($volumeXmlId) && !empty($arOffer["PROPERTY_{$volumePropCode}_VALUE"])) {
-        $enumId = (int)$arOffer["PROPERTY_{$volumePropCode}_VALUE"];
-        $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
-        // volumeEnumMap хранит int|'X', приводим к строке для парсера
-        if ($volumeXmlId !== null) {
-            $volumeXmlId = (string)$volumeXmlId;
+    if (empty($volumeXmlId)) {
+        $enumId = (int)($arOffer["PROPERTY_{$volumePropCode}_ENUM_ID"] ?? 0);
+        if ($enumId > 0) {
+            $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
+            // volumeEnumMap хранит int|'X', приводим к строке для парсера
+            if ($volumeXmlId !== null) {
+                $volumeXmlId = (string)$volumeXmlId;
+            }
         }
     }
 
@@ -246,29 +281,71 @@ while ($arOffer = $rsOffers->Fetch()) {
         'width'  => $formatParsed['width']  ?? null,
         'height' => $formatParsed['height'] ?? null,
         'volume' => $volumeParsed,
-        'price'  => null,
+        'prices' => [],  // [groupId => [{from, to, price}, ...]]
+        'props'  => [],  // [propId => enumId]
     ];
+
+    // Собираем "прочие" свойства типа «список» для фильтрации
+    foreach ($otherProps as $propId => $code) {
+        $enumId = (int)($arOffer["PROPERTY_{$code}_ENUM_ID"] ?? 0);
+        if ($enumId > 0) {
+            $offers[$offerId]['props'][$propId] = $enumId;
+        }
+    }
 
     $offerIds[] = $offerId;
 }
 
-// ─── Загружаем цены ───────────────────────────────────────────────────────────
+// ─── Загружаем все цены (все группы × все диапазоны) ─────────────────────────
 
 if (!empty($offerIds)) {
     $rsPrices = PriceTable::getList([
-        'filter' => [
-            '=PRODUCT_ID'       => $offerIds,
-            '=CATALOG_GROUP_ID' => $priceTypeId,
+        'filter' => ['=PRODUCT_ID' => $offerIds],
+        'select' => [
+            'PRODUCT_ID',
+            'CATALOG_GROUP_ID',
+            'PRICE',
+            'QUANTITY_FROM',
+            'QUANTITY_TO',
         ],
-        'select' => ['PRODUCT_ID', 'PRICE'],
+        'order' => [
+            'PRODUCT_ID'       => 'ASC',
+            'CATALOG_GROUP_ID' => 'ASC',
+            'QUANTITY_FROM'    => 'ASC',
+        ],
     ]);
 
     while ($arPrice = $rsPrices->fetch()) {
-        $id = (int)$arPrice['PRODUCT_ID'];
+        $id      = (int)$arPrice['PRODUCT_ID'];
+        $groupId = (int)$arPrice['CATALOG_GROUP_ID'];
         if (isset($offers[$id])) {
-            $offers[$id]['price'] = (float)$arPrice['PRICE'];
+            $offers[$id]['prices'][$groupId][] = [
+                'from'  => $arPrice['QUANTITY_FROM'] !== null ? (int)$arPrice['QUANTITY_FROM'] : null,
+                'to'    => $arPrice['QUANTITY_TO']   !== null ? (int)$arPrice['QUANTITY_TO']   : null,
+                'price' => (float)$arPrice['PRICE'],
+            ];
         }
     }
+}
+
+// ─── Загружаем типы цен (catalog groups) ─────────────────────────────────────
+
+$catalogGroups = [];
+try {
+    $rsCatGroups = GroupTable::getList([
+        'select' => ['ID', 'NAME', 'BASE'],
+        'order'  => ['ID' => 'ASC'],
+    ]);
+    while ($arGroup = $rsCatGroups->fetch()) {
+        $gid = (int)$arGroup['ID'];
+        $catalogGroups[$gid] = [
+            'id'   => $gid,
+            'name' => (string)$arGroup['NAME'],
+            'base' => ($arGroup['BASE'] ?? 'N') === 'Y',
+        ];
+    }
+} catch (\Throwable $e) {
+    PageHandler::debugLog('Failed to load catalog groups: ' . $e->getMessage());
 }
 
 // ─── Формируем конфиг для JS ──────────────────────────────────────────────────
@@ -283,6 +360,8 @@ $pmodConfig = [
             'offers'          => array_values($offers),
             'volumeEnumMap'   => $volumeEnumMap,
             'formatEnumMap'   => $formatEnumMap,
+            'catalogGroups'   => $catalogGroups,
+            'allPropIds'      => array_keys($otherProps),
         ],
     ],
 ];

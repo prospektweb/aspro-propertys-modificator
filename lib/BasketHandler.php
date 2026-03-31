@@ -109,6 +109,9 @@ class BasketHandler
             'custom_price' => isset($raw['custom_price']) ? (float)$raw['custom_price'] : null,
             'is_custom'    => ($raw['is_custom'] ?? '') === 'Y' ? 'Y' : 'N',
             'product_id'   => isset($raw['product_id'])  ? (int)$raw['product_id']   : null,
+            'other_props'  => isset($raw['other_props']) && is_array($raw['other_props'])
+                ? array_map('intval', $raw['other_props'])
+                : null,
         ];
     }
 
@@ -175,7 +178,8 @@ class BasketHandler
         return $interpolator->interpolate(
             $calcData['width'],
             $calcData['height'],
-            $calcData['volume']
+            $calcData['volume'],
+            $calcData['other_props'] ?? null
         );
     }
 

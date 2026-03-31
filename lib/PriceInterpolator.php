@@ -36,14 +36,15 @@ class PriceInterpolator
     /**
      * Рассчитать интерполированную цену.
      *
-     * @param int|null $width   Ширина в мм (null — берём стандартное ТП)
-     * @param int|null $height  Высота в мм
-     * @param int|null $volume  Тираж в шт.
-     * @return float|null       Цена или null, если не удалось рассчитать
+     * @param int|null   $width        Ширина в мм (null — берём стандартное ТП)
+     * @param int|null   $height       Высота в мм
+     * @param int|null   $volume       Тираж в шт.
+     * @param array|null $filterProps  Дополнительная фильтрация: [propId => enumId]
+     * @return float|null              Цена или null, если не удалось рассчитать
      */
-    public function interpolate(?int $width, ?int $height, ?int $volume): ?float
+    public function interpolate(?int $width, ?int $height, ?int $volume, ?array $filterProps = null): ?float
     {
-        $this->loadOfferPoints();
+        $this->loadOfferPoints($filterProps);
 
         if (empty($this->offerPoints)) {
             return null;
@@ -72,7 +73,7 @@ class PriceInterpolator
 
     // ─── Загрузка данных ──────────────────────────────────────────────────────
 
-    private function loadOfferPoints(): void
+    private function loadOfferPoints(?array $filterProps = null): void
     {
         if ($this->loaded) {
             return;
@@ -87,8 +88,8 @@ class PriceInterpolator
         $volumeCode = Config::getVolumePropCode();
 
         // Загружаем ID свойств для построения fallback-маппинга enumId → XML_ID.
-        // Это нужно потому, что Bitrix может не возвращать PROPERTY_{CODE}_VALUE_XML_ID
-        // для свойств типа «список» (L) в зависимости от версии и способа запроса.
+        // Это нужно потому, что Bitrix для свойств типа «список» (L) в GetList
+        // возвращает PROPERTY_{CODE}_ENUM_ID, а не PROPERTY_{CODE}_VALUE_XML_ID.
         $formatPropId = null;
         $volumePropId = null;
         if ($formatCode) {
@@ -135,6 +136,40 @@ class PriceInterpolator
             }
         }
 
+        // Загружаем "прочие" свойства типа «список» для фильтрации ТП
+        $otherProps = []; // [propId => code]
+        if ($filterProps !== null && !empty($filterProps)) {
+            $rsPropList = \CIBlockProperty::GetList(['SORT' => 'ASC'], [
+                'IBLOCK_ID'     => $this->offersIblockId,
+                'PROPERTY_TYPE' => 'L',
+                'ACTIVE'        => 'Y',
+            ]);
+            while ($arProp = $rsPropList->Fetch()) {
+                $code   = (string)$arProp['CODE'];
+                $propId = (int)$arProp['ID'];
+                if (
+                    $propId > 0
+                    && $code !== $volumeCode
+                    && $code !== $formatCode
+                    && $code !== 'CML2_LINK'
+                    && isset($filterProps[$propId])
+                ) {
+                    $otherProps[$propId] = $code;
+                }
+            }
+        }
+
+        // Все ТП данного товара
+        $selectFields = [
+            'ID',
+            'IBLOCK_ID',
+            "PROPERTY_{$formatCode}",
+            "PROPERTY_{$volumeCode}",
+        ];
+        foreach ($otherProps as $propId => $code) {
+            $selectFields[] = "PROPERTY_{$code}";
+        }
+
         // Все ТП данного товара
         $rsOffers = \CIBlockElement::GetList(
             ['ID' => 'ASC'],
@@ -145,7 +180,7 @@ class PriceInterpolator
             ],
             false,
             false,
-            ['ID', 'IBLOCK_ID', "PROPERTY_{$formatCode}", "PROPERTY_{$volumeCode}"]
+            $selectFields
         );
 
         $offerIds = [];
@@ -154,20 +189,24 @@ class PriceInterpolator
         while ($arOffer = $rsOffers->Fetch()) {
             $offerId = (int)$arOffer['ID'];
 
-            // Разбираем XML_ID значений свойств; fallback — через enumMap
+            // Разбираем XML_ID значений свойств; fallback — через enumMap по ENUM_ID
             $formatXmlId = $arOffer["PROPERTY_{$formatCode}_VALUE_XML_ID"] ?? null;
-            if (empty($formatXmlId) && !empty($arOffer["PROPERTY_{$formatCode}_VALUE"])) {
-                $enumId = (int)$arOffer["PROPERTY_{$formatCode}_VALUE"];
-                $formatXmlId = $formatEnumMap[$enumId] ?? null;
+            if (empty($formatXmlId)) {
+                $enumId = (int)($arOffer["PROPERTY_{$formatCode}_ENUM_ID"] ?? 0);
+                if ($enumId > 0) {
+                    $formatXmlId = $formatEnumMap[$enumId] ?? null;
+                }
             }
 
             $volumeXmlId = $arOffer["PROPERTY_{$volumeCode}_VALUE_XML_ID"] ?? null;
-            if (empty($volumeXmlId) && !empty($arOffer["PROPERTY_{$volumeCode}_VALUE"])) {
-                $enumId = (int)$arOffer["PROPERTY_{$volumeCode}_VALUE"];
-                $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
-                // volumeEnumMap хранит int|'X', приводим к строке для парсера
-                if ($volumeXmlId !== null) {
-                    $volumeXmlId = (string)$volumeXmlId;
+            if (empty($volumeXmlId)) {
+                $enumId = (int)($arOffer["PROPERTY_{$volumeCode}_ENUM_ID"] ?? 0);
+                if ($enumId > 0) {
+                    $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
+                    // volumeEnumMap хранит int|'X', приводим к строке для парсера
+                    if ($volumeXmlId !== null) {
+                        $volumeXmlId = (string)$volumeXmlId;
+                    }
                 }
             }
 
@@ -178,12 +217,36 @@ class PriceInterpolator
                 continue;
             }
 
+            // Собираем "прочие" свойства типа «список» для фильтрации
+            $props = [];
+            foreach ($otherProps as $propId => $code) {
+                $enumId = (int)($arOffer["PROPERTY_{$code}_ENUM_ID"] ?? 0);
+                if ($enumId > 0) {
+                    $props[$propId] = $enumId;
+                }
+            }
+
+            // Фильтруем по переданным свойствам
+            if ($filterProps !== null && !empty($filterProps)) {
+                $skip = false;
+                foreach ($filterProps as $propId => $requiredEnumId) {
+                    if (!isset($props[$propId]) || $props[$propId] !== $requiredEnumId) {
+                        $skip = true;
+                        break;
+                    }
+                }
+                if ($skip) {
+                    continue;
+                }
+            }
+
             $rawOffers[$offerId] = [
                 'id'     => $offerId,
                 'width'  => $formatParsed['width']  ?? null,
                 'height' => $formatParsed['height'] ?? null,
                 'volume' => $volumeParsed,
                 'price'  => null,
+                'props'  => $props,
             ];
 
             $offerIds[] = $offerId;
@@ -193,24 +256,33 @@ class PriceInterpolator
             return;
         }
 
-        // Загружаем цены одним запросом
+        // Загружаем цену для настроенного типа цены
+        // Берём все записи, сортируем по QUANTITY_FROM ASC, используем первую на ТП
+        // (то есть диапазон с минимальным QUANTITY_FROM / null = 1 единица заказа)
         $rsPrices = PriceTable::getList([
             'filter' => [
                 '=PRODUCT_ID'       => $offerIds,
                 '=CATALOG_GROUP_ID' => $this->priceTypeId,
             ],
-            'select' => ['PRODUCT_ID', 'PRICE'],
+            'select' => ['PRODUCT_ID', 'PRICE', 'QUANTITY_FROM', 'QUANTITY_TO'],
+            'order'  => ['PRODUCT_ID' => 'ASC', 'QUANTITY_FROM' => 'ASC'],
         ]);
 
         while ($arPrice = $rsPrices->fetch()) {
             $id = (int)$arPrice['PRODUCT_ID'];
-            if (isset($rawOffers[$id])) {
+            // Берём первую запись (минимальный QUANTITY_FROM) для каждого ТП
+            if (isset($rawOffers[$id]) && $rawOffers[$id]['price'] === null) {
                 $rawOffers[$id]['price'] = (float)$arPrice['PRICE'];
             }
         }
 
-        // Оставляем только ТП с ценами
-        $this->offerPoints = array_filter($rawOffers, fn($o) => $o['price'] !== null);
+        // Оставляем только ТП с ценами.
+        // volume !== null — исключаем X-ТП (произвольный тираж).
+        // price > 0 — исключаем плейсхолдерные нулевые/символические цены.
+        $this->offerPoints = array_filter(
+            $rawOffers,
+            fn($o) => $o['price'] !== null && $o['price'] > 0 && $o['volume'] !== null
+        );
     }
 
     // ─── Методы интерполяции ──────────────────────────────────────────────────
