@@ -48,5 +48,5 @@ if (!Loader::includeModule('prospektweb.propmodificator')) {
     die();
 }
 
-echo json_encode(AjaxController::calcPrice(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP);
+echo json_encode(AjaxController::calcPrice(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS);
 die();

@@ -302,7 +302,7 @@ class AjaxController
     {
         $formatted = number_format(
             $price,
-            fmod($price, 1) == 0 ? 0 : 2,
+            abs(fmod($price, 1)) < 0.005 ? 0 : 2,
             '.',
             "\u{00A0}"
         );
