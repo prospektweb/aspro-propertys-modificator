@@ -32,6 +32,7 @@ use Prospektweb\PropModificator\PageHandler;
 use Prospektweb\PropModificator\PropertyValidator;
 use Bitrix\Catalog\PriceTable;
 use Bitrix\Catalog\GroupTable;
+use Bitrix\Catalog\RoundingTable;
 
 // Загружаем модуль
 if (!Loader::includeModule('prospektweb.propmodificator')) {
@@ -348,6 +349,26 @@ try {
     PageHandler::debugLog('Failed to load catalog groups: ' . $e->getMessage());
 }
 
+// ─── Загружаем правила округления цен ────────────────────────────────────────
+
+$roundingRules = [];
+try {
+    $rsRounding = RoundingTable::getList([
+        'select' => ['CATALOG_GROUP_ID', 'PRICE', 'ROUND_TYPE', 'ROUND_PRECISION'],
+        'order'  => ['CATALOG_GROUP_ID' => 'ASC', 'PRICE' => 'ASC'],
+    ]);
+    while ($arRounding = $rsRounding->fetch()) {
+        $gid = (int)$arRounding['CATALOG_GROUP_ID'];
+        $roundingRules[$gid][] = [
+            'price'     => (float)$arRounding['PRICE'],
+            'type'      => (int)$arRounding['ROUND_TYPE'],
+            'precision' => (float)$arRounding['ROUND_PRECISION'],
+        ];
+    }
+} catch (\Throwable $e) {
+    PageHandler::debugLog('Failed to load rounding rules: ' . $e->getMessage());
+}
+
 // ─── Формируем конфиг для JS ──────────────────────────────────────────────────
 
 $pmodConfig = [
@@ -362,6 +383,7 @@ $pmodConfig = [
             'formatEnumMap'   => $formatEnumMap,
             'catalogGroups'   => $catalogGroups,
             'allPropIds'      => array_keys($otherProps),
+            'roundingRules'   => $roundingRules,
         ],
     ],
 ];
