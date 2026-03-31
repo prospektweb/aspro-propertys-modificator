@@ -297,6 +297,21 @@ while ($arOffer = $rsOffers->Fetch()) {
     $offerIds[] = $offerId;
 }
 
+// ─── Если URL указывает на X-ТП без тиража — редирект на базовый URL ─────────
+// Предотвращает отображение страницы с ценой 0.01 при прямой ссылке на X-ТП.
+// Если же в URL уже передан pmod_volume, разрешаем загрузку (JS установит тираж).
+$requestOid = (int)($_GET['oid'] ?? 0);
+if ($requestOid > 0 && empty($_GET['pmod_volume'])) {
+    foreach ($offers as $offerId => $offerData) {
+        if ((int)$offerId === $requestOid && $offerData['volume'] === null) {
+            // Убираем CR/LF для безопасности (защита от header injection)
+            $baseUrl = preg_replace('/[\r\n]/', '', strtok($_SERVER['REQUEST_URI'], '?'));
+            LocalRedirect($baseUrl, false, '302 Found');
+            die();
+        }
+    }
+}
+
 // ─── Загружаем все цены (все группы × все диапазоны) ─────────────────────────
 
 if (!empty($offerIds)) {
