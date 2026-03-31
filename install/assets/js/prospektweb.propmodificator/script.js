@@ -209,6 +209,9 @@
                 h1.classList.add('pmod-title-clamp');
             }
 
+            // Синхронизируем title с textContent при любых изменениях h1
+            PModificator.setupH1TitleSync();
+
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
@@ -279,6 +282,56 @@
 
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
+        },
+
+        // ── Синхронизация h1 title с textContent ─────────────────────────────
+
+        /**
+         * Устанавливает MutationObserver на h1, чтобы атрибут title всегда
+         * совпадал с текстовым содержимым (Aspro обновляет textContent, но не title).
+         */
+        setupH1TitleSync: function () {
+            var h1 = document.querySelector('h1.pmod-title-clamp');
+            if (!h1) h1 = document.querySelector('h1');
+            if (!h1) return;
+
+            // Первичная синхронизация
+            if (h1.textContent.trim()) {
+                h1.title = h1.textContent.trim();
+            }
+
+            var obs = new MutationObserver(function () {
+                if (h1._pmodUpdatingTitle) return;
+                var text = h1.textContent.trim();
+                if (text && h1.title !== text) {
+                    h1.title = text;
+                }
+            });
+            obs.observe(h1, { childList: true, characterData: true, subtree: true });
+        },
+
+        /**
+         * Заменяет последний сегмент в h1 (после « | ») на volumeStr
+         * и синхронно обновляет и textContent, и title.
+         *
+         * @param {string} volumeStr  — например «4 950 экз»
+         */
+        updateH1WithVolume: function (volumeStr) {
+            var h1 = document.querySelector('h1.pmod-title-clamp');
+            if (!h1) h1 = document.querySelector('h1');
+            if (!h1) return;
+
+            var text  = h1.textContent.trim();
+            var parts = text.split(' | ');
+            if (parts.length < 2) return;
+
+            parts[parts.length - 1] = volumeStr;
+            var newText = parts.join(' | ');
+
+            h1._pmodUpdatingTitle = true;
+            h1.textContent = newText;
+            h1.title       = newText;
+            h1._pmodUpdatingTitle = false;
         },
 
         // ── Улучшение свойства ФОРМАТ ─────────────────────────────────────────
@@ -515,6 +568,14 @@
             // Найти кнопку «Произвольный тираж» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, volumeEnumMap);
 
+            // Скрываем кнопку «Произвольный тираж» — пользователь управляет тиражом через инпут
+            if (customBtn) {
+                customBtn.style.display = 'none';
+            }
+
+            // Находим span лейбла тиража для обновления при произвольном вводе
+            var volumeLabelSpan = inner.querySelector('.sku-props__title .sku-props__js-size');
+
             // ── Вспомогательная функция: найти кнопку пресета по VALUE_XML_ID ──
             function findBtnByXmlId(xmlId) {
                 return xmlIdToBtnMap[xmlId] || null;
@@ -563,6 +624,13 @@
                     }
                     state.customVolume = null;
                     state.customMode   = !!state.customWidth;
+
+                    // Обновляем лейбл тиража и заголовок h1 с реальным числом
+                    var presetStr = v.toLocaleString('ru-RU');
+                    if (volumeLabelSpan) {
+                        volumeLabelSpan.textContent = presetStr;
+                    }
+                    PModificator.updateH1WithVolume(presetStr + ' экз');
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
@@ -580,6 +648,22 @@
                             nearest.click();
                         }
                     }
+
+                    // Обновляем лейбл и h1 с реальным числом (переопределяем "Произвольный тираж").
+                    // Immediate set — переопределяет синхронное обновление Аспро после click();
+                    // setTimeout — гарантирует сброс при любых async-обновлениях Аспро.
+                    var customStr = v.toLocaleString('ru-RU');
+                    if (volumeLabelSpan) {
+                        volumeLabelSpan.textContent = customStr;
+                    }
+                    (function (str) {
+                        setTimeout(function () {
+                            if (volumeLabelSpan) {
+                                volumeLabelSpan.textContent = str;
+                            }
+                            PModificator.updateH1WithVolume(str + ' экз');
+                        }, PRICE_UPDATE_TIMEOUT_MS);
+                    }(customStr));
                 }
 
                 PModificator.updatePriceDisplay(container, state);
@@ -702,6 +786,18 @@
                         state.customMode   = false;
                         state.customVolume = null;
                         PModificator.hideCustomPrice(container);
+
+                        // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
+                        // MutationObserver синхронизирует title; но также страхуемся явной установкой)
+                        if (!isNaN(volXmlId)) {
+                            var presetLabelStr = volXmlId.toLocaleString('ru-RU');
+                            var volumeInnerEl  = innerEl;
+                            var labelSpan = volumeInnerEl.querySelector('.sku-props__title .sku-props__js-size');
+                            if (labelSpan) {
+                                labelSpan.textContent = presetLabelStr;
+                            }
+                            PModificator.updateH1WithVolume(presetLabelStr + ' экз');
+                        }
                     }
 
                 } else if (state.allPropIds && state.allPropIds.indexOf(parseInt(propId, 10)) !== -1) {

@@ -237,7 +237,21 @@ class BasketHandler
             return ['format' => [], 'volume' => []];
         }
 
-        $arProps = $arElement->GetProperties([], ['CODE' => [$formatCode, $volumeCode]]);
+        // Получаем все свойства (Option C: без фильтра по CODE, чтобы избежать
+        // TypeError в mysqli::real_escape_string при передаче массива в CODE).
+        $arProps = $arElement->GetProperties([], []);
+
+        // Если SET_FORMAT/SET_VOLUME не найдены — возможно передан ID торгового предложения.
+        // Ищем родительский товар через CML2_LINK и берём свойства с него.
+        if (empty($arProps[$formatCode]['VALUE']) && empty($arProps[$volumeCode]['VALUE'])) {
+            $parentId = (int)($arProps['CML2_LINK']['VALUE'] ?? 0);
+            if ($parentId > 0 && $parentId !== $productId) {
+                $rsParent = \CIBlockElement::GetByID($parentId);
+                if ($arParent = $rsParent->GetNextElement()) {
+                    $arProps = $arParent->GetProperties([], []);
+                }
+            }
+        }
 
         $format = [];
         $volume = [];
