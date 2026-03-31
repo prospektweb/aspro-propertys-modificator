@@ -12,7 +12,8 @@
 
     // ── Константы ─────────────────────────────────────────────────────────────
 
-    var DEBOUNCE_MS = 400;
+    var DEBOUNCE_MS              = 400;
+    var PRICE_UPDATE_TIMEOUT_MS  = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
 
     // ── Утилиты ───────────────────────────────────────────────────────────────
 
@@ -200,18 +201,34 @@
 
             var formatPropId = productCfg.formatPropId;
             var volumePropId = productCfg.volumePropId;
+            var allPropIds   = productCfg.allPropIds || [];
+            var catalogGroups = productCfg.catalogGroups || {};
+
+            // Считываем текущий активный выбор "прочих" свойств из DOM
+            var initialOtherProps = {};
+            allPropIds.forEach(function (pid) {
+                var innerEl = container.querySelector('.sku-props__inner[data-id="' + pid + '"]');
+                if (!innerEl) return;
+                var activeBtn = innerEl.querySelector('.sku-props__value--active');
+                if (activeBtn && activeBtn.dataset.onevalue) {
+                    initialOtherProps[pid] = parseInt(activeBtn.dataset.onevalue, 10);
+                }
+            });
 
             var state = {
-                productId:    productId,
-                offers:       productCfg.offers || [],
-                formatCfg:    productCfg.formatSettings || {},
-                volumeCfg:    productCfg.volumeSettings || {},
-                volumeEnumMap: productCfg.volumeEnumMap || {},
-                formatEnumMap: productCfg.formatEnumMap || {},
-                customWidth:  null,
-                customHeight: null,
-                customVolume: null,
-                customMode:   false,
+                productId:        productId,
+                offers:           productCfg.offers || [],
+                formatCfg:        productCfg.formatSettings || {},
+                volumeCfg:        productCfg.volumeSettings || {},
+                volumeEnumMap:    productCfg.volumeEnumMap || {},
+                formatEnumMap:    productCfg.formatEnumMap || {},
+                catalogGroups:    catalogGroups,
+                allPropIds:       allPropIds,
+                activeOtherProps: initialOtherProps,
+                customWidth:      null,
+                customHeight:     null,
+                customVolume:     null,
+                customMode:       false,
             };
 
             // Найти блоки свойств
@@ -644,7 +661,7 @@
                         : (btn.dataset.title || '');
 
                     if (rawVolXmlId === 'X') {
-                        // Клик по «Произвольный тираж» — не обновлять инпут, включить custom mode
+                        // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
                         state.customMode   = true;
                         PModificator.updatePriceDisplay(container, state);
@@ -658,8 +675,17 @@
                         state.customVolume = null;
                         PModificator.hideCustomPrice(container);
                     }
+
+                } else if (state.allPropIds && state.allPropIds.indexOf(parseInt(propId, 10)) !== -1) {
+                    // Клик по «прочему» свойству (красочность, бумага и т.д.) — обновляем activeOtherProps
+                    var otherEnumId = parseInt(btn.dataset.onevalue, 10);
+                    if (!isNaN(otherEnumId)) {
+                        state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
+                    }
+                    if (state.customMode) {
+                        PModificator.updatePriceDisplay(container, state);
+                    }
                 }
-                // Если это другое свойство (красочность, бумага и т.д.) — ничего не делаем
 
             }, true); // capture — срабатывает до skuAction.js
         },
@@ -741,6 +767,97 @@
             return best;
         },
 
+        // ── Фильтрация предложений по активным свойствам ──────────────────────
+
+        /**
+         * Фильтрует массив предложений по словарю {propId: enumId}.
+         * Возвращает только те предложения, у которых для каждого propId
+         * значение props[propId] совпадает с требуемым enumId.
+         *
+         * @param {Array}  offers           — массив из pmodConfig
+         * @param {Object} activeOtherProps — {propId: enumId}
+         * @returns {Array}
+         */
+        filterOffersByProps: function (offers, activeOtherProps) {
+            if (!activeOtherProps || Object.keys(activeOtherProps).length === 0) {
+                return offers;
+            }
+            return offers.filter(function (offer) {
+                if (!offer.props) return false;
+                var propIds = Object.keys(activeOtherProps);
+                for (var i = 0; i < propIds.length; i++) {
+                    var pid = propIds[i];
+                    if (offer.props[pid] !== activeOtherProps[pid]) return false;
+                }
+                return true;
+            });
+        },
+
+        /**
+         * Интерполирует цены для всех групп × диапазонов по заданному тиражу.
+         *
+         * Результат: {groupId: [{from, to, price}, ...]}
+         * Использует только предложения с числовым volume (исключает X-ТП и плейсхолдеры ≤ 0).
+         *
+         * @param {Array}  offers  — предложения (уже отфильтрованные по props)
+         * @param {number} volume  — запрошенный тираж
+         * @returns {Object}
+         */
+        interpolateAllPrices: function (offers, volume) {
+            // Берём только ТП с реальным числовым тиражом и ценами
+            // (volume === null у X-ТП, > 0 исключает потенциальные нулевые цены)
+            var validOffers = offers.filter(function (o) {
+                return typeof o.volume === 'number' && o.volume > 0
+                    && o.prices && Object.keys(o.prices).length > 0;
+            });
+
+            if (!validOffers.length) return {};
+
+            // Собираем все уникальные groupId
+            var groupIds = {};
+            validOffers.forEach(function (o) {
+                Object.keys(o.prices).forEach(function (gid) { groupIds[gid] = true; });
+            });
+
+            var result = {};
+
+            Object.keys(groupIds).forEach(function (gid) {
+                // Строим карту ключей диапазонов
+                var rangeMap = {};
+
+                validOffers.forEach(function (offer) {
+                    if (!offer.prices[gid]) return;
+                    offer.prices[gid].forEach(function (entry) {
+                        // Пропускаем плейсхолдерные цены (≤ 0)
+                        if (entry.price <= 0) return;
+                        var rangeKey = (entry.from === null ? '' : entry.from) + '-' + (entry.to === null ? '' : entry.to);
+                        if (!rangeMap[rangeKey]) {
+                            rangeMap[rangeKey] = { from: entry.from, to: entry.to, points: [] };
+                        }
+                        rangeMap[rangeKey].points.push({ key: offer.volume, price: entry.price });
+                    });
+                });
+
+                var ranges = [];
+                Object.keys(rangeMap).forEach(function (rangeKey) {
+                    var range = rangeMap[rangeKey];
+                    var pts   = range.points.slice().sort(function (a, b) { return a.key - b.key; });
+                    if (!pts.length) return;
+
+                    var price = linearInterp(pts, volume);
+                    if (price !== null) {
+                        ranges.push({ from: range.from, to: range.to, price: price });
+                    }
+                });
+
+                if (ranges.length) {
+                    result[gid] = ranges;
+                }
+            });
+
+            return result;
+        },
+
         // ── Отображение расчётной цены ────────────────────────────────────────
 
         updatePriceDisplay: function (container, state) {
@@ -749,62 +866,220 @@
                 return;
             }
 
-            var offers  = state.offers;
-            var w       = state.customWidth;
-            var h       = state.customHeight;
-            var v       = state.customVolume;
+            var v = state.customVolume;
 
-            var price = null;
-
-            if (w && h && v) {
-                price = bilinearInterp(offers, w, h, v);
-            } else if (w && h) {
-                // Только формат: линейная по площади
-                var area = w * h;
-                var areaPoints = offers
-                    .filter(function (o) { return o.width && o.height && o.price; })
-                    .map(function (o) { return { key: o.width * o.height, price: o.price }; })
-                    .sort(function (a, b) { return a.key - b.key; });
-                price = linearInterp(areaPoints, area);
-            } else if (v) {
-                // Только тираж: линейная по тиражу
-                var volPoints = offers
-                    .filter(function (o) { return o.volume && o.price; })
-                    .map(function (o) { return { key: o.volume, price: o.price }; })
-                    .sort(function (a, b) { return a.key - b.key; });
-                price = linearInterp(volPoints, v);
-            }
-
-            console.log('[pmod price]', {
-                productId: state.productId,
-                width: w,
-                height: h,
-                volume: v,
-                offersCount: offers.length,
-                calculatedPrice: price,
-            });
-
-            if (price === null) {
+            // Только тираж (FORMAT пока не используется, согласно ТЗ)
+            if (!v) {
                 PModificator.hideCustomPrice(container);
                 return;
             }
 
-            state.lastCalculatedPrice = price;
-            PModificator.showCustomPrice(container, price);
+            // Фильтруем предложения по активным «прочим» свойствам
+            var filteredOffers = PModificator.filterOffersByProps(state.offers, state.activeOtherProps);
+
+            // Интерполируем все группы × диапазоны
+            var interpolated = PModificator.interpolateAllPrices(filteredOffers, v);
+
+            console.log('[pmod price]', {
+                productId:         state.productId,
+                volume:            v,
+                activeOtherProps:  state.activeOtherProps,
+                filteredOffersLen: filteredOffers.length,
+                interpolated:      interpolated,
+            });
+
+            if (!Object.keys(interpolated).length) {
+                PModificator.hideCustomPrice(container);
+                return;
+            }
+
+            // Сохраняем результат в state (для корзины и повторного применения)
+            state.lastInterpolatedPrices = interpolated;
+
+            // Определяем «главную» цену (базовая группа → первый диапазон)
+            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            if (mainPrice !== null) {
+                state.lastCalculatedPrice = mainPrice;
+            }
+
+            PModificator.showCustomPrice(container, interpolated, state);
         },
 
-        showCustomPrice: function (container, price) {
-            if (typeof price !== 'number' || !isFinite(price)) return;
+        /**
+         * Возвращает цену базовой группы (или первой доступной), первый диапазон.
+         */
+        getMainPrice: function (interpolated, catalogGroups) {
+            var baseGid   = null;
+            var firstGid  = null;
 
+            Object.keys(interpolated).forEach(function (gid) {
+                if (!firstGid) firstGid = gid;
+                var g = catalogGroups && catalogGroups[gid];
+                if (g && g.base) baseGid = gid;
+            });
+
+            var targetGid = baseGid || firstGid;
+            if (!targetGid) return null;
+
+            var ranges = interpolated[targetGid];
+            if (!ranges || !ranges.length) return null;
+
+            return ranges[0].price;
+        },
+
+        /**
+         * Показать расчётную цену в блоке цены Аспро.
+         *
+         * Anti-flicker алгоритм:
+         *  1. Немедленно добавляем pmod-price-loading на .js-popup-price (скрывает цену)
+         *  2. Устанавливаем MutationObserver — ждём, пока Аспро обновит DOM через AJAX
+         *  3. Когда DOM изменился (или по таймауту) — подставляем нашу цену и снимаем класс
+         *
+         * @param {Element} container
+         * @param {Object}  interpolated — {groupId: [{from, to, price}, ...]}
+         * @param {Object}  state
+         */
+        showCustomPrice: function (container, interpolated, state) {
             var popupPrice = document.querySelector('.js-popup-price');
             var cartEl     = document.querySelector('.catalog-detail__cart');
 
-            if (popupPrice) {
-                // Сохраняем оригинальное содержимое блока цены при первом вызове
-                if (popupPrice._pmodOriginalContent === undefined) {
-                    popupPrice._pmodOriginalContent = popupPrice.innerHTML;
+            // Делаем кнопку корзины видимой (X-ТП с 0.01 может иметь её)
+            if (cartEl) {
+                if (cartEl._pmodWasHidden === undefined) {
+                    cartEl._pmodWasHidden = cartEl.classList.contains('hidden');
                 }
-                var priceStr = price.toLocaleString('ru-RU', {
+                cartEl.classList.remove('hidden');
+            }
+
+            if (!popupPrice) {
+                // Запасной вариант: собственный элемент модуля
+                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                if (mainPrice === null) return;
+                var priceEl = container.querySelector('.pmod-custom-price');
+                if (!priceEl) {
+                    priceEl = document.createElement('div');
+                    priceEl.className = 'pmod-custom-price';
+                    var buyBtn = document.querySelector('.detail-buy, .js-basket-btn, [data-entity="basket-button"]');
+                    var insertTarget = buyBtn ? buyBtn.parentNode : container.parentNode;
+                    if (insertTarget) insertTarget.insertBefore(priceEl, buyBtn);
+                }
+                priceEl.innerHTML =
+                    '<span class="pmod-custom-price__label">Расчётная цена:</span> ' +
+                    '<span class="pmod-custom-price__value">' + formatPrice(mainPrice) + '</span>' +
+                    '<span class="pmod-custom-price__note"> (предварительный расчёт)</span>';
+                priceEl.style.display = '';
+                return;
+            }
+
+            // Добавляем класс-заглушку (скрывает цену, показывает анимацию)
+            popupPrice.classList.add('pmod-price-loading');
+
+            // Отменяем предыдущий ожидающий апдейт
+            PModificator.cancelPendingPriceUpdate(popupPrice);
+
+            // Функция применения цен
+            var applied = false;
+            var applyPrices = function () {
+                if (applied) return;
+                applied = true;
+                PModificator.cancelPendingPriceUpdate(popupPrice);
+
+                if (!state.customMode) {
+                    popupPrice.classList.remove('pmod-price-loading');
+                    return;
+                }
+
+                popupPrice._pmodUpdating = true;
+                PModificator.applyPricesToDom(popupPrice, interpolated, state);
+                popupPrice._pmodUpdating = false;
+
+                popupPrice.classList.remove('pmod-price-loading');
+            };
+
+            // MutationObserver: срабатывает когда Аспро обновит DOM через AJAX
+            var observer = new MutationObserver(function () {
+                if (popupPrice._pmodUpdating) return;
+                observer.disconnect();
+                applyPrices();
+            });
+            observer.observe(popupPrice, { childList: true, subtree: true, characterData: true });
+            popupPrice._pmodObserver = observer;
+
+            // Fallback-таймаут: если Аспро не обновит DOM (X-ТП уже активен),
+            // применяем цены через PRICE_UPDATE_TIMEOUT_MS
+            popupPrice._pmodFallbackTimer = setTimeout(function () {
+                if (popupPrice._pmodObserver) {
+                    popupPrice._pmodObserver.disconnect();
+                    delete popupPrice._pmodObserver;
+                }
+                applyPrices();
+            }, PRICE_UPDATE_TIMEOUT_MS);
+        },
+
+        /**
+         * Отменить ожидающее применение цен (очистить observer + timer).
+         */
+        cancelPendingPriceUpdate: function (popupPrice) {
+            if (!popupPrice) return;
+            if (popupPrice._pmodObserver) {
+                popupPrice._pmodObserver.disconnect();
+                delete popupPrice._pmodObserver;
+            }
+            if (popupPrice._pmodFallbackTimer) {
+                clearTimeout(popupPrice._pmodFallbackTimer);
+                delete popupPrice._pmodFallbackTimer;
+            }
+        },
+
+        /**
+         * Применяет интерполированные цены в DOM блока .js-popup-price.
+         *
+         * Стратегия:
+         *  1. Пытаемся найти элементы с data-catalog-group-id и price value elements
+         *  2. Если не найдено — перестраиваем innerHTML целиком (с базовой ценой)
+         */
+        applyPricesToDom: function (popupPrice, interpolated, state) {
+            // Пробуем обновить существующие price-элементы через атрибут группы
+            var handled = false;
+            var priceGroupEls = popupPrice.querySelectorAll('[data-catalog-group-id]');
+            if (priceGroupEls.length) {
+                priceGroupEls.forEach(function (groupEl) {
+                    var gid = String(groupEl.dataset.catalogGroupId);
+                    var ranges = interpolated[gid];
+                    if (!ranges) return;
+
+                    // Находим числовые элементы цены внутри блока группы
+                    var valEls = groupEl.querySelectorAll(
+                        '.price__new-val, .price__num, .price__val, [data-price-value]'
+                    );
+                    if (!valEls.length) return;
+
+                    // Если в блоке несколько элементов цены и несколько диапазонов —
+                    // сопоставляем по порядку
+                    valEls.forEach(function (el, idx) {
+                        var range = ranges[idx] || ranges[0];
+                        if (!range) return;
+                        var priceStr = range.price.toLocaleString('ru-RU', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        });
+                        // Заменяем первое вхождение числа с разделителями и 2 знаками после запятой
+                        // Паттерн покрывает: "9 636,63", "9636.63", "0,01", "0.01"
+                        var replaced = el.innerHTML.replace(
+                            /[\d\u00a0\s]+[.,]\d{2}/,
+                            priceStr
+                        );
+                        el.innerHTML = replaced !== el.innerHTML ? replaced : priceStr + '\u00a0₽';
+                    });
+                    handled = true;
+                });
+            }
+
+            if (!handled) {
+                // Fallback: перестраиваем весь блок, показываем главную цену
+                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                if (mainPrice === null) return;
+                var priceStr = mainPrice.toLocaleString('ru-RU', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                 });
@@ -813,36 +1088,13 @@
                       '<div class="price color_dark price--current">' +
                         '<div class="price__row">' +
                           '<div class="price__new fw-500">' +
-                            '<span class="price__new-val font_24">' + priceStr + ' ₽/<span>тираж</span></span>' +
+                            '<span class="price__new-val font_24">' +
+                              priceStr + ' ₽/<span>тираж</span>' +
+                            '</span>' +
                           '</div>' +
                         '</div>' +
                       '</div>' +
                     '</div>';
-            } else {
-                // Запасной вариант: собственный элемент модуля
-                var priceEl = container.querySelector('.pmod-custom-price');
-                if (!priceEl) {
-                    priceEl = document.createElement('div');
-                    priceEl.className = 'pmod-custom-price';
-                    var buyBtn = document.querySelector('.detail-buy, .js-basket-btn, [data-entity="basket-button"]');
-                    var insertTarget = buyBtn ? buyBtn.parentNode : container.parentNode;
-                    if (insertTarget) {
-                        insertTarget.insertBefore(priceEl, buyBtn);
-                    }
-                }
-                priceEl.innerHTML =
-                    '<span class="pmod-custom-price__label">Расчётная цена:</span> ' +
-                    '<span class="pmod-custom-price__value">' + formatPrice(price) + '</span>' +
-                    '<span class="pmod-custom-price__note"> (предварительный расчёт)</span>';
-                priceEl.style.display = '';
-            }
-
-            if (cartEl) {
-                // Запоминаем исходное состояние видимости кнопки корзины
-                if (cartEl._pmodWasHidden === undefined) {
-                    cartEl._pmodWasHidden = cartEl.classList.contains('hidden');
-                }
-                cartEl.classList.remove('hidden');
             }
         },
 
@@ -850,9 +1102,10 @@
             var popupPrice = document.querySelector('.js-popup-price');
             var cartEl     = document.querySelector('.catalog-detail__cart');
 
-            if (popupPrice && popupPrice._pmodOriginalContent !== undefined) {
-                popupPrice.innerHTML = popupPrice._pmodOriginalContent;
-                delete popupPrice._pmodOriginalContent;
+            if (popupPrice) {
+                PModificator.cancelPendingPriceUpdate(popupPrice);
+                popupPrice.classList.remove('pmod-price-loading');
+                delete popupPrice._pmodUpdating;
             }
 
             var legacyEl = document.querySelector('.pmod-custom-price');
@@ -916,6 +1169,16 @@
 
                 formData.append('prospekt_calc[is_custom]',  'Y');
                 formData.append('prospekt_calc[product_id]', state.productId);
+
+                // Передаём активные «прочие» свойства для серверной фильтрации
+                if (state.activeOtherProps) {
+                    Object.keys(state.activeOtherProps).forEach(function (propId) {
+                        formData.append(
+                            'prospekt_calc[other_props][' + propId + ']',
+                            state.activeOtherProps[propId]
+                        );
+                    });
+                }
 
                 if (state.lastCalculatedPrice) {
                     formData.append('prospekt_calc[custom_price]', state.lastCalculatedPrice.toFixed(2));
