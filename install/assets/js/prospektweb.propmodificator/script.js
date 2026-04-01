@@ -270,6 +270,7 @@
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
                 catalogGroups:    catalogGroups,
+                canBuyGroups:     productCfg.canBuyGroups || [],
                 allPropIds:       allPropIds,
                 roundingRules:    productCfg.roundingRules || {},
                 activeOtherProps: initialOtherProps,
@@ -277,9 +278,11 @@
                 customHeight:     null,
                 customVolume:     null,
                 customMode:       false,
+                mainPriceGroupId: null,
                 // AJAX state (AbortController + requestId для защиты от race conditions)
                 _ajaxAbortCtrl:   null,
                 _ajaxRequestId:   0,
+                _volumeLabelTimer: null,
             };
 
             // Найти блоки свойств
@@ -363,6 +366,18 @@
             h1.textContent = newText;
             h1.title       = newText;
             h1._pmodUpdatingTitle = false;
+        },
+
+        /**
+         * Пересчитывает customMode по фактическим кастомным значениям.
+         * Кастомный режим активен, если задан произвольный тираж
+         * или одновременно заданы произвольные ширина и высота.
+         */
+        recomputeCustomMode: function (state) {
+            state.customMode = !!(
+                state.customVolume !== null ||
+                (state.customWidth !== null && state.customHeight !== null)
+            );
         },
 
         // ── Улучшение свойства ФОРМАТ ─────────────────────────────────────────
@@ -460,11 +475,11 @@
                     }
                     state.customWidth  = null;
                     state.customHeight = null;
-                    state.customMode   = !state.customVolume;
+                    PModificator.recomputeCustomMode(state);
                 } else {
                     state.customWidth  = w;
                     state.customHeight = h;
-                    state.customMode   = true;
+                    PModificator.recomputeCustomMode(state);
 
                     // Выбираем кнопку «Произвольный формат» или ближайший пресет
                     if (customBtn) {
@@ -649,12 +664,16 @@
 
                 var matchedBtn = findBtnByXmlId(v);
                 if (matchedBtn) {
+                    if (state._volumeLabelTimer) {
+                        clearTimeout(state._volumeLabelTimer);
+                        state._volumeLabelTimer = null;
+                    }
                     if (!matchedBtn.classList.contains('sku-props__value--active')) {
                         inner._pmodProgrammaticChange = true;
                         matchedBtn.click();
                     }
                     state.customVolume = null;
-                    state.customMode   = !!state.customWidth;
+                    PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
 
                     // Обновляем лейбл тиража и заголовок h1 с реальным числом
@@ -666,7 +685,7 @@
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
-                    state.customMode   = true;
+                    PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(v);
 
                     if (customBtn) {
@@ -689,12 +708,18 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = customStr;
                     }
+                    if (state._volumeLabelTimer) {
+                        clearTimeout(state._volumeLabelTimer);
+                        state._volumeLabelTimer = null;
+                    }
                     (function (str) {
-                        setTimeout(function () {
+                        state._volumeLabelTimer = setTimeout(function () {
+                            if (state.customVolume !== v) return;
                             if (volumeLabelSpan) {
                                 volumeLabelSpan.textContent = str;
                             }
                             PModificator.updateH1WithVolume(str + ' экз');
+                            state._volumeLabelTimer = null;
                         }, PRICE_UPDATE_TIMEOUT_MS);
                     }(customStr));
                 }
@@ -776,7 +801,7 @@
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
                         state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
                         state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
-                        state.customMode   = true;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету FORMAT — обновляем поля ширины/высоты
@@ -787,9 +812,9 @@
                                 hInput.value = parseInt(parts[1], 10) || hInput.value;
                             }
                         }
-                        state.customMode   = false;
                         state.customWidth  = null;
                         state.customHeight = null;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.hideCustomPrice(container);
                     }
 
@@ -808,7 +833,7 @@
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
-                        state.customMode   = true;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету VOLUME — обновляем поле тиража
@@ -816,8 +841,12 @@
                         if (vInput && !isNaN(volXmlId)) {
                             vInput.value = volXmlId;
                         }
-                        state.customMode   = false;
                         state.customVolume = null;
+                        PModificator.recomputeCustomMode(state);
+                        if (state._volumeLabelTimer) {
+                            clearTimeout(state._volumeLabelTimer);
+                            state._volumeLabelTimer = null;
+                        }
                         syncUrlPmodVolume(null);
                         PModificator.hideCustomPrice(container);
 
@@ -1061,7 +1090,12 @@
             state.lastInterpolatedPrices = interpolated;
 
             // Определяем «главную» цену (базовая группа → первый диапазон)
-            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            var mainPrice = PModificator.getMainPrice(
+                interpolated,
+                state.catalogGroups,
+                state.canBuyGroups,
+                state.mainPriceGroupId
+            );
             if (mainPrice !== null) {
                 state.lastCalculatedPrice = mainPrice;
             }
@@ -1090,8 +1124,14 @@
 
                     if (data.mainPrice) {
                         state.lastCalculatedPrice = data.mainPrice.raw;
+                        state.mainPriceGroupId = String(data.mainPrice.groupId);
                     } else {
-                        var srvMain = PModificator.getMainPrice(serverInterpolated, state.catalogGroups);
+                        var srvMain = PModificator.getMainPrice(
+                            serverInterpolated,
+                            state.catalogGroups,
+                            state.canBuyGroups,
+                            state.mainPriceGroupId
+                        );
                         if (srvMain !== null) {
                             state.lastCalculatedPrice = srvMain;
                         }
@@ -1106,17 +1146,28 @@
         /**
          * Возвращает цену базовой группы (или первой доступной), первый диапазон.
          */
-        getMainPrice: function (interpolated, catalogGroups) {
+        getMainPrice: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId) {
+            if (preferredGroupId && interpolated[preferredGroupId] && interpolated[preferredGroupId][0]) {
+                return interpolated[preferredGroupId][0].price;
+            }
+
+            var canBuyLookup = {};
+            (canBuyGroups || []).forEach(function (gid) {
+                canBuyLookup[String(gid)] = true;
+            });
+
+            var canBuyGid = null;
             var baseGid   = null;
             var firstGid  = null;
 
             Object.keys(interpolated).forEach(function (gid) {
                 if (!firstGid) firstGid = gid;
+                if (!canBuyGid && canBuyLookup[String(gid)]) canBuyGid = gid;
                 var g = catalogGroups && catalogGroups[gid];
                 if (g && g.base) baseGid = gid;
             });
 
-            var targetGid = baseGid || firstGid;
+            var targetGid = canBuyGid || baseGid || firstGid;
             if (!targetGid) return null;
 
             var ranges = interpolated[targetGid];
@@ -1213,7 +1264,12 @@
 
             if (!popupPrice) {
                 // Fallback: обновляем собственный элемент модуля
-                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                var mainPrice = PModificator.getMainPrice(
+                    interpolated,
+                    state.catalogGroups,
+                    state.canBuyGroups,
+                    state.mainPriceGroupId
+                );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');
                 if (priceEl && priceEl.style.display !== 'none') {
@@ -1263,7 +1319,12 @@
 
             if (!popupPrice) {
                 // Запасной вариант: собственный элемент модуля
-                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                var mainPrice = PModificator.getMainPrice(
+                    interpolated,
+                    state.catalogGroups,
+                    state.canBuyGroups,
+                    state.mainPriceGroupId
+                );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');
                 if (!priceEl) {
@@ -1429,7 +1490,12 @@
             });
 
             // ── 5. Обновляем главную видимую цену (снаружи template) ──────────
-            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            var mainPrice = PModificator.getMainPrice(
+                interpolated,
+                state.catalogGroups,
+                state.canBuyGroups,
+                state.mainPriceGroupId
+            );
             var mainPriceUpdated = false;
             if (mainPrice !== null) {
                 var allPriceVals = popupPrice.querySelectorAll('.price__new-val');
@@ -1590,25 +1656,57 @@
 
             var origFetch = window.fetch;
 
+            function parsePositiveInt(value) {
+                var n = parseInt(value, 10);
+                return isNaN(n) || n <= 0 ? null : n;
+            }
+
+            function getProductIdFromFormData(fd) {
+                if (!fd || typeof fd.get !== 'function') return null;
+                var keys = [
+                    'product_id',
+                    'PRODUCT_ID',
+                    'item',
+                    'id',
+                    'offer',
+                    'offer_id',
+                    'basket_props[PRODUCT_ID]',
+                ];
+                for (var i = 0; i < keys.length; i++) {
+                    var val = fd.get(keys[i]);
+                    var parsed = parsePositiveInt(val);
+                    if (parsed) return parsed;
+                }
+                return null;
+            }
+
+            function findMatchingState(states, requestProductId) {
+                var customStates = (states || []).filter(function (s) { return s && s.customMode; });
+                if (!customStates.length) return null;
+                if (requestProductId) {
+                    for (var i = 0; i < customStates.length; i++) {
+                        if (customStates[i].productId === requestProductId) {
+                            return customStates[i];
+                        }
+                    }
+                    return null;
+                }
+                return customStates.length === 1 ? customStates[0] : null;
+            }
+
             window.fetch = function (url, options) {
                 var urlStr = typeof url === 'string' ? url
                     : (url instanceof Request ? url.url : '');
 
                 if (urlStr.indexOf('/ajax/item.php') !== -1) {
-                    // Ищем активный customMode среди всех зарегистрированных состояний
-                    var activeState = null;
-                    var states = window._pmodActiveStates || [];
-                    for (var i = 0; i < states.length; i++) {
-                        if (states[i].customMode) {
-                            activeState = states[i];
-                            break;
-                        }
-                    }
-
-                    if (activeState && options && options.body instanceof FormData) {
+                    if (options && options.body instanceof FormData) {
                         var fd = options.body;
+                        var requestProductId = getProductIdFromFormData(fd);
+                        var states = window._pmodActiveStates || [];
+                        var activeState = findMatchingState(states, requestProductId);
+
                         // Пропускаем если patchCollectRequestData уже добавил поля
-                        if (typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
+                        if (activeState && typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
                             if (activeState.customWidth)  fd.append('prospekt_calc[width]',  activeState.customWidth);
                             if (activeState.customHeight) fd.append('prospekt_calc[height]', activeState.customHeight);
                             if (activeState.customVolume) fd.append('prospekt_calc[volume]', activeState.customVolume);
