@@ -1229,6 +1229,21 @@
 
                     state.lastInterpolatedPrices = serverInterpolated;
 
+                    // Если группа ещё не зафиксирована, пытаемся определить её по текущей
+                    // "главной" цене, которую в этот момент показывает Aspro.
+                    if (!state.mainPriceGroupId) {
+                        var basketQty = PModificator.getBasketQuantity(state.productId);
+                        var displayedMain = PModificator.getDisplayedMainPriceValue();
+                        var inferredGroupId = PModificator.inferGroupIdByDisplayedPrice(
+                            serverInterpolated,
+                            basketQty,
+                            displayedMain
+                        );
+                        if (inferredGroupId) {
+                            state.mainPriceGroupId = String(inferredGroupId);
+                        }
+                    }
+
                     if (data.mainPrice) {
                         state.lastCalculatedPrice = data.mainPrice.raw;
                         state.mainPriceGroupId = String(data.mainPrice.groupId);
@@ -1270,6 +1285,55 @@
                 }
             });
             return popupPrice;
+        },
+
+        getDisplayedMainPriceValue: function () {
+            var popupPrice = PModificator.getVisiblePopupPriceElement();
+            if (!popupPrice) return null;
+
+            var valEl = null;
+            popupPrice.querySelectorAll('.price__new-val').forEach(function (el) {
+                if (!el.closest('template') && valEl === null) {
+                    valEl = el;
+                }
+            });
+            if (!valEl) return null;
+
+            var raw = (valEl.textContent || '').replace(/\s+/g, ' ').trim();
+            var match = raw.match(/([\d\s]+)(?:[.,](\d+))?/);
+            if (!match) return null;
+
+            var intPart = (match[1] || '').replace(/\s/g, '');
+            var fracPart = match[2] || '';
+            var normalized = intPart + (fracPart ? '.' + fracPart : '');
+            var num = Number(normalized);
+            return isNaN(num) ? null : num;
+        },
+
+        inferGroupIdByDisplayedPrice: function (interpolated, basketQty, displayedPrice) {
+            if (displayedPrice === null || displayedPrice === undefined) return null;
+            basketQty = basketQty && basketQty > 0 ? basketQty : 1;
+
+            var bestGid = null;
+            var bestDiff = Number.MAX_VALUE;
+
+            Object.keys(interpolated || {}).forEach(function (gid) {
+                var ranges = interpolated[gid];
+                if (!ranges || !ranges.length) return;
+                var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
+                var row = ranges[idx] || ranges[0];
+                if (!row || row.price === null || row.price === undefined) return;
+                var p = Number(row.price);
+                if (isNaN(p)) return;
+                var diff = Math.abs(p - displayedPrice);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestGid = gid;
+                }
+            });
+
+            // Допускаем небольшое расхождение из‑за округления.
+            return bestDiff <= 1 ? bestGid : null;
         },
 
         getMinPriceFromRanges: function (interpolated, basketQty) {
