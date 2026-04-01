@@ -336,50 +336,78 @@ class AjaxController
         array $catalogGroups,
         array $visibleGroups = []
     ): ?array {
-        $visibleLookup = [];
-        foreach ($visibleGroups as $gid) {
-            $visibleLookup[(int)$gid] = true;
-        }
-
-        $candidates = [];
+        $rowsByGroup = [];
         foreach ($rangePrices as $gid => $rows) {
-            if (!is_array($rows) || empty($rows)) {
-                continue;
-            }
             $gid = (int)$gid;
-            if (!empty($visibleLookup) && empty($visibleLookup[$gid])) {
-                continue;
+            if (is_array($rows) && !empty($rows)) {
+                $rowsByGroup[$gid] = $rows;
             }
-            $selected = self::pickRangeForBasketQty($rows, $basketQty);
-            if ($selected === null) {
-                continue;
-            }
-            $candidates[] = [
-                'groupId' => $gid,
-                'price'   => (float)$selected['price'],
-                'canBuy'  => in_array($gid, $accessibleIds, true),
-                'base'    => !empty($catalogGroups[$gid]['base']),
-            ];
         }
-
-        if (empty($candidates)) {
+        if (empty($rowsByGroup)) {
             return null;
         }
 
-        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
-        $pool = !empty($buyable) ? $buyable : $candidates;
-
-        usort($pool, static function (array $a, array $b): int {
-            if ($a['price'] === $b['price']) {
-                if ($a['base'] !== $b['base']) {
-                    return $a['base'] ? -1 : 1;
+        // 1) Приоритет: порядок видимых групп на карточке (как в Aspro UI).
+        if (!empty($visibleGroups)) {
+            foreach ($visibleGroups as $gid) {
+                $gid = (int)$gid;
+                if (empty($rowsByGroup[$gid])) {
+                    continue;
                 }
-                return $a['groupId'] <=> $b['groupId'];
+                if (!in_array($gid, $accessibleIds, true)) {
+                    continue;
+                }
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => $gid];
+                }
             }
-            return $a['price'] <=> $b['price'];
-        });
+            // если из visible нет buyable-групп — берём первую visible с ценой
+            foreach ($visibleGroups as $gid) {
+                $gid = (int)$gid;
+                if (empty($rowsByGroup[$gid])) {
+                    continue;
+                }
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => $gid];
+                }
+            }
+        }
 
-        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+        // 2) Fallback: первая доступная для покупки группа по возрастанию ID.
+        $allGids = array_keys($rowsByGroup);
+        sort($allGids);
+        foreach ($allGids as $gid) {
+            if (!in_array($gid, $accessibleIds, true)) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+            if ($selected !== null) {
+                return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
+            }
+        }
+
+        // 3) Fallback: базовая группа.
+        foreach ($allGids as $gid) {
+            if (!empty($catalogGroups[$gid]['base'])) {
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
+                }
+            }
+        }
+
+        // 4) Последний fallback: первая группа по ID.
+        $firstGid = reset($allGids);
+        if ($firstGid !== false) {
+            $selected = self::pickRangeForBasketQty($rowsByGroup[(int)$firstGid], $basketQty);
+            if ($selected !== null) {
+                return ['price' => (float)$selected['price'], 'groupId' => (int)$firstGid];
+            }
+        }
+
+        return null;
     }
 
     /**
