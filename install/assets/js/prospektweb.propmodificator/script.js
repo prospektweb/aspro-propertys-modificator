@@ -358,7 +358,8 @@
                         return;
                     }
 
-                    PModificator.updatePriceDisplay(state.containerEl, state);
+                    // Один отложенный re-apply после асинхронного апдейта Аспро
+                    // заметно снижает визуальное "моргание" цены.
                     PModificator.scheduleReapplyCustomPrice(state.containerEl, state);
                 });
             });
@@ -1162,14 +1163,29 @@
                 state.lastCalculatedPrice = mainPrice;
             }
 
-            // Показываем клиентский расчёт немедленно (оптимистичный UI)
-            PModificator.showCustomPrice(container, interpolated, state);
-
             // Если AJAX-URL настроен — уточняем цену на сервере
             var cfg = window.pmodConfig;
             if (cfg && cfg.ajaxUrl) {
+                // Для произвольного тиража работаем по схеме server-first:
+                // показываем лоадер и применяем только финальную серверную цену.
+                var serverFirst = state.customVolume !== null;
+                if (serverFirst) {
+                    var visiblePopup = PModificator.getVisiblePopupPriceElement();
+                    if (visiblePopup) {
+                        visiblePopup.classList.add('pmod-price-loading');
+                    }
+                } else {
+                    // Для прочих сценариев оставляем оптимистичный UI.
+                    PModificator.showCustomPrice(container, interpolated, state);
+                }
+
                 PModificator.fetchServerPrice(state, function (data) {
-                    if (!data || !data.success || !state.customMode) return;
+                    if (!state.customMode) return;
+                    if (!data || !data.success) {
+                        // Fallback при ошибке сервера: показываем клиентский расчёт и снимаем лоадер.
+                        PModificator.showCustomPrice(container, interpolated, state);
+                        return;
+                    }
 
                     // Преобразуем ответ сервера в формат, понятный applyPricesToDom
                     var serverInterpolated = {};
@@ -1219,7 +1235,21 @@
                     // Применяем серверные цены к DOM
                     PModificator.applyServerPricesToDom(container, serverInterpolated, state);
                 });
+                return;
             }
+
+            // Если серверного уточнения нет — показываем клиентский расчёт.
+            PModificator.showCustomPrice(container, interpolated, state);
+        },
+
+        getVisiblePopupPriceElement: function () {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+            return popupPrice;
         },
 
         /**
