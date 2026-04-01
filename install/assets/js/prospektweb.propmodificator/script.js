@@ -1431,7 +1431,9 @@
             }
             body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
-            if (visibleGroups.length) {
+            // Если удалось определить только одну группу, не сужаем серверный выбор —
+            // это часто "шумный" кейс, когда Aspro отдаёт неполный PRICE_CODE.
+            if (visibleGroups.length > 1) {
                 visibleGroups.forEach(function (gid) {
                     body.append('visible_groups[]', gid);
                 });

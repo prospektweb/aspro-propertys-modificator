@@ -133,7 +133,11 @@ class AjaxController
             ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups, $visibleGroups, $activeGroupId)
             : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds, $activeGroupId);
 
-        return [
+        if ($mainPrice === null && !empty($rangePrices)) {
+            $mainPrice = self::fallbackMainPriceFromRanges($rangePrices, $basketQty);
+        }
+
+        $result = [
             'success'   => true,
             'prices'    => $pricesResult,
             'ranges'    => $rangePrices,
@@ -149,6 +153,17 @@ class AjaxController
             ],
             'requestId' => uniqid('pmod_', true),
         ];
+
+        if (isset($_POST['debug']) && $_POST['debug'] === 'Y') {
+            $result['debug'] = [
+                'activeGroupId' => $activeGroupId,
+                'visibleGroups' => $visibleGroups,
+                'accessibleIds' => $accessibleGroupIds,
+                'resolvedMain'  => $mainPrice,
+            ];
+        }
+
+        return $result;
     }
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
@@ -449,6 +464,39 @@ class AjaxController
             return $a['groupId'] <=> $b['groupId'];
         }
         return $a['price'] <=> $b['price'];
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
+    }
+
+    private static function fallbackMainPriceFromRanges(array $rangePrices, int $basketQty): ?array
+    {
+        $best = null;
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null || !isset($selected['price'])) {
+                continue;
+            }
+            $price = (float)$selected['price'];
+            if ($best === null || $price < $best['price']) {
+                $best = ['price' => $price, 'groupId' => (int)$gid];
+            }
+        }
+        return $best;
     }
 
     /**
