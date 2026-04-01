@@ -134,6 +134,9 @@ class prospektweb_propmodificator extends CModule
             }
         }
 
+        // Aspro local overrides (копия шаблонных файлов в /local/templates/aspro-premier)
+        $this->installAsproLocalOverrides();
+
         return true;
     }
 
@@ -233,8 +236,96 @@ class prospektweb_propmodificator extends CModule
 
     public function uninstallFiles(): void
     {
+        $this->uninstallAsproLocalOverrides();
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
         DeleteDirFilesEx('/ajax/prospektweb.propmodificator');
+    }
+
+    /**
+     * Копирует ключевые файлы шаблона Аспро из /bitrix/templates в /local/templates
+     * для безопасного override без правки vendor-файлов.
+     */
+    private function installAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $targets = [
+            'js/select_offer_func.js'   => '/local/templates/aspro-premier/js/select_offer_func.js',
+            'js/select_offer_func.min.js' => '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            'ajax/js_item_detail.php'   => '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $relativeFile => $dstRel) {
+            $src = $this->resolveAsproTemplateSourceFile($relativeFile);
+            if (!$src) {
+                continue;
+            }
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+
+            if (!is_dir(dirname($dst))) {
+                @mkdir(dirname($dst), 0755, true);
+            }
+            if (!is_dir(dirname($dst))) {
+                continue;
+            }
+
+            // Не затираем пользовательские override-файлы.
+            if (!file_exists($dst)) {
+                @copy($src, $dst);
+                if (file_exists($dst)) {
+                    @file_put_contents(
+                        $marker,
+                        'Installed by prospektweb.propmodificator at ' . date('c')
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ищет исходный файл шаблона Aspro Premier в типовых локациях.
+     */
+    private function resolveAsproTemplateSourceFile(string $relativeFile): ?string
+    {
+        $docRoot = Application::getDocumentRoot();
+        $candidates = [
+            $docRoot . '/local/templates/aspro-premier/' . $relativeFile,
+            $docRoot . '/bitrix/templates/aspro-premier/' . $relativeFile,
+            $docRoot . '/bitrix/wizards/aspro/premier/site/templates/aspro-premier/' . $relativeFile,
+        ];
+
+        foreach ($candidates as $file) {
+            if (file_exists($file)) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Удаляет только те override-файлы Аспро в /local/templates,
+     * которые были скопированы установщиком модуля (по marker-файлу).
+     */
+    private function uninstallAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $targets = [
+            '/local/templates/aspro-premier/js/select_offer_func.js',
+            '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $dstRel) {
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+            if (file_exists($marker)) {
+                if (file_exists($dst)) {
+                    @unlink($dst);
+                }
+                @unlink($marker);
+            }
+        }
     }
 
     public function uninstallFooter(): void
