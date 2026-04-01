@@ -232,6 +232,10 @@
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
+
+            // После обновления SKU в Аспро повторно применяем кастомную цену,
+            // чтобы "техническая" цена X-ТП не перетирала расчёт pmod.
+            PModificator.hookAsproSkuFinalAction();
         },
 
         /**
@@ -286,6 +290,9 @@
                 _otherPropRecalcTimer: null,
             };
 
+            // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
+            state.containerEl = container;
+
             // Найти блоки свойств
             if (formatPropId) {
                 var formatInner = container.querySelector('.sku-props__inner[data-id="' + formatPropId + '"]');
@@ -317,6 +324,44 @@
 
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
+        },
+
+        // ── События Аспро ────────────────────────────────────────────────────
+
+        hookAsproSkuFinalAction: function () {
+            if (window._pmodAsproFinalActionHooked) {
+                return;
+            }
+            window._pmodAsproFinalActionHooked = true;
+
+            if (typeof BX === 'undefined' || typeof BX.addCustomEvent !== 'function') {
+                return;
+            }
+
+            BX.addCustomEvent('onFinalActionSKUInfo', function (eventdata) {
+                var wrapperEl = null;
+                if (eventdata && eventdata.wrapper) {
+                    // В Аспро wrapper обычно jQuery-объект
+                    if (eventdata.wrapper.jquery && eventdata.wrapper[0]) {
+                        wrapperEl = eventdata.wrapper[0];
+                    } else if (eventdata.wrapper.nodeType === 1) {
+                        wrapperEl = eventdata.wrapper;
+                    }
+                }
+
+                var states = window._pmodActiveStates || [];
+                states.forEach(function (state) {
+                    if (!state || !state.customMode || !state.containerEl) return;
+
+                    // Если wrapper известен — применяем только к затронутому контейнеру
+                    if (wrapperEl && !wrapperEl.contains(state.containerEl) && wrapperEl !== state.containerEl) {
+                        return;
+                    }
+
+                    PModificator.updatePriceDisplay(state.containerEl, state);
+                    PModificator.scheduleReapplyCustomPrice(state.containerEl, state);
+                });
+            });
         },
 
         // ── Синхронизация h1 title с textContent ─────────────────────────────
