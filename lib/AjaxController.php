@@ -48,11 +48,16 @@ class AjaxController
         $width      = isset($_POST['width'])   && $_POST['width']  !== ''  ? (int)$_POST['width']   : null;
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
         $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
-        $visibleGroups = isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])
-            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static function ($v) {
-                return $v > 0;
-            })))
-            : [];
+        $visibleGroups = [];
+        if (isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])) {
+            foreach ($_POST['visible_groups'] as $gidRaw) {
+                $gid = (int)$gidRaw;
+                if ($gid > 0) {
+                    $visibleGroups[$gid] = $gid;
+                }
+            }
+            $visibleGroups = array_values($visibleGroups);
+        }
         $activeGroupId = isset($_POST['active_group_id']) && (int)$_POST['active_group_id'] > 0
             ? (int)$_POST['active_group_id']
             : null;
@@ -419,24 +424,31 @@ class AjaxController
             }
         }
 
-        $buyable = array_values(array_filter($candidates, static function ($c) {
-            return $c['canBuy'] === true;
-        }));
-        $pool = !empty($buyable) ? $buyable : $candidates;
-
-        usort($pool, static function (array $a, array $b): int {
-            if ($a['price'] === $b['price']) {
-                if ($a['ord'] !== $b['ord']) {
-                    return $a['ord'] <=> $b['ord'];
-                }
-                if ($a['base'] !== $b['base']) {
-                    return $a['base'] ? -1 : 1;
-                }
-                return $a['groupId'] <=> $b['groupId'];
+        $buyable = [];
+        foreach ($candidates as $candidate) {
+            if (!empty($candidate['canBuy'])) {
+                $buyable[] = $candidate;
             }
         }
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, [self::class, 'compareMainPriceCandidates']);
 
         return null;
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
     }
 
     /**
