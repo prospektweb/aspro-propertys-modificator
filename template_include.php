@@ -100,9 +100,18 @@ if (!$productId) {
 // Попытка через GetPageProperty — большинство компонентов Битрикс/Аспро
 // устанавливают element_id через $APPLICATION->SetPageProperty() во время рендера,
 // значение доступно в OnEpilog через GetPageProperty.
+// Aspro Premier может использовать разные ключи в зависимости от версии шаблона.
 if (!$productId) {
     global $APPLICATION;
-    $pageElementId = (int)$APPLICATION->GetPageProperty('element_id');
+    $pageElementId = 0;
+    foreach (['element_id', 'item_id', 'catalog_element_id', 'ELEMENT_ID', 'catalog_item_id'] as $propKey) {
+        $propVal = (int)$APPLICATION->GetPageProperty($propKey);
+        if ($propVal > 0) {
+            $pageElementId = $propVal;
+            PageHandler::debugLog('GetPageProperty(' . $propKey . ')=' . $pageElementId);
+            break;
+        }
+    }
     if ($pageElementId > 0) {
         // Проверяем: это ТП или товар?
         if ($offersIblockId > 0) {
@@ -122,7 +131,7 @@ if (!$productId) {
             // Возможно, element_id — это сам товар
             $productId = $pageElementId;
         }
-        PageHandler::debugLog('GetPageProperty(element_id)=' . $pageElementId . ' resolved to productId=' . $productId);
+        PageHandler::debugLog('GetPageProperty resolved to productId=' . $productId);
     }
 }
 
@@ -144,6 +153,39 @@ if (!$productId && $productsIblockId > 0) {
                 $productId = (int)$arEl['ID'];
                 PageHandler::debugLog('URL CODE="' . $lastSegment . '" resolved to productId=' . $productId);
             }
+        }
+    }
+}
+
+// Последний резерв: парсим буфер вывода в поисках data-item-id="..." на .sku-props.
+// Aspro Premier рендерит компонент каталога раньше OnEpilog, поэтому буфер уже
+// содержит сгенерированный HTML с атрибутом data-item-id на блоке свойств SKU.
+// ob_get_contents() только читает буфер, не изменяет и не сбрасывает его —
+// это безопасно на этапе OnEpilog, когда буфер ещё не финализирован.
+if (!$productId) {
+    $html = ob_get_contents();
+    if ($html && preg_match('/data-item-id=["\'](\d+)["\']/', $html, $obMatch)) {
+        $candidateId = (int)$obMatch[1];
+        if ($candidateId > 0) {
+            // Проверяем: это ТП или товар?
+            $resolvedFromBuffer = false;
+            if ($offersIblockId > 0) {
+                $rsEl = CIBlockElement::GetList(
+                    [],
+                    ['IBLOCK_ID' => $offersIblockId, 'ID' => $candidateId, 'ACTIVE' => 'Y'],
+                    false,
+                    false,
+                    ['ID', 'PROPERTY_CML2_LINK']
+                );
+                if ($arEl = $rsEl->Fetch()) {
+                    $productId = (int)($arEl['PROPERTY_CML2_LINK_VALUE'] ?? 0);
+                    $resolvedFromBuffer = true;
+                }
+            }
+            if (!$resolvedFromBuffer) {
+                $productId = $candidateId;
+            }
+            PageHandler::debugLog('Output buffer data-item-id=' . $candidateId . ' resolved to productId=' . $productId);
         }
     }
 }

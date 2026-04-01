@@ -12,7 +12,7 @@
 
     // ── Константы ─────────────────────────────────────────────────────────────
 
-    var DEBOUNCE_MS              = 400;
+    var DEBOUNCE_MS              = 300;
     var PRICE_UPDATE_TIMEOUT_MS  = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
 
     // ── Утилиты ───────────────────────────────────────────────────────────────
@@ -1464,7 +1464,8 @@
         // ── Перехват корзины ──────────────────────────────────────────────────
 
         hookBasket: function (container, state) {
-            // Ждём инициализации JItemActionBasket (может грузиться асинхронно)
+            // Подход 1: патч JItemActionBasket.prototype.collectRequestData
+            // (работает если класс загружен, Aspro Premier >= 2.x)
             var attempts = 0;
 
             function tryHook() {
@@ -1482,6 +1483,11 @@
             }
 
             tryHook();
+
+            // Подход 2: перехват fetch() — надёжный fallback для любой версии Aspro.
+            // Срабатывает ВСЕГДА при POST на /ajax/item.php, независимо от внутренней
+            // архитектуры Aspro. Дублирование полей исключается проверкой has().
+            PModificator.hookBasketViaFetch(state);
         },
 
         /**
@@ -1529,6 +1535,78 @@
                 }
 
                 return formData;
+            };
+        },
+
+        /**
+         * Надёжный fallback-перехват корзины через monkey-patching window.fetch.
+         *
+         * Работает с любой версией Aspro Premier независимо от наличия
+         * JItemActionBasket. Перед добавлением полей проверяет has() чтобы
+         * не дублировать данные, если patchCollectRequestData уже отработал.
+         *
+         * Для поддержки нескольких контейнеров на одной странице реестр состояний
+         * хранится в window._pmodActiveStates. Подключение fetch-хука выполняется
+         * один раз (флаг window._pmodFetchHooked).
+         *
+         * @param {Object} state — состояние контейнера
+         */
+        hookBasketViaFetch: function (state) {
+            // Регистрируем state в глобальном реестре
+            if (!window._pmodActiveStates) {
+                window._pmodActiveStates = [];
+            }
+            window._pmodActiveStates.push(state);
+
+            // Устанавливаем перехватчик один раз
+            if (window._pmodFetchHooked) {
+                return;
+            }
+            window._pmodFetchHooked = true;
+
+            if (typeof window.fetch !== 'function') {
+                return; // fetch не поддерживается — пропускаем
+            }
+
+            var origFetch = window.fetch;
+
+            window.fetch = function (url, options) {
+                var urlStr = typeof url === 'string' ? url
+                    : (url instanceof Request ? url.url : '');
+
+                if (urlStr.indexOf('/ajax/item.php') !== -1) {
+                    // Ищем активный customMode среди всех зарегистрированных состояний
+                    var activeState = null;
+                    var states = window._pmodActiveStates || [];
+                    for (var i = 0; i < states.length; i++) {
+                        if (states[i].customMode) {
+                            activeState = states[i];
+                            break;
+                        }
+                    }
+
+                    if (activeState && options && options.body instanceof FormData) {
+                        var fd = options.body;
+                        // Пропускаем если patchCollectRequestData уже добавил поля
+                        if (typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
+                            if (activeState.customWidth)  fd.append('prospekt_calc[width]',  activeState.customWidth);
+                            if (activeState.customHeight) fd.append('prospekt_calc[height]', activeState.customHeight);
+                            if (activeState.customVolume) fd.append('prospekt_calc[volume]', activeState.customVolume);
+                            fd.append('prospekt_calc[is_custom]',  'Y');
+                            fd.append('prospekt_calc[product_id]', activeState.productId);
+                            if (activeState.activeOtherProps) {
+                                Object.keys(activeState.activeOtherProps).forEach(function (pid) {
+                                    fd.append('prospekt_calc[other_props][' + pid + ']', activeState.activeOtherProps[pid]);
+                                });
+                            }
+                            if (activeState.lastCalculatedPrice) {
+                                fd.append('prospekt_calc[custom_price]', activeState.lastCalculatedPrice.toFixed(2));
+                            }
+                        }
+                    }
+                }
+
+                return origFetch.apply(this, arguments);
             };
         },
     };
