@@ -322,6 +322,12 @@
             // Следим за кликами по стандартным кнопкам ТП
             PModificator.watchPresetClicks(container, state);
 
+            // Фиксируем активную группу цены Аспро как baseline для custom-режима.
+            var detectedMainGid = PModificator.detectActivePriceGroupIdFromDom(state);
+            if (detectedMainGid) {
+                state.mainPriceGroupId = detectedMainGid;
+            }
+
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
         },
@@ -1163,6 +1169,12 @@
                 state.lastCalculatedPrice = mainPrice;
             }
 
+            // Перед custom-пересчётом уточняем активную группу цены из DOM Аспро.
+            var activeGid = PModificator.detectActivePriceGroupIdFromDom(state);
+            if (activeGid) {
+                state.mainPriceGroupId = activeGid;
+            }
+
             // Если AJAX-URL настроен — уточняем цену на сервере
             var cfg = window.pmodConfig;
             if (cfg && cfg.ajaxUrl) {
@@ -1414,6 +1426,9 @@
 
             var body = new FormData();
             body.append('productId', state.productId);
+            if (state.mainPriceGroupId) {
+                body.append('active_group_id', state.mainPriceGroupId);
+            }
             body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
             if (visibleGroups.length) {
@@ -1523,6 +1538,38 @@
                 if (gid) gids.push(String(gid));
             });
             return gids;
+        },
+
+        detectActivePriceGroupIdFromDom: function (state) {
+            var popupPrice = PModificator.getVisiblePopupPriceElement();
+            if (!popupPrice || !state || !state.catalogGroups) return null;
+
+            var nameToGid = {};
+            Object.keys(state.catalogGroups).forEach(function (gid) {
+                var g = state.catalogGroups[gid];
+                var n = g && g.name ? String(g.name).trim().toLowerCase() : '';
+                if (n) nameToGid[n] = String(gid);
+            });
+
+            var row = popupPrice.querySelector('.price--current');
+            if (!row) return null;
+
+            function extractTitle(el) {
+                var cur = el;
+                while (cur) {
+                    var tEl = cur.querySelector('.price__title');
+                    if (tEl) {
+                        var t = (tEl.textContent || '').trim().toLowerCase();
+                        if (t) return t;
+                    }
+                    cur = cur.previousElementSibling;
+                }
+                return '';
+            }
+
+            var title = extractTitle(row);
+            if (!title) return null;
+            return nameToGid[title] || null;
         },
 
         /**
