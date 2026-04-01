@@ -1164,24 +1164,60 @@
          * Возвращает цену базовой группы (или первой доступной), первый диапазон.
          */
         getMainPrice: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId) {
-            if (preferredGroupId && interpolated[preferredGroupId] && interpolated[preferredGroupId][0]) {
-                return interpolated[preferredGroupId][0].price;
-            }
+            var desc = PModificator.getMainPriceDescriptor(
+                interpolated,
+                catalogGroups,
+                canBuyGroups,
+                preferredGroupId,
+                1
+            );
+            return desc ? desc.price : null;
+        },
 
+        getRangeIndexForQuantity: function (ranges, basketQty) {
+            if (!ranges || !ranges.length) return 0;
+            for (var i = 0; i < ranges.length; i++) {
+                var r = ranges[i] || {};
+                var from = r.from !== null && r.from !== undefined ? Number(r.from) : null;
+                var to   = r.to   !== null && r.to   !== undefined ? Number(r.to)   : null;
+                var okFrom = (from === null) || (basketQty >= from);
+                var okTo   = (to === null) || (basketQty <= to);
+                if (okFrom && okTo) return i;
+            }
+            return 0;
+        },
+
+        getMainPriceDescriptor: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId, basketQty) {
+            basketQty = basketQty && basketQty > 0 ? basketQty : 1;
             var canBuyLookup = {};
             (canBuyGroups || []).forEach(function (gid) {
                 canBuyLookup[String(gid)] = true;
             });
 
+            if (preferredGroupId && interpolated[preferredGroupId] && interpolated[preferredGroupId].length) {
+                var prefRanges = interpolated[preferredGroupId];
+                var prefIdx = PModificator.getRangeIndexForQuantity(prefRanges, basketQty);
+                var prefRow = prefRanges[prefIdx] || prefRanges[0];
+                if (prefRow && prefRow.price !== null && prefRow.price !== undefined) {
+                    return {
+                        gid: String(preferredGroupId),
+                        rangeIndex: prefIdx,
+                        price: Number(prefRow.price),
+                    };
+                }
+            }
+
             var candidates = [];
             Object.keys(interpolated).forEach(function (gid) {
                 var ranges = interpolated[gid];
                 if (!ranges || !ranges.length) return;
-                var row = ranges[0];
+                var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
+                var row = ranges[idx] || ranges[0];
                 if (row.price === null || row.price === undefined || isNaN(Number(row.price))) return;
                 var g = catalogGroups && catalogGroups[gid];
                 candidates.push({
                     gid: gid,
+                    rangeIndex: idx,
                     price: Number(row.price),
                     canBuy: !!canBuyLookup[String(gid)],
                     base: !!(g && g.base),
@@ -1201,7 +1237,7 @@
                 return a.price - b.price;
             });
 
-            return pool[0].price;
+            return pool[0];
         },
 
         // ── Серверный пересчёт цены (AJAX) ───────────────────────────────────
@@ -1551,12 +1587,15 @@
             });
 
             // ── 5. Обновляем главную видимую цену (снаружи template) ──────────
-            var mainPrice = PModificator.getMainPrice(
+            var basketQty = PModificator.getBasketQuantity(state.productId);
+            var mainDesc = PModificator.getMainPriceDescriptor(
                 interpolated,
                 state.catalogGroups,
                 state.canBuyGroups,
-                state.mainPriceGroupId
+                state.mainPriceGroupId,
+                basketQty
             );
+            var mainPrice = mainDesc ? mainDesc.price : null;
             var mainPriceUpdated = false;
             if (mainPrice !== null) {
                 var allPriceVals = popupPrice.querySelectorAll('.price__new-val');
@@ -1587,6 +1626,31 @@
                         '</div>' +
                       '</div>' +
                     '</div>';
+            }
+
+            // Подсветка текущей строки цены в popup-таблице (price--current)
+            if (templateEl && templateEl.content && mainDesc) {
+                var priceRows = Array.prototype.slice.call(templateEl.content.querySelectorAll('.price'));
+                priceRows.forEach(function (row) { row.classList.remove('price--current'); });
+
+                var flatMeta = [];
+                orderedGids.forEach(function (gid) {
+                    var ranges = interpolated[gid];
+                    if (!ranges) return;
+                    ranges.forEach(function (_range, idx) {
+                        flatMeta.push({ gid: String(gid), rangeIndex: idx });
+                    });
+                });
+
+                for (var i = 0; i < flatMeta.length && i < priceRows.length; i++) {
+                    if (
+                        flatMeta[i].gid === String(mainDesc.gid) &&
+                        flatMeta[i].rangeIndex === mainDesc.rangeIndex
+                    ) {
+                        priceRows[i].classList.add('price--current');
+                        break;
+                    }
+                }
             }
         },
 
