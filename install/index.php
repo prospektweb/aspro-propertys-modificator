@@ -134,6 +134,9 @@ class prospektweb_propmodificator extends CModule
             }
         }
 
+        // Aspro local overrides (копия шаблонных файлов в /local/templates/aspro-premier)
+        $this->installAsproLocalOverrides();
+
         return true;
     }
 
@@ -233,8 +236,122 @@ class prospektweb_propmodificator extends CModule
 
     public function uninstallFiles(): void
     {
+        $this->uninstallAsproLocalOverrides();
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
         DeleteDirFilesEx('/ajax/prospektweb.propmodificator');
+    }
+
+    /**
+     * Копирует ключевые файлы шаблона Аспро из /bitrix/templates в /local/templates
+     * для безопасного override без правки vendor-файлов.
+     */
+    private function installAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $localTemplateRoot = $docRoot . '/local/templates/aspro-premier';
+
+        // Важно: не создаём "пустой" local-template.
+        // Если папка шаблона в /local отсутствует (или неполная), пропускаем auto-copy,
+        // иначе Bitrix может попытаться использовать неполный шаблон и уронить сайт.
+        $hasLocalTemplate = is_dir($localTemplateRoot) && (
+            file_exists($localTemplateRoot . '/description.php')
+            || file_exists($localTemplateRoot . '/header.php')
+            || file_exists($localTemplateRoot . '/init.php')
+        );
+
+        if (!$hasLocalTemplate) {
+            // Миграционный self-heal: если ранее были созданы только pmod-файлы,
+            // удалим их, чтобы не оставлять "битый" каркас local-template.
+            foreach ([
+                $localTemplateRoot . '/js/select_offer_func.js',
+                $localTemplateRoot . '/js/select_offer_func.min.js',
+                $localTemplateRoot . '/ajax/js_item_detail.php',
+            ] as $file) {
+                $marker = $file . '.pmod_installed';
+                if (file_exists($marker)) {
+                    @unlink($file);
+                    @unlink($marker);
+                }
+            }
+            return;
+        }
+
+        $targets = [
+            'js/select_offer_func.js'   => '/local/templates/aspro-premier/js/select_offer_func.js',
+            'js/select_offer_func.min.js' => '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            'ajax/js_item_detail.php'   => '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $relativeFile => $dstRel) {
+            $src = $this->resolveAsproTemplateSourceFile($relativeFile);
+            if (!$src) {
+                continue;
+            }
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+
+            if (!is_dir(dirname($dst))) {
+                @mkdir(dirname($dst), 0755, true);
+            }
+            if (!is_dir(dirname($dst))) {
+                continue;
+            }
+
+            // Не затираем пользовательские override-файлы.
+            if (!file_exists($dst)) {
+                @copy($src, $dst);
+                if (file_exists($dst)) {
+                    @file_put_contents(
+                        $marker,
+                        'Installed by prospektweb.propmodificator at ' . date('c')
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ищет исходный файл шаблона Aspro Premier в типовых локациях.
+     */
+    private function resolveAsproTemplateSourceFile(string $relativeFile): ?string
+    {
+        $docRoot = Application::getDocumentRoot();
+        $candidates = [
+            $docRoot . '/bitrix/templates/aspro-premier/' . $relativeFile,
+        ];
+
+        foreach ($candidates as $file) {
+            if (file_exists($file)) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Удаляет только те override-файлы Аспро в /local/templates,
+     * которые были скопированы установщиком модуля (по marker-файлу).
+     */
+    private function uninstallAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $targets = [
+            '/local/templates/aspro-premier/js/select_offer_func.js',
+            '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $dstRel) {
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+            if (file_exists($marker)) {
+                if (file_exists($dst)) {
+                    @unlink($dst);
+                }
+                @unlink($marker);
+            }
+        }
     }
 
     public function uninstallFooter(): void
