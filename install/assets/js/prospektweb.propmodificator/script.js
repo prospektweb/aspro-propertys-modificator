@@ -270,6 +270,7 @@
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
                 catalogGroups:    catalogGroups,
+                canBuyGroups:     productCfg.canBuyGroups || [],
                 allPropIds:       allPropIds,
                 roundingRules:    productCfg.roundingRules || {},
                 activeOtherProps: initialOtherProps,
@@ -277,9 +278,12 @@
                 customHeight:     null,
                 customVolume:     null,
                 customMode:       false,
+                mainPriceGroupId: null,
                 // AJAX state (AbortController + requestId для защиты от race conditions)
                 _ajaxAbortCtrl:   null,
                 _ajaxRequestId:   0,
+                _volumeLabelTimer: null,
+                _otherPropRecalcTimer: null,
             };
 
             // Найти блоки свойств
@@ -363,6 +367,18 @@
             h1.textContent = newText;
             h1.title       = newText;
             h1._pmodUpdatingTitle = false;
+        },
+
+        /**
+         * Пересчитывает customMode по фактическим кастомным значениям.
+         * Кастомный режим активен, если задан произвольный тираж
+         * или одновременно заданы произвольные ширина и высота.
+         */
+        recomputeCustomMode: function (state) {
+            state.customMode = !!(
+                state.customVolume !== null ||
+                (state.customWidth !== null && state.customHeight !== null)
+            );
         },
 
         // ── Улучшение свойства ФОРМАТ ─────────────────────────────────────────
@@ -460,11 +476,11 @@
                     }
                     state.customWidth  = null;
                     state.customHeight = null;
-                    state.customMode   = !state.customVolume;
+                    PModificator.recomputeCustomMode(state);
                 } else {
                     state.customWidth  = w;
                     state.customHeight = h;
-                    state.customMode   = true;
+                    PModificator.recomputeCustomMode(state);
 
                     // Выбираем кнопку «Произвольный формат» или ближайший пресет
                     if (customBtn) {
@@ -649,12 +665,16 @@
 
                 var matchedBtn = findBtnByXmlId(v);
                 if (matchedBtn) {
+                    if (state._volumeLabelTimer) {
+                        clearTimeout(state._volumeLabelTimer);
+                        state._volumeLabelTimer = null;
+                    }
                     if (!matchedBtn.classList.contains('sku-props__value--active')) {
                         inner._pmodProgrammaticChange = true;
                         matchedBtn.click();
                     }
                     state.customVolume = null;
-                    state.customMode   = !!state.customWidth;
+                    PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
 
                     // Обновляем лейбл тиража и заголовок h1 с реальным числом
@@ -666,7 +686,7 @@
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
-                    state.customMode   = true;
+                    PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(v);
 
                     if (customBtn) {
@@ -689,12 +709,18 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = customStr;
                     }
+                    if (state._volumeLabelTimer) {
+                        clearTimeout(state._volumeLabelTimer);
+                        state._volumeLabelTimer = null;
+                    }
                     (function (str) {
-                        setTimeout(function () {
+                        state._volumeLabelTimer = setTimeout(function () {
+                            if (state.customVolume !== v) return;
                             if (volumeLabelSpan) {
                                 volumeLabelSpan.textContent = str;
                             }
                             PModificator.updateH1WithVolume(str + ' экз');
+                            state._volumeLabelTimer = null;
                         }, PRICE_UPDATE_TIMEOUT_MS);
                     }(customStr));
                 }
@@ -744,6 +770,18 @@
 
         // ── Слежение за кликами по стандартным пресетам ───────────────────────
 
+        scheduleReapplyCustomPrice: function (container, state) {
+            if (state._otherPropRecalcTimer) {
+                clearTimeout(state._otherPropRecalcTimer);
+                state._otherPropRecalcTimer = null;
+            }
+            state._otherPropRecalcTimer = setTimeout(function () {
+                if (!state.customMode) return;
+                PModificator.updatePriceDisplay(container, state);
+                state._otherPropRecalcTimer = null;
+            }, PRICE_UPDATE_TIMEOUT_MS + 120);
+        },
+
         watchPresetClicks: function (container, state) {
             var productCfg = window.pmodConfig && window.pmodConfig.products && window.pmodConfig.products[state.productId];
             var formatPropId = productCfg && productCfg.formatPropId;
@@ -776,7 +814,7 @@
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
                         state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
                         state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
-                        state.customMode   = true;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету FORMAT — обновляем поля ширины/высоты
@@ -787,9 +825,9 @@
                                 hInput.value = parseInt(parts[1], 10) || hInput.value;
                             }
                         }
-                        state.customMode   = false;
                         state.customWidth  = null;
                         state.customHeight = null;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.hideCustomPrice(container);
                     }
 
@@ -808,7 +846,7 @@
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
-                        state.customMode   = true;
+                        PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету VOLUME — обновляем поле тиража
@@ -816,8 +854,12 @@
                         if (vInput && !isNaN(volXmlId)) {
                             vInput.value = volXmlId;
                         }
-                        state.customMode   = false;
                         state.customVolume = null;
+                        PModificator.recomputeCustomMode(state);
+                        if (state._volumeLabelTimer) {
+                            clearTimeout(state._volumeLabelTimer);
+                            state._volumeLabelTimer = null;
+                        }
                         syncUrlPmodVolume(null);
                         PModificator.hideCustomPrice(container);
 
@@ -841,7 +883,11 @@
                         state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
                     }
                     if (state.customMode) {
+                        // 1) мгновенная переоценка
                         PModificator.updatePriceDisplay(container, state);
+                        // 2) отложенная — после асинхронного DOM/AJAX-апдейта Аспро,
+                        // чтобы не оставалась "техническая" цена X-ТП
+                        PModificator.scheduleReapplyCustomPrice(container, state);
                     }
                 }
 
@@ -1061,7 +1107,12 @@
             state.lastInterpolatedPrices = interpolated;
 
             // Определяем «главную» цену (базовая группа → первый диапазон)
-            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            var mainPrice = PModificator.getMainPrice(
+                interpolated,
+                state.catalogGroups,
+                state.canBuyGroups,
+                state.mainPriceGroupId
+            );
             if (mainPrice !== null) {
                 state.lastCalculatedPrice = mainPrice;
             }
@@ -1077,7 +1128,24 @@
 
                     // Преобразуем ответ сервера в формат, понятный applyPricesToDom
                     var serverInterpolated = {};
-                    if (data.prices) {
+                    if (data.ranges && typeof data.ranges === 'object') {
+                        Object.keys(data.ranges).forEach(function (gid) {
+                            var rows = Array.isArray(data.ranges[gid]) ? data.ranges[gid] : [];
+                            var normalized = rows.map(function (row) {
+                                return {
+                                    from: row && row.from !== undefined ? row.from : null,
+                                    to: row && row.to !== undefined ? row.to : null,
+                                    price: row && row.price !== undefined ? row.price : null,
+                                };
+                            }).filter(function (row) {
+                                return row.price !== null && !isNaN(Number(row.price));
+                            });
+                            if (normalized.length) {
+                                serverInterpolated[gid] = normalized;
+                            }
+                        });
+                    }
+                    if (!Object.keys(serverInterpolated).length && data.prices) {
                         Object.keys(data.prices).forEach(function (gid) {
                             var p = data.prices[gid];
                             serverInterpolated[gid] = [{ from: null, to: null, price: p.raw }];
@@ -1090,8 +1158,14 @@
 
                     if (data.mainPrice) {
                         state.lastCalculatedPrice = data.mainPrice.raw;
+                        state.mainPriceGroupId = String(data.mainPrice.groupId);
                     } else {
-                        var srvMain = PModificator.getMainPrice(serverInterpolated, state.catalogGroups);
+                        var srvMain = PModificator.getMainPrice(
+                            serverInterpolated,
+                            state.catalogGroups,
+                            state.canBuyGroups,
+                            state.mainPriceGroupId
+                        );
                         if (srvMain !== null) {
                             state.lastCalculatedPrice = srvMain;
                         }
@@ -1106,23 +1180,93 @@
         /**
          * Возвращает цену базовой группы (или первой доступной), первый диапазон.
          */
-        getMainPrice: function (interpolated, catalogGroups) {
-            var baseGid   = null;
-            var firstGid  = null;
+        getMainPrice: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId) {
+            var desc = PModificator.getMainPriceDescriptor(
+                interpolated,
+                catalogGroups,
+                canBuyGroups,
+                preferredGroupId,
+                1,
+                null
+            );
+            return desc ? desc.price : null;
+        },
 
+        getRangeIndexForQuantity: function (ranges, basketQty) {
+            if (!ranges || !ranges.length) return 0;
+            for (var i = 0; i < ranges.length; i++) {
+                var r = ranges[i] || {};
+                var from = r.from !== null && r.from !== undefined ? Number(r.from) : null;
+                var to   = r.to   !== null && r.to   !== undefined ? Number(r.to)   : null;
+                var okFrom = (from === null) || (basketQty >= from);
+                var okTo   = (to === null) || (basketQty <= to);
+                if (okFrom && okTo) return i;
+            }
+            return 0;
+        },
+
+        getMainPriceDescriptor: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId, basketQty, allowedGroupIds) {
+            basketQty = basketQty && basketQty > 0 ? basketQty : 1;
+            var canBuyLookup = {};
+            (canBuyGroups || []).forEach(function (gid) {
+                canBuyLookup[String(gid)] = true;
+            });
+            var allowedLookup = null;
+            if (allowedGroupIds && allowedGroupIds.length) {
+                allowedLookup = {};
+                allowedGroupIds.forEach(function (gid) { allowedLookup[String(gid)] = true; });
+            }
+
+            if (
+                preferredGroupId &&
+                interpolated[preferredGroupId] &&
+                interpolated[preferredGroupId].length &&
+                (!allowedLookup || allowedLookup[String(preferredGroupId)])
+            ) {
+                var prefRanges = interpolated[preferredGroupId];
+                var prefIdx = PModificator.getRangeIndexForQuantity(prefRanges, basketQty);
+                var prefRow = prefRanges[prefIdx] || prefRanges[0];
+                if (prefRow && prefRow.price !== null && prefRow.price !== undefined) {
+                    return {
+                        gid: String(preferredGroupId),
+                        rangeIndex: prefIdx,
+                        price: Number(prefRow.price),
+                    };
+                }
+            }
+
+            var candidates = [];
             Object.keys(interpolated).forEach(function (gid) {
-                if (!firstGid) firstGid = gid;
+                if (allowedLookup && !allowedLookup[String(gid)]) return;
+                var ranges = interpolated[gid];
+                if (!ranges || !ranges.length) return;
+                var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
+                var row = ranges[idx] || ranges[0];
+                if (row.price === null || row.price === undefined || isNaN(Number(row.price))) return;
                 var g = catalogGroups && catalogGroups[gid];
-                if (g && g.base) baseGid = gid;
+                candidates.push({
+                    gid: gid,
+                    rangeIndex: idx,
+                    price: Number(row.price),
+                    canBuy: !!canBuyLookup[String(gid)],
+                    base: !!(g && g.base),
+                });
             });
 
-            var targetGid = baseGid || firstGid;
-            if (!targetGid) return null;
+            if (!candidates.length) return null;
 
-            var ranges = interpolated[targetGid];
-            if (!ranges || !ranges.length) return null;
+            var buyable = candidates.filter(function (c) { return c.canBuy; });
+            var pool = buyable.length ? buyable : candidates;
 
-            return ranges[0].price;
+            pool.sort(function (a, b) {
+                if (a.price === b.price) {
+                    if (a.base !== b.base) return a.base ? -1 : 1;
+                    return parseInt(a.gid, 10) - parseInt(b.gid, 10);
+                }
+                return a.price - b.price;
+            });
+
+            return pool[0];
         },
 
         // ── Серверный пересчёт цены (AJAX) ───────────────────────────────────
@@ -1157,6 +1301,13 @@
 
             var body = new FormData();
             body.append('productId', state.productId);
+            body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
+            var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
+            if (visibleGroups.length) {
+                visibleGroups.forEach(function (gid) {
+                    body.append('visible_groups[]', gid);
+                });
+            }
             if (state.customVolume)  body.append('volume',  state.customVolume);
             if (state.customWidth)   body.append('width',   state.customWidth);
             if (state.customHeight)  body.append('height',  state.customHeight);
@@ -1196,6 +1347,72 @@
         },
 
         /**
+         * Пытается определить текущее количество "тиражей" (quantity) на карточке.
+         * Если не найдено — возвращает 1.
+         */
+        getBasketQuantity: function (productId) {
+            var selectors = [
+                '.catalog-detail [name="quantity"]',
+                '.catalog-detail input[data-entity="quantity-input"]',
+                '.catalog-detail .counter__value input',
+                '.catalog-detail .counter input[type="number"]',
+            ];
+
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (!el) continue;
+                var v = parseInt(el.value, 10);
+                if (!isNaN(v) && v > 0) return v;
+            }
+
+            var sku = document.querySelector('.sku-props[data-item-id="' + productId + '"]');
+            if (sku) {
+                var nearQty = sku.closest('.catalog-detail__main') &&
+                    sku.closest('.catalog-detail__main').querySelector('[name="quantity"], input[data-entity="quantity-input"]');
+                if (nearQty) {
+                    var nearVal = parseInt(nearQty.value, 10);
+                    if (!isNaN(nearVal) && nearVal > 0) return nearVal;
+                }
+            }
+
+            return 1;
+        },
+
+        getVisiblePriceGroupIds: function (state) {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+            if (!popupPrice) return [];
+
+            var priceCodeOrder = null;
+            try {
+                var cfgAttr = popupPrice.getAttribute('data-price-config');
+                if (cfgAttr) {
+                    var cfg = JSON.parse(cfgAttr);
+                    priceCodeOrder = (cfg && cfg.PRICE_CODE) || null;
+                }
+            } catch (e) {}
+
+            if (!priceCodeOrder || !priceCodeOrder.length) return [];
+
+            var nameToGid = {};
+            Object.keys(state.catalogGroups || {}).forEach(function (gid) {
+                var g = state.catalogGroups[gid];
+                if (g && g.name) nameToGid[g.name] = gid;
+            });
+
+            var gids = [];
+            priceCodeOrder.forEach(function (name) {
+                var gid = nameToGid[name];
+                if (gid) gids.push(String(gid));
+            });
+            return gids;
+        },
+
+        /**
          * Применяет серверные цены непосредственно в DOM, минуя MutationObserver.
          * Вызывается когда сервер вернул финальный расчёт.
          *
@@ -1213,7 +1430,12 @@
 
             if (!popupPrice) {
                 // Fallback: обновляем собственный элемент модуля
-                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                var mainPrice = PModificator.getMainPrice(
+                    interpolated,
+                    state.catalogGroups,
+                    state.canBuyGroups,
+                    state.mainPriceGroupId
+                );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');
                 if (priceEl && priceEl.style.display !== 'none') {
@@ -1263,7 +1485,12 @@
 
             if (!popupPrice) {
                 // Запасной вариант: собственный элемент модуля
-                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                var mainPrice = PModificator.getMainPrice(
+                    interpolated,
+                    state.catalogGroups,
+                    state.canBuyGroups,
+                    state.mainPriceGroupId
+                );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');
                 if (!priceEl) {
@@ -1429,7 +1656,16 @@
             });
 
             // ── 5. Обновляем главную видимую цену (снаружи template) ──────────
-            var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+            var basketQty = PModificator.getBasketQuantity(state.productId);
+            var mainDesc = PModificator.getMainPriceDescriptor(
+                interpolated,
+                state.catalogGroups,
+                state.canBuyGroups,
+                state.mainPriceGroupId,
+                basketQty,
+                orderedGids
+            );
+            var mainPrice = mainDesc ? mainDesc.price : null;
             var mainPriceUpdated = false;
             if (mainPrice !== null) {
                 var allPriceVals = popupPrice.querySelectorAll('.price__new-val');
@@ -1461,9 +1697,41 @@
                       '</div>' +
                     '</div>';
             }
+
+            // Подсветка текущей строки цены в popup-таблице (price--current)
+            if (templateEl && templateEl.content && mainDesc) {
+                var priceRows = Array.prototype.slice.call(templateEl.content.querySelectorAll('.price'));
+                priceRows.forEach(function (row) { row.classList.remove('price--current'); });
+
+                var flatMeta = [];
+                orderedGids.forEach(function (gid) {
+                    var ranges = interpolated[gid];
+                    if (!ranges) return;
+                    ranges.forEach(function (_range, idx) {
+                        flatMeta.push({ gid: String(gid), rangeIndex: idx });
+                    });
+                });
+
+                for (var i = 0; i < flatMeta.length && i < priceRows.length; i++) {
+                    if (
+                        flatMeta[i].gid === String(mainDesc.gid) &&
+                        flatMeta[i].rangeIndex === mainDesc.rangeIndex
+                    ) {
+                        priceRows[i].classList.add('price--current');
+                        break;
+                    }
+                }
+            }
         },
 
         hideCustomPrice: function (container) {
+            var stateList = window._pmodActiveStates || [];
+            stateList.forEach(function (st) {
+                if (st && st._otherPropRecalcTimer) {
+                    clearTimeout(st._otherPropRecalcTimer);
+                    st._otherPropRecalcTimer = null;
+                }
+            });
             // Очищаем все .js-popup-price (скрытые и видимые)
             document.querySelectorAll('.js-popup-price').forEach(function (el) {
                 PModificator.cancelPendingPriceUpdate(el);
@@ -1590,25 +1858,57 @@
 
             var origFetch = window.fetch;
 
+            function parsePositiveInt(value) {
+                var n = parseInt(value, 10);
+                return isNaN(n) || n <= 0 ? null : n;
+            }
+
+            function getProductIdFromFormData(fd) {
+                if (!fd || typeof fd.get !== 'function') return null;
+                var keys = [
+                    'product_id',
+                    'PRODUCT_ID',
+                    'item',
+                    'id',
+                    'offer',
+                    'offer_id',
+                    'basket_props[PRODUCT_ID]',
+                ];
+                for (var i = 0; i < keys.length; i++) {
+                    var val = fd.get(keys[i]);
+                    var parsed = parsePositiveInt(val);
+                    if (parsed) return parsed;
+                }
+                return null;
+            }
+
+            function findMatchingState(states, requestProductId) {
+                var customStates = (states || []).filter(function (s) { return s && s.customMode; });
+                if (!customStates.length) return null;
+                if (requestProductId) {
+                    for (var i = 0; i < customStates.length; i++) {
+                        if (customStates[i].productId === requestProductId) {
+                            return customStates[i];
+                        }
+                    }
+                    return null;
+                }
+                return customStates.length === 1 ? customStates[0] : null;
+            }
+
             window.fetch = function (url, options) {
                 var urlStr = typeof url === 'string' ? url
                     : (url instanceof Request ? url.url : '');
 
                 if (urlStr.indexOf('/ajax/item.php') !== -1) {
-                    // Ищем активный customMode среди всех зарегистрированных состояний
-                    var activeState = null;
-                    var states = window._pmodActiveStates || [];
-                    for (var i = 0; i < states.length; i++) {
-                        if (states[i].customMode) {
-                            activeState = states[i];
-                            break;
-                        }
-                    }
-
-                    if (activeState && options && options.body instanceof FormData) {
+                    if (options && options.body instanceof FormData) {
                         var fd = options.body;
+                        var requestProductId = getProductIdFromFormData(fd);
+                        var states = window._pmodActiveStates || [];
+                        var activeState = findMatchingState(states, requestProductId);
+
                         // Пропускаем если patchCollectRequestData уже добавил поля
-                        if (typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
+                        if (activeState && typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
                             if (activeState.customWidth)  fd.append('prospekt_calc[width]',  activeState.customWidth);
                             if (activeState.customHeight) fd.append('prospekt_calc[height]', activeState.customHeight);
                             if (activeState.customVolume) fd.append('prospekt_calc[volume]', activeState.customVolume);
