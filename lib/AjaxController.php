@@ -347,45 +347,38 @@ class AjaxController
             return null;
         }
 
-        // 1) Приоритет: порядок видимых групп на карточке (как в Aspro UI).
+        $allowedOrder = [];
         if (!empty($visibleGroups)) {
             foreach ($visibleGroups as $gid) {
                 $gid = (int)$gid;
-                if (empty($rowsByGroup[$gid])) {
-                    continue;
-                }
-                if (!in_array($gid, $accessibleIds, true)) {
-                    continue;
-                }
-                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
-                if ($selected !== null) {
-                    return ['price' => (float)$selected['price'], 'groupId' => $gid];
-                }
-            }
-            // если из visible нет buyable-групп — берём первую visible с ценой
-            foreach ($visibleGroups as $gid) {
-                $gid = (int)$gid;
-                if (empty($rowsByGroup[$gid])) {
-                    continue;
-                }
-                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
-                if ($selected !== null) {
-                    return ['price' => (float)$selected['price'], 'groupId' => $gid];
+                if (!empty($rowsByGroup[$gid])) {
+                    $allowedOrder[] = $gid;
                 }
             }
         }
+        if (empty($allowedOrder)) {
+            $allowedOrder = array_keys($rowsByGroup);
+            sort($allowedOrder);
+        }
 
-        // 2) Fallback: первая доступная для покупки группа по возрастанию ID.
-        $allGids = array_keys($rowsByGroup);
-        sort($allGids);
-        foreach ($allGids as $gid) {
-            if (!in_array($gid, $accessibleIds, true)) {
+        $orderLookup = [];
+        foreach ($allowedOrder as $idx => $gid) {
+            $orderLookup[$gid] = $idx;
+        }
+
+        $candidates = [];
+        foreach ($allowedOrder as $gid) {
+            $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+            if ($selected === null) {
                 continue;
             }
-            $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
-            if ($selected !== null) {
-                return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
-            }
+            $candidates[] = [
+                'groupId' => $gid,
+                'price'   => (float)$selected['price'],
+                'canBuy'  => in_array($gid, $accessibleIds, true),
+                'base'    => !empty($catalogGroups[$gid]['base']),
+                'ord'     => $orderLookup[$gid] ?? PHP_INT_MAX,
+            ];
         }
 
         // 3) Fallback: базовая группа.
@@ -398,12 +391,18 @@ class AjaxController
             }
         }
 
-        // 4) Последний fallback: первая группа по ID.
-        $firstGid = reset($allGids);
-        if ($firstGid !== false) {
-            $selected = self::pickRangeForBasketQty($rowsByGroup[(int)$firstGid], $basketQty);
-            if ($selected !== null) {
-                return ['price' => (float)$selected['price'], 'groupId' => (int)$firstGid];
+        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, static function (array $a, array $b): int {
+            if ($a['price'] === $b['price']) {
+                if ($a['ord'] !== $b['ord']) {
+                    return $a['ord'] <=> $b['ord'];
+                }
+                if ($a['base'] !== $b['base']) {
+                    return $a['base'] ? -1 : 1;
+                }
+                return $a['groupId'] <=> $b['groupId'];
             }
         }
 

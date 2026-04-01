@@ -1359,6 +1359,7 @@
                     price: Number(row.price),
                     canBuy: !!canBuyLookup[String(gid)],
                     base: !!(g && g.base),
+                    order: allowedGroupIds && allowedGroupIds.length ? allowedGroupIds.indexOf(String(gid)) : -1,
                 });
             });
 
@@ -1367,7 +1368,16 @@
             var buyable = candidates.filter(function (c) { return c.canBuy; });
             var pool = buyable.length ? buyable : candidates;
 
-            pool.sort(function (a, b) { return parseInt(a.gid, 10) - parseInt(b.gid, 10); });
+            pool.sort(function (a, b) {
+                if (a.price === b.price) {
+                    var aOrd = a.order >= 0 ? a.order : Number.MAX_SAFE_INTEGER;
+                    var bOrd = b.order >= 0 ? b.order : Number.MAX_SAFE_INTEGER;
+                    if (aOrd !== bOrd) return aOrd - bOrd;
+                    if (a.base !== b.base) return a.base ? -1 : 1;
+                    return parseInt(a.gid, 10) - parseInt(b.gid, 10);
+                }
+                return a.price - b.price;
+            });
 
             return pool[0];
         },
