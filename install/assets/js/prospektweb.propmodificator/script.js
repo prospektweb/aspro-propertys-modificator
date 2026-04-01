@@ -283,6 +283,7 @@
                 _ajaxAbortCtrl:   null,
                 _ajaxRequestId:   0,
                 _volumeLabelTimer: null,
+                _otherPropRecalcTimer: null,
             };
 
             // Найти блоки свойств
@@ -769,6 +770,18 @@
 
         // ── Слежение за кликами по стандартным пресетам ───────────────────────
 
+        scheduleReapplyCustomPrice: function (container, state) {
+            if (state._otherPropRecalcTimer) {
+                clearTimeout(state._otherPropRecalcTimer);
+                state._otherPropRecalcTimer = null;
+            }
+            state._otherPropRecalcTimer = setTimeout(function () {
+                if (!state.customMode) return;
+                PModificator.updatePriceDisplay(container, state);
+                state._otherPropRecalcTimer = null;
+            }, PRICE_UPDATE_TIMEOUT_MS + 120);
+        },
+
         watchPresetClicks: function (container, state) {
             var productCfg = window.pmodConfig && window.pmodConfig.products && window.pmodConfig.products[state.productId];
             var formatPropId = productCfg && productCfg.formatPropId;
@@ -870,7 +883,11 @@
                         state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
                     }
                     if (state.customMode) {
+                        // 1) мгновенная переоценка
                         PModificator.updatePriceDisplay(container, state);
+                        // 2) отложенная — после асинхронного DOM/AJAX-апдейта Аспро,
+                        // чтобы не оставалась "техническая" цена X-ТП
+                        PModificator.scheduleReapplyCustomPrice(container, state);
                     }
                 }
 
@@ -1708,6 +1725,13 @@
         },
 
         hideCustomPrice: function (container) {
+            var stateList = window._pmodActiveStates || [];
+            stateList.forEach(function (st) {
+                if (st && st._otherPropRecalcTimer) {
+                    clearTimeout(st._otherPropRecalcTimer);
+                    st._otherPropRecalcTimer = null;
+                }
+            });
             // Очищаем все .js-popup-price (скрытые и видимые)
             document.querySelectorAll('.js-popup-price').forEach(function (el) {
                 PModificator.cancelPendingPriceUpdate(el);
