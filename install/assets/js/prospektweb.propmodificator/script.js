@@ -1173,24 +1173,35 @@
                 canBuyLookup[String(gid)] = true;
             });
 
-            var canBuyGid = null;
-            var baseGid   = null;
-            var firstGid  = null;
-
+            var candidates = [];
             Object.keys(interpolated).forEach(function (gid) {
-                if (!firstGid) firstGid = gid;
-                if (!canBuyGid && canBuyLookup[String(gid)]) canBuyGid = gid;
+                var ranges = interpolated[gid];
+                if (!ranges || !ranges.length) return;
+                var row = ranges[0];
+                if (row.price === null || row.price === undefined || isNaN(Number(row.price))) return;
                 var g = catalogGroups && catalogGroups[gid];
-                if (g && g.base) baseGid = gid;
+                candidates.push({
+                    gid: gid,
+                    price: Number(row.price),
+                    canBuy: !!canBuyLookup[String(gid)],
+                    base: !!(g && g.base),
+                });
             });
 
-            var targetGid = canBuyGid || baseGid || firstGid;
-            if (!targetGid) return null;
+            if (!candidates.length) return null;
 
-            var ranges = interpolated[targetGid];
-            if (!ranges || !ranges.length) return null;
+            var buyable = candidates.filter(function (c) { return c.canBuy; });
+            var pool = buyable.length ? buyable : candidates;
 
-            return ranges[0].price;
+            pool.sort(function (a, b) {
+                if (a.price === b.price) {
+                    if (a.base !== b.base) return a.base ? -1 : 1;
+                    return parseInt(a.gid, 10) - parseInt(b.gid, 10);
+                }
+                return a.price - b.price;
+            });
+
+            return pool[0].price;
         },
 
         // ── Серверный пересчёт цены (AJAX) ───────────────────────────────────
@@ -1225,6 +1236,7 @@
 
             var body = new FormData();
             body.append('productId', state.productId);
+            body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
             if (state.customVolume)  body.append('volume',  state.customVolume);
             if (state.customWidth)   body.append('width',   state.customWidth);
             if (state.customHeight)  body.append('height',  state.customHeight);
@@ -1261,6 +1273,38 @@
                     console.warn('[pmod] Server price fetch error:', e);
                     callback(null);
                 });
+        },
+
+        /**
+         * Пытается определить текущее количество "тиражей" (quantity) на карточке.
+         * Если не найдено — возвращает 1.
+         */
+        getBasketQuantity: function (productId) {
+            var selectors = [
+                '.catalog-detail [name="quantity"]',
+                '.catalog-detail input[data-entity="quantity-input"]',
+                '.catalog-detail .counter__value input',
+                '.catalog-detail .counter input[type="number"]',
+            ];
+
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (!el) continue;
+                var v = parseInt(el.value, 10);
+                if (!isNaN(v) && v > 0) return v;
+            }
+
+            var sku = document.querySelector('.sku-props[data-item-id="' + productId + '"]');
+            if (sku) {
+                var nearQty = sku.closest('.catalog-detail__main') &&
+                    sku.closest('.catalog-detail__main').querySelector('[name="quantity"], input[data-entity="quantity-input"]');
+                if (nearQty) {
+                    var nearVal = parseInt(nearQty.value, 10);
+                    if (!isNaN(nearVal) && nearVal > 0) return nearVal;
+                }
+            }
+
+            return 1;
         },
 
         /**

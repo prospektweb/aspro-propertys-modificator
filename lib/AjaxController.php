@@ -47,6 +47,7 @@ class AjaxController
         $volume     = isset($_POST['volume'])  && $_POST['volume'] !== ''  ? (int)$_POST['volume']  : null;
         $width      = isset($_POST['width'])   && $_POST['width']  !== ''  ? (int)$_POST['width']   : null;
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
+        $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
         $otherProps = isset($_POST['other_props']) && is_array($_POST['other_props'])
             ? array_map('intval', $_POST['other_props'])
             : null;
@@ -115,7 +116,9 @@ class AjaxController
             ];
         }
 
-        $mainPrice = self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
+        $mainPrice = !empty($rangePrices)
+            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups)
+            : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
 
         return [
             'success'   => true,
@@ -311,6 +314,83 @@ class AjaxController
         }
 
         return null;
+    }
+
+    /**
+     * Определяет главную цену с учётом диапазонов количества и прав покупки.
+     * Выбирает минимальную цену среди доступных для покупки групп в диапазоне basketQty.
+     *
+     * @param array $rangePrices     [groupId => [{from,to,price}, ...]]
+     * @param array $accessibleIds   [groupId]
+     * @param int   $basketQty       Количество тиражей в корзине (обычно 1)
+     * @param array $catalogGroups   [groupId => {id, name, base}]
+     * @return array|null            ['price' => float, 'groupId' => int]
+     */
+    private static function determineMainPriceFromRanges(
+        array $rangePrices,
+        array $accessibleIds,
+        int $basketQty,
+        array $catalogGroups
+    ): ?array {
+        $candidates = [];
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $gid = (int)$gid;
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null) {
+                continue;
+            }
+            $candidates[] = [
+                'groupId' => $gid,
+                'price'   => (float)$selected['price'],
+                'canBuy'  => in_array($gid, $accessibleIds, true),
+                'base'    => !empty($catalogGroups[$gid]['base']),
+            ];
+        }
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, static function (array $a, array $b): int {
+            if ($a['price'] === $b['price']) {
+                if ($a['base'] !== $b['base']) {
+                    return $a['base'] ? -1 : 1;
+                }
+                return $a['groupId'] <=> $b['groupId'];
+            }
+            return $a['price'] <=> $b['price'];
+        });
+
+        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+    }
+
+    /**
+     * Возвращает строку диапазона, соответствующую количеству basketQty.
+     * Если точного диапазона нет — возвращает первую строку.
+     */
+    private static function pickRangeForBasketQty(array $rows, int $basketQty): ?array
+    {
+        foreach ($rows as $row) {
+            if (!isset($row['price'])) {
+                continue;
+            }
+            $from = $row['from'] ?? null;
+            $to   = $row['to'] ?? null;
+            $okFrom = ($from === null) || ($basketQty >= (int)$from);
+            $okTo   = ($to === null) || ($basketQty <= (int)$to);
+            if ($okFrom && $okTo) {
+                return $row;
+            }
+        }
+
+        $first = reset($rows);
+        return is_array($first) ? $first : null;
     }
 
     /**
