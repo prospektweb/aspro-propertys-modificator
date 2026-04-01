@@ -232,6 +232,10 @@
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
+
+            // После обновления SKU в Аспро повторно применяем кастомную цену,
+            // чтобы "техническая" цена X-ТП не перетирала расчёт pmod.
+            PModificator.hookAsproSkuFinalAction();
         },
 
         /**
@@ -286,6 +290,9 @@
                 _otherPropRecalcTimer: null,
             };
 
+            // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
+            state.containerEl = container;
+
             // Найти блоки свойств
             if (formatPropId) {
                 var formatInner = container.querySelector('.sku-props__inner[data-id="' + formatPropId + '"]');
@@ -317,6 +324,45 @@
 
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
+        },
+
+        // ── События Аспро ────────────────────────────────────────────────────
+
+        hookAsproSkuFinalAction: function () {
+            if (window._pmodAsproFinalActionHooked) {
+                return;
+            }
+            window._pmodAsproFinalActionHooked = true;
+
+            if (typeof BX === 'undefined' || typeof BX.addCustomEvent !== 'function') {
+                return;
+            }
+
+            BX.addCustomEvent('onFinalActionSKUInfo', function (eventdata) {
+                var wrapperEl = null;
+                if (eventdata && eventdata.wrapper) {
+                    // В Аспро wrapper обычно jQuery-объект
+                    if (eventdata.wrapper.jquery && eventdata.wrapper[0]) {
+                        wrapperEl = eventdata.wrapper[0];
+                    } else if (eventdata.wrapper.nodeType === 1) {
+                        wrapperEl = eventdata.wrapper;
+                    }
+                }
+
+                var states = window._pmodActiveStates || [];
+                states.forEach(function (state) {
+                    if (!state || !state.customMode || !state.containerEl) return;
+
+                    // Если wrapper известен — применяем только к затронутому контейнеру
+                    if (wrapperEl && !wrapperEl.contains(state.containerEl) && wrapperEl !== state.containerEl) {
+                        return;
+                    }
+
+                    // Один отложенный re-apply после асинхронного апдейта Аспро
+                    // заметно снижает визуальное "моргание" цены.
+                    PModificator.scheduleReapplyCustomPrice(state.containerEl, state);
+                });
+            });
         },
 
         // ── Синхронизация h1 title с textContent ─────────────────────────────
@@ -1117,14 +1163,29 @@
                 state.lastCalculatedPrice = mainPrice;
             }
 
-            // Показываем клиентский расчёт немедленно (оптимистичный UI)
-            PModificator.showCustomPrice(container, interpolated, state);
-
             // Если AJAX-URL настроен — уточняем цену на сервере
             var cfg = window.pmodConfig;
             if (cfg && cfg.ajaxUrl) {
+                // Для произвольного тиража работаем по схеме server-first:
+                // показываем лоадер и применяем только финальную серверную цену.
+                var serverFirst = state.customVolume !== null;
+                if (serverFirst) {
+                    var visiblePopup = PModificator.getVisiblePopupPriceElement();
+                    if (visiblePopup) {
+                        visiblePopup.classList.add('pmod-price-loading');
+                    }
+                } else {
+                    // Для прочих сценариев оставляем оптимистичный UI.
+                    PModificator.showCustomPrice(container, interpolated, state);
+                }
+
                 PModificator.fetchServerPrice(state, function (data) {
-                    if (!data || !data.success || !state.customMode) return;
+                    if (!state.customMode) return;
+                    if (!data || !data.success) {
+                        // Fallback при ошибке сервера: показываем клиентский расчёт и снимаем лоадер.
+                        PModificator.showCustomPrice(container, interpolated, state);
+                        return;
+                    }
 
                     // Преобразуем ответ сервера в формат, понятный applyPricesToDom
                     var serverInterpolated = {};
@@ -1174,7 +1235,21 @@
                     // Применяем серверные цены к DOM
                     PModificator.applyServerPricesToDom(container, serverInterpolated, state);
                 });
+                return;
             }
+
+            // Если серверного уточнения нет — показываем клиентский расчёт.
+            PModificator.showCustomPrice(container, interpolated, state);
+        },
+
+        getVisiblePopupPriceElement: function () {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+            return popupPrice;
         },
 
         /**
@@ -1250,6 +1325,7 @@
                     price: Number(row.price),
                     canBuy: !!canBuyLookup[String(gid)],
                     base: !!(g && g.base),
+                    order: allowedGroupIds && allowedGroupIds.length ? allowedGroupIds.indexOf(String(gid)) : -1,
                 });
             });
 
@@ -1260,6 +1336,9 @@
 
             pool.sort(function (a, b) {
                 if (a.price === b.price) {
+                    var aOrd = a.order >= 0 ? a.order : Number.MAX_SAFE_INTEGER;
+                    var bOrd = b.order >= 0 ? b.order : Number.MAX_SAFE_INTEGER;
+                    if (aOrd !== bOrd) return aOrd - bOrd;
                     if (a.base !== b.base) return a.base ? -1 : 1;
                     return parseInt(a.gid, 10) - parseInt(b.gid, 10);
                 }

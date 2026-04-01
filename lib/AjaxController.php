@@ -336,21 +336,39 @@ class AjaxController
         array $catalogGroups,
         array $visibleGroups = []
     ): ?array {
-        $visibleLookup = [];
-        foreach ($visibleGroups as $gid) {
-            $visibleLookup[(int)$gid] = true;
+        $rowsByGroup = [];
+        foreach ($rangePrices as $gid => $rows) {
+            $gid = (int)$gid;
+            if (is_array($rows) && !empty($rows)) {
+                $rowsByGroup[$gid] = $rows;
+            }
+        }
+        if (empty($rowsByGroup)) {
+            return null;
+        }
+
+        $allowedOrder = [];
+        if (!empty($visibleGroups)) {
+            foreach ($visibleGroups as $gid) {
+                $gid = (int)$gid;
+                if (!empty($rowsByGroup[$gid])) {
+                    $allowedOrder[] = $gid;
+                }
+            }
+        }
+        if (empty($allowedOrder)) {
+            $allowedOrder = array_keys($rowsByGroup);
+            sort($allowedOrder);
+        }
+
+        $orderLookup = [];
+        foreach ($allowedOrder as $idx => $gid) {
+            $orderLookup[$gid] = $idx;
         }
 
         $candidates = [];
-        foreach ($rangePrices as $gid => $rows) {
-            if (!is_array($rows) || empty($rows)) {
-                continue;
-            }
-            $gid = (int)$gid;
-            if (!empty($visibleLookup) && empty($visibleLookup[$gid])) {
-                continue;
-            }
-            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+        foreach ($allowedOrder as $gid) {
+            $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
             if ($selected === null) {
                 continue;
             }
@@ -359,6 +377,7 @@ class AjaxController
                 'price'   => (float)$selected['price'],
                 'canBuy'  => in_array($gid, $accessibleIds, true),
                 'base'    => !empty($catalogGroups[$gid]['base']),
+                'ord'     => $orderLookup[$gid] ?? PHP_INT_MAX,
             ];
         }
 
@@ -371,6 +390,9 @@ class AjaxController
 
         usort($pool, static function (array $a, array $b): int {
             if ($a['price'] === $b['price']) {
+                if ($a['ord'] !== $b['ord']) {
+                    return $a['ord'] <=> $b['ord'];
+                }
                 if ($a['base'] !== $b['base']) {
                     return $a['base'] ? -1 : 1;
                 }
