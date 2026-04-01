@@ -370,6 +370,125 @@ class PriceInterpolator
     }
 
     /**
+     * Рассчитать интерполированные цены по всем группам и диапазонам количества.
+     *
+     * Результат:
+     * [
+     *   groupId => [
+     *     ['from' => ?int, 'to' => ?int, 'price' => float],
+     *     ...
+     *   ],
+     *   ...
+     * ]
+     */
+    public function interpolateAllGroupsWithRanges(?int $width, ?int $height, ?int $volume, ?array $filterProps = null): array
+    {
+        if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
+            return [];
+        }
+
+        $rawMeta = $this->loadOfferMetadata($filterProps);
+        if (empty($rawMeta)) {
+            return [];
+        }
+
+        $customFormat = ($width !== null && $height !== null);
+        $customVolume = ($volume !== null);
+        if (!$customFormat && !$customVolume) {
+            return [];
+        }
+
+        $offerIds = array_keys($rawMeta);
+        $rsPrices = PriceTable::getList([
+            'filter' => ['=PRODUCT_ID' => $offerIds],
+            'select' => ['PRODUCT_ID', 'CATALOG_GROUP_ID', 'PRICE', 'QUANTITY_FROM', 'QUANTITY_TO'],
+            'order'  => [
+                'CATALOG_GROUP_ID' => 'ASC',
+                'QUANTITY_FROM'    => 'ASC',
+                'QUANTITY_TO'      => 'ASC',
+                'PRODUCT_ID'       => 'ASC',
+            ],
+        ]);
+
+        // [groupId => [rangeKey => ['from'=>?int,'to'=>?int,'points'=>[...]]]]
+        $rangesByGroup = [];
+        while ($ar = $rsPrices->fetch()) {
+            $oid = (int)$ar['PRODUCT_ID'];
+            $gid = (int)$ar['CATALOG_GROUP_ID'];
+
+            if (!isset($rawMeta[$oid])) {
+                continue;
+            }
+
+            $meta = $rawMeta[$oid];
+            if (($meta['volume'] ?? null) === null) {
+                // исключаем X-ТП
+                continue;
+            }
+
+            $price = (float)$ar['PRICE'];
+            if ($price <= 0) {
+                continue;
+            }
+
+            $from = $ar['QUANTITY_FROM'] !== null ? (int)$ar['QUANTITY_FROM'] : null;
+            $to   = $ar['QUANTITY_TO']   !== null ? (int)$ar['QUANTITY_TO']   : null;
+            $key  = ($from === null ? '' : (string)$from) . '-' . ($to === null ? '' : (string)$to);
+
+            if (!isset($rangesByGroup[$gid][$key])) {
+                $rangesByGroup[$gid][$key] = [
+                    'from'   => $from,
+                    'to'     => $to,
+                    'points' => [],
+                ];
+            }
+
+            $rangesByGroup[$gid][$key]['points'][] = array_merge($meta, ['price' => $price]);
+        }
+
+        if (empty($rangesByGroup)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rangesByGroup as $gid => $rangeMap) {
+            $rows = [];
+            foreach ($rangeMap as $range) {
+                $points = $range['points'];
+                if (empty($points)) {
+                    continue;
+                }
+                $price = $this->interpolatePoints($points, $width, $height, $volume);
+                if ($price === null) {
+                    continue;
+                }
+                $rows[] = [
+                    'from'  => $range['from'],
+                    'to'    => $range['to'],
+                    'price' => $price,
+                ];
+            }
+
+            usort($rows, static function (array $a, array $b): int {
+                $af = $a['from'] ?? PHP_INT_MIN;
+                $bf = $b['from'] ?? PHP_INT_MIN;
+                if ($af === $bf) {
+                    $at = $a['to'] ?? PHP_INT_MAX;
+                    $bt = $b['to'] ?? PHP_INT_MAX;
+                    return $at <=> $bt;
+                }
+                return $af <=> $bf;
+            });
+
+            if (!empty($rows)) {
+                $result[$gid] = $rows;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Загружает метаданные ТП (без цен): id, width, height, volume, props.
      * Результат не кэшируется — вызывается из interpolateAllGroups().
      *
