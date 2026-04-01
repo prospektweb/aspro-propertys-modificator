@@ -49,7 +49,9 @@ class AjaxController
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
         $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
         $visibleGroups = isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])
-            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static fn($v) => $v > 0)))
+            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static function ($v) {
+                return $v > 0;
+            })))
             : [];
         $activeGroupId = isset($_POST['active_group_id']) && (int)$_POST['active_group_id'] > 0
             ? (int)$_POST['active_group_id']
@@ -417,7 +419,9 @@ class AjaxController
             }
         }
 
-        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
+        $buyable = array_values(array_filter($candidates, static function ($c) {
+            return $c['canBuy'] === true;
+        }));
         $pool = !empty($buyable) ? $buyable : $candidates;
 
         usort($pool, static function (array $a, array $b): int {
