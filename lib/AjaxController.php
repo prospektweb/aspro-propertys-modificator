@@ -47,6 +47,10 @@ class AjaxController
         $volume     = isset($_POST['volume'])  && $_POST['volume'] !== ''  ? (int)$_POST['volume']  : null;
         $width      = isset($_POST['width'])   && $_POST['width']  !== ''  ? (int)$_POST['width']   : null;
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
+        $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
+        $visibleGroups = isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])
+            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static fn($v) => $v > 0)))
+            : [];
         $otherProps = isset($_POST['other_props']) && is_array($_POST['other_props'])
             ? array_map('intval', $_POST['other_props'])
             : null;
@@ -63,6 +67,11 @@ class AjaxController
 
         $interpolator = new PriceInterpolator($productId);
         $rawPrices    = $interpolator->interpolateAllGroups($width, $height, $volume, $otherProps);
+        $rangePrices  = $interpolator->interpolateAllGroupsWithRanges($width, $height, $volume, $otherProps);
+
+        if (!empty($rangePrices)) {
+            $rawPrices = self::extractMainPricesFromRanges($rangePrices);
+        }
 
         if (empty($rawPrices)) {
             return ['success' => false, 'error' => 'No prices could be calculated'];
@@ -80,6 +89,18 @@ class AjaxController
             }
         }
         unset($price);
+        foreach ($rangePrices as $gid => &$rows) {
+            if (empty($roundingRules[$gid]) || !is_array($rows)) {
+                continue;
+            }
+            foreach ($rows as &$row) {
+                if (isset($row['price'])) {
+                    $row['price'] = self::applyRounding((float)$row['price'], $roundingRules[$gid]);
+                }
+            }
+            unset($row);
+        }
+        unset($rows);
 
         // ── Определяем доступность типов цен для текущего пользователя ────────
 
@@ -98,11 +119,14 @@ class AjaxController
             ];
         }
 
-        $mainPrice = self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
+        $mainPrice = !empty($rangePrices)
+            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups, $visibleGroups)
+            : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
 
         return [
             'success'   => true,
             'prices'    => $pricesResult,
+            'ranges'    => $rangePrices,
             'mainPrice' => $mainPrice !== null ? [
                 'raw'       => round($mainPrice['price'], 2),
                 'formatted' => self::formatPrice($mainPrice['price']),
@@ -293,6 +317,114 @@ class AjaxController
         }
 
         return null;
+    }
+
+    /**
+     * Определяет главную цену с учётом диапазонов количества и прав покупки.
+     * Выбирает минимальную цену среди доступных для покупки групп в диапазоне basketQty.
+     *
+     * @param array $rangePrices     [groupId => [{from,to,price}, ...]]
+     * @param array $accessibleIds   [groupId]
+     * @param int   $basketQty       Количество тиражей в корзине (обычно 1)
+     * @param array $catalogGroups   [groupId => {id, name, base}]
+     * @return array|null            ['price' => float, 'groupId' => int]
+     */
+    private static function determineMainPriceFromRanges(
+        array $rangePrices,
+        array $accessibleIds,
+        int $basketQty,
+        array $catalogGroups,
+        array $visibleGroups = []
+    ): ?array {
+        $visibleLookup = [];
+        foreach ($visibleGroups as $gid) {
+            $visibleLookup[(int)$gid] = true;
+        }
+
+        $candidates = [];
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $gid = (int)$gid;
+            if (!empty($visibleLookup) && empty($visibleLookup[$gid])) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null) {
+                continue;
+            }
+            $candidates[] = [
+                'groupId' => $gid,
+                'price'   => (float)$selected['price'],
+                'canBuy'  => in_array($gid, $accessibleIds, true),
+                'base'    => !empty($catalogGroups[$gid]['base']),
+            ];
+        }
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, static function (array $a, array $b): int {
+            if ($a['price'] === $b['price']) {
+                if ($a['base'] !== $b['base']) {
+                    return $a['base'] ? -1 : 1;
+                }
+                return $a['groupId'] <=> $b['groupId'];
+            }
+            return $a['price'] <=> $b['price'];
+        });
+
+        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+    }
+
+    /**
+     * Возвращает строку диапазона, соответствующую количеству basketQty.
+     * Если точного диапазона нет — возвращает первую строку.
+     */
+    private static function pickRangeForBasketQty(array $rows, int $basketQty): ?array
+    {
+        foreach ($rows as $row) {
+            if (!isset($row['price'])) {
+                continue;
+            }
+            $from = $row['from'] ?? null;
+            $to   = $row['to'] ?? null;
+            $okFrom = ($from === null) || ($basketQty >= (int)$from);
+            $okTo   = ($to === null) || ($basketQty <= (int)$to);
+            if ($okFrom && $okTo) {
+                return $row;
+            }
+        }
+
+        $first = reset($rows);
+        return is_array($first) ? $first : null;
+    }
+
+    /**
+     * Схлопывает диапазонные цены к «основной» цене группы
+     * (первая строка диапазонов после сортировки).
+     *
+     * @param array $rangePrices [groupId => [{from,to,price}, ...]]
+     * @return array [groupId => float]
+     */
+    private static function extractMainPricesFromRanges(array $rangePrices): array
+    {
+        $result = [];
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $first = reset($rows);
+            if (is_array($first) && isset($first['price'])) {
+                $result[(int)$gid] = (float)$first['price'];
+            }
+        }
+        return $result;
     }
 
     /**
