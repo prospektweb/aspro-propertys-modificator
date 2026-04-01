@@ -232,6 +232,10 @@
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
+
+            // После обновления SKU в Аспро повторно применяем кастомную цену,
+            // чтобы "техническая" цена X-ТП не перетирала расчёт pmod.
+            PModificator.hookAsproSkuFinalAction();
         },
 
         /**
@@ -286,6 +290,9 @@
                 _otherPropRecalcTimer: null,
             };
 
+            // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
+            state.containerEl = container;
+
             // Найти блоки свойств
             if (formatPropId) {
                 var formatInner = container.querySelector('.sku-props__inner[data-id="' + formatPropId + '"]');
@@ -315,8 +322,53 @@
             // Следим за кликами по стандартным кнопкам ТП
             PModificator.watchPresetClicks(container, state);
 
+            // Фиксируем активную группу цены Аспро как baseline для custom-режима.
+            var detectedMainGid = PModificator.detectActivePriceGroupIdFromDom(state);
+            if (detectedMainGid) {
+                state.mainPriceGroupId = detectedMainGid;
+            }
+
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
+        },
+
+        // ── События Аспро ────────────────────────────────────────────────────
+
+        hookAsproSkuFinalAction: function () {
+            if (window._pmodAsproFinalActionHooked) {
+                return;
+            }
+            window._pmodAsproFinalActionHooked = true;
+
+            if (typeof BX === 'undefined' || typeof BX.addCustomEvent !== 'function') {
+                return;
+            }
+
+            BX.addCustomEvent('onFinalActionSKUInfo', function (eventdata) {
+                var wrapperEl = null;
+                if (eventdata && eventdata.wrapper) {
+                    // В Аспро wrapper обычно jQuery-объект
+                    if (eventdata.wrapper.jquery && eventdata.wrapper[0]) {
+                        wrapperEl = eventdata.wrapper[0];
+                    } else if (eventdata.wrapper.nodeType === 1) {
+                        wrapperEl = eventdata.wrapper;
+                    }
+                }
+
+                var states = window._pmodActiveStates || [];
+                states.forEach(function (state) {
+                    if (!state || !state.customMode || !state.containerEl) return;
+
+                    // Если wrapper известен — применяем только к затронутому контейнеру
+                    if (wrapperEl && !wrapperEl.contains(state.containerEl) && wrapperEl !== state.containerEl) {
+                        return;
+                    }
+
+                    // Один отложенный re-apply после асинхронного апдейта Аспро
+                    // заметно снижает визуальное "моргание" цены.
+                    PModificator.scheduleReapplyCustomPrice(state.containerEl, state);
+                });
+            });
         },
 
         // ── Синхронизация h1 title с textContent ─────────────────────────────
@@ -1117,14 +1169,35 @@
                 state.lastCalculatedPrice = mainPrice;
             }
 
-            // Показываем клиентский расчёт немедленно (оптимистичный UI)
-            PModificator.showCustomPrice(container, interpolated, state);
+            // Перед custom-пересчётом уточняем активную группу цены из DOM Аспро.
+            var activeGid = PModificator.detectActivePriceGroupIdFromDom(state);
+            if (activeGid) {
+                state.mainPriceGroupId = activeGid;
+            }
 
             // Если AJAX-URL настроен — уточняем цену на сервере
             var cfg = window.pmodConfig;
             if (cfg && cfg.ajaxUrl) {
+                // Для произвольного тиража работаем по схеме server-first:
+                // показываем лоадер и применяем только финальную серверную цену.
+                var serverFirst = state.customVolume !== null;
+                if (serverFirst) {
+                    var visiblePopup = PModificator.getVisiblePopupPriceElement();
+                    if (visiblePopup) {
+                        visiblePopup.classList.add('pmod-price-loading');
+                    }
+                } else {
+                    // Для прочих сценариев оставляем оптимистичный UI.
+                    PModificator.showCustomPrice(container, interpolated, state);
+                }
+
                 PModificator.fetchServerPrice(state, function (data) {
-                    if (!data || !data.success || !state.customMode) return;
+                    if (!state.customMode) return;
+                    if (!data || !data.success) {
+                        // Fallback при ошибке сервера: показываем клиентский расчёт и снимаем лоадер.
+                        PModificator.showCustomPrice(container, interpolated, state);
+                        return;
+                    }
 
                     // Преобразуем ответ сервера в формат, понятный applyPricesToDom
                     var serverInterpolated = {};
@@ -1166,6 +1239,14 @@
                             state.canBuyGroups,
                             state.mainPriceGroupId
                         );
+                        // Если сервер не вернул mainPrice (legacy/старый backend),
+                        // выбираем минимальную цену по текущему диапазону из server-ranges.
+                        if (srvMain === null) {
+                            srvMain = PModificator.getMinPriceFromRanges(
+                                serverInterpolated,
+                                PModificator.getBasketQuantity(state.productId)
+                            );
+                        }
                         if (srvMain !== null) {
                             state.lastCalculatedPrice = srvMain;
                         }
@@ -1174,7 +1255,39 @@
                     // Применяем серверные цены к DOM
                     PModificator.applyServerPricesToDom(container, serverInterpolated, state);
                 });
+                return;
             }
+
+            // Если серверного уточнения нет — показываем клиентский расчёт.
+            PModificator.showCustomPrice(container, interpolated, state);
+        },
+
+        getVisiblePopupPriceElement: function () {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+            return popupPrice;
+        },
+
+        getMinPriceFromRanges: function (interpolated, basketQty) {
+            basketQty = basketQty && basketQty > 0 ? basketQty : 1;
+            var best = null;
+            Object.keys(interpolated || {}).forEach(function (gid) {
+                var ranges = interpolated[gid];
+                if (!ranges || !ranges.length) return;
+                var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
+                var row = ranges[idx] || ranges[0];
+                if (!row || row.price === null || row.price === undefined) return;
+                var price = Number(row.price);
+                if (isNaN(price)) return;
+                if (best === null || price < best) {
+                    best = price;
+                }
+            });
+            return best;
         },
 
         /**
@@ -1250,6 +1363,7 @@
                     price: Number(row.price),
                     canBuy: !!canBuyLookup[String(gid)],
                     base: !!(g && g.base),
+                    order: allowedGroupIds && allowedGroupIds.length ? allowedGroupIds.indexOf(String(gid)) : -1,
                 });
             });
 
@@ -1260,6 +1374,9 @@
 
             pool.sort(function (a, b) {
                 if (a.price === b.price) {
+                    var aOrd = a.order >= 0 ? a.order : Number.MAX_SAFE_INTEGER;
+                    var bOrd = b.order >= 0 ? b.order : Number.MAX_SAFE_INTEGER;
+                    if (aOrd !== bOrd) return aOrd - bOrd;
                     if (a.base !== b.base) return a.base ? -1 : 1;
                     return parseInt(a.gid, 10) - parseInt(b.gid, 10);
                 }
@@ -1301,9 +1418,14 @@
 
             var body = new FormData();
             body.append('productId', state.productId);
+            if (state.mainPriceGroupId) {
+                body.append('active_group_id', state.mainPriceGroupId);
+            }
             body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
-            if (visibleGroups.length) {
+            // Если удалось определить только одну группу, не сужаем серверный выбор —
+            // это часто "шумный" кейс, когда Aspro отдаёт неполный PRICE_CODE.
+            if (visibleGroups.length > 1) {
                 visibleGroups.forEach(function (gid) {
                     body.append('visible_groups[]', gid);
                 });
@@ -1410,6 +1532,38 @@
                 if (gid) gids.push(String(gid));
             });
             return gids;
+        },
+
+        detectActivePriceGroupIdFromDom: function (state) {
+            var popupPrice = PModificator.getVisiblePopupPriceElement();
+            if (!popupPrice || !state || !state.catalogGroups) return null;
+
+            var nameToGid = {};
+            Object.keys(state.catalogGroups).forEach(function (gid) {
+                var g = state.catalogGroups[gid];
+                var n = g && g.name ? String(g.name).trim().toLowerCase() : '';
+                if (n) nameToGid[n] = String(gid);
+            });
+
+            var row = popupPrice.querySelector('.price--current');
+            if (!row) return null;
+
+            function extractTitle(el) {
+                var cur = el;
+                while (cur) {
+                    var tEl = cur.querySelector('.price__title');
+                    if (tEl) {
+                        var t = (tEl.textContent || '').trim().toLowerCase();
+                        if (t) return t;
+                    }
+                    cur = cur.previousElementSibling;
+                }
+                return '';
+            }
+
+            var title = extractTitle(row);
+            if (!title) return null;
+            return nameToGid[title] || null;
         },
 
         /**

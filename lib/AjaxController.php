@@ -48,9 +48,19 @@ class AjaxController
         $width      = isset($_POST['width'])   && $_POST['width']  !== ''  ? (int)$_POST['width']   : null;
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
         $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
-        $visibleGroups = isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])
-            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static fn($v) => $v > 0)))
-            : [];
+        $visibleGroups = [];
+        if (isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])) {
+            foreach ($_POST['visible_groups'] as $gidRaw) {
+                $gid = (int)$gidRaw;
+                if ($gid > 0) {
+                    $visibleGroups[$gid] = $gid;
+                }
+            }
+            $visibleGroups = array_values($visibleGroups);
+        }
+        $activeGroupId = isset($_POST['active_group_id']) && (int)$_POST['active_group_id'] > 0
+            ? (int)$_POST['active_group_id']
+            : null;
         $otherProps = isset($_POST['other_props']) && is_array($_POST['other_props'])
             ? array_map('intval', $_POST['other_props'])
             : null;
@@ -120,10 +130,14 @@ class AjaxController
         }
 
         $mainPrice = !empty($rangePrices)
-            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups, $visibleGroups)
-            : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
+            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups, $visibleGroups, $activeGroupId)
+            : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds, $activeGroupId);
 
-        return [
+        if ($mainPrice === null && !empty($rangePrices)) {
+            $mainPrice = self::fallbackMainPriceFromRanges($rangePrices, $basketQty);
+        }
+
+        $result = [
             'success'   => true,
             'prices'    => $pricesResult,
             'ranges'    => $rangePrices,
@@ -139,6 +153,17 @@ class AjaxController
             ],
             'requestId' => uniqid('pmod_', true),
         ];
+
+        if (isset($_POST['debug']) && $_POST['debug'] === 'Y') {
+            $result['debug'] = [
+                'activeGroupId' => $activeGroupId,
+                'visibleGroups' => $visibleGroups,
+                'accessibleIds' => $accessibleGroupIds,
+                'resolvedMain'  => $mainPrice,
+            ];
+        }
+
+        return $result;
     }
 
     // ── Вспомогательные методы ────────────────────────────────────────────────
@@ -291,10 +316,20 @@ class AjaxController
     private static function determineMainPrice(
         array $rawPrices,
         array $catalogGroups,
-        array $accessibleIds
+        array $accessibleIds,
+        ?int $preferredGroupId = null
     ): ?array {
         $sortedGids = array_keys($rawPrices);
         sort($sortedGids);
+
+        // 0. Предпочтительная активная группа (из фронта), если доступна.
+        if (
+            $preferredGroupId !== null
+            && isset($rawPrices[$preferredGroupId])
+            && (empty($accessibleIds) || in_array((int)$preferredGroupId, $accessibleIds, true))
+        ) {
+            return ['price' => $rawPrices[$preferredGroupId], 'groupId' => (int)$preferredGroupId];
+        }
 
         // 1. Доступные для покупки
         foreach ($sortedGids as $gid) {
@@ -334,23 +369,54 @@ class AjaxController
         array $accessibleIds,
         int $basketQty,
         array $catalogGroups,
-        array $visibleGroups = []
+        array $visibleGroups = [],
+        ?int $preferredGroupId = null
     ): ?array {
-        $visibleLookup = [];
-        foreach ($visibleGroups as $gid) {
-            $visibleLookup[(int)$gid] = true;
+        $rowsByGroup = [];
+        foreach ($rangePrices as $gid => $rows) {
+            $gid = (int)$gid;
+            if (is_array($rows) && !empty($rows)) {
+                $rowsByGroup[$gid] = $rows;
+            }
+        }
+        if (empty($rowsByGroup)) {
+            return null;
+        }
+
+        // 0) Предпочтительная активная группа (из фронта), если она доступна.
+        if (
+            $preferredGroupId !== null
+            && !empty($rowsByGroup[$preferredGroupId])
+            && (empty($accessibleIds) || in_array($preferredGroupId, $accessibleIds, true))
+        ) {
+            $selectedPref = self::pickRangeForBasketQty($rowsByGroup[$preferredGroupId], $basketQty);
+            if ($selectedPref !== null) {
+                return ['price' => (float)$selectedPref['price'], 'groupId' => (int)$preferredGroupId];
+            }
+        }
+
+        $allowedOrder = [];
+        if (!empty($visibleGroups)) {
+            foreach ($visibleGroups as $gid) {
+                $gid = (int)$gid;
+                if (!empty($rowsByGroup[$gid])) {
+                    $allowedOrder[] = $gid;
+                }
+            }
+        }
+        if (empty($allowedOrder)) {
+            $allowedOrder = array_keys($rowsByGroup);
+            sort($allowedOrder);
+        }
+
+        $orderLookup = [];
+        foreach ($allowedOrder as $idx => $gid) {
+            $orderLookup[$gid] = $idx;
         }
 
         $candidates = [];
-        foreach ($rangePrices as $gid => $rows) {
-            if (!is_array($rows) || empty($rows)) {
-                continue;
-            }
-            $gid = (int)$gid;
-            if (!empty($visibleLookup) && empty($visibleLookup[$gid])) {
-                continue;
-            }
-            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+        foreach ($allowedOrder as $gid) {
+            $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
             if ($selected === null) {
                 continue;
             }
@@ -359,6 +425,7 @@ class AjaxController
                 'price'   => (float)$selected['price'],
                 'canBuy'  => in_array($gid, $accessibleIds, true),
                 'base'    => !empty($catalogGroups[$gid]['base']),
+                'ord'     => $orderLookup[$gid] ?? PHP_INT_MAX,
             ];
         }
 
@@ -366,20 +433,50 @@ class AjaxController
             return null;
         }
 
-        $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
+        $buyable = [];
+        foreach ($candidates as $candidate) {
+            if (!empty($candidate['canBuy'])) {
+                $buyable[] = $candidate;
+            }
+        }
         $pool = !empty($buyable) ? $buyable : $candidates;
 
-        usort($pool, static function (array $a, array $b): int {
-            if ($a['price'] === $b['price']) {
-                if ($a['base'] !== $b['base']) {
-                    return $a['base'] ? -1 : 1;
-                }
-                return $a['groupId'] <=> $b['groupId'];
-            }
-            return $a['price'] <=> $b['price'];
-        });
+        usort($pool, [self::class, 'compareMainPriceCandidates']);
 
         return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
+    }
+
+    private static function fallbackMainPriceFromRanges(array $rangePrices, int $basketQty): ?array
+    {
+        $best = null;
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null || !isset($selected['price'])) {
+                continue;
+            }
+            $price = (float)$selected['price'];
+            if ($best === null || $price < $best['price']) {
+                $best = ['price' => $price, 'groupId' => (int)$gid];
+            }
+        }
+        return $best;
     }
 
     /**
