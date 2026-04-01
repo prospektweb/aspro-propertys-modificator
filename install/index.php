@@ -248,6 +248,34 @@ class prospektweb_propmodificator extends CModule
     private function installAsproLocalOverrides(): void
     {
         $docRoot = Application::getDocumentRoot();
+        $localTemplateRoot = $docRoot . '/local/templates/aspro-premier';
+
+        // Важно: не создаём "пустой" local-template.
+        // Если папка шаблона в /local отсутствует (или неполная), пропускаем auto-copy,
+        // иначе Bitrix может попытаться использовать неполный шаблон и уронить сайт.
+        $hasLocalTemplate = is_dir($localTemplateRoot) && (
+            file_exists($localTemplateRoot . '/description.php')
+            || file_exists($localTemplateRoot . '/header.php')
+            || file_exists($localTemplateRoot . '/init.php')
+        );
+
+        if (!$hasLocalTemplate) {
+            // Миграционный self-heal: если ранее были созданы только pmod-файлы,
+            // удалим их, чтобы не оставлять "битый" каркас local-template.
+            foreach ([
+                $localTemplateRoot . '/js/select_offer_func.js',
+                $localTemplateRoot . '/js/select_offer_func.min.js',
+                $localTemplateRoot . '/ajax/js_item_detail.php',
+            ] as $file) {
+                $marker = $file . '.pmod_installed';
+                if (file_exists($marker)) {
+                    @unlink($file);
+                    @unlink($marker);
+                }
+            }
+            return;
+        }
+
         $targets = [
             'js/select_offer_func.js'   => '/local/templates/aspro-premier/js/select_offer_func.js',
             'js/select_offer_func.min.js' => '/local/templates/aspro-premier/js/select_offer_func.min.js',
@@ -289,9 +317,7 @@ class prospektweb_propmodificator extends CModule
     {
         $docRoot = Application::getDocumentRoot();
         $candidates = [
-            $docRoot . '/local/templates/aspro-premier/' . $relativeFile,
             $docRoot . '/bitrix/templates/aspro-premier/' . $relativeFile,
-            $docRoot . '/bitrix/wizards/aspro/premier/site/templates/aspro-premier/' . $relativeFile,
         ];
 
         foreach ($candidates as $file) {
