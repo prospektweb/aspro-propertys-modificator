@@ -1111,7 +1111,24 @@
 
                     // Преобразуем ответ сервера в формат, понятный applyPricesToDom
                     var serverInterpolated = {};
-                    if (data.prices) {
+                    if (data.ranges && typeof data.ranges === 'object') {
+                        Object.keys(data.ranges).forEach(function (gid) {
+                            var rows = Array.isArray(data.ranges[gid]) ? data.ranges[gid] : [];
+                            var normalized = rows.map(function (row) {
+                                return {
+                                    from: row && row.from !== undefined ? row.from : null,
+                                    to: row && row.to !== undefined ? row.to : null,
+                                    price: row && row.price !== undefined ? row.price : null,
+                                };
+                            }).filter(function (row) {
+                                return row.price !== null && !isNaN(Number(row.price));
+                            });
+                            if (normalized.length) {
+                                serverInterpolated[gid] = normalized;
+                            }
+                        });
+                    }
+                    if (!Object.keys(serverInterpolated).length && data.prices) {
                         Object.keys(data.prices).forEach(function (gid) {
                             var p = data.prices[gid];
                             serverInterpolated[gid] = [{ from: null, to: null, price: p.raw }];
