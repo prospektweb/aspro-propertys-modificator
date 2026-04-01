@@ -39,6 +39,23 @@
         return Math.max(min, Math.min(max, val));
     }
 
+    /**
+     * Синхронизирует query-параметр pmod_volume с текущим URL через history.replaceState.
+     * Если volume задан — добавляет/обновляет параметр; если null/0 — удаляет его.
+     * Остальные параметры (oid и др.) остаются нетронутыми.
+     */
+    function syncUrlPmodVolume(volume) {
+        if (!window.history || !window.history.replaceState) return;
+        var url    = new URL(window.location.href);
+        var params = url.searchParams;
+        if (volume != null && volume !== 0 && volume !== '') {
+            params.set('pmod_volume', volume);
+        } else {
+            params.delete('pmod_volume');
+        }
+        window.history.replaceState(null, '', url.toString());
+    }
+
     function formatPrice(price) {
         var isInt = price % 1 === 0;
         return price.toLocaleString('ru-RU', {
@@ -638,6 +655,7 @@
                     }
                     state.customVolume = null;
                     state.customMode   = !!state.customWidth;
+                    syncUrlPmodVolume(null);
 
                     // Обновляем лейбл тиража и заголовок h1 с реальным числом
                     var presetStr = v.toLocaleString('ru-RU');
@@ -649,6 +667,7 @@
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
                     state.customMode   = true;
+                    syncUrlPmodVolume(v);
 
                     if (customBtn) {
                         if (!customBtn.classList.contains('sku-props__value--active')) {
@@ -799,6 +818,7 @@
                         }
                         state.customMode   = false;
                         state.customVolume = null;
+                        syncUrlPmodVolume(null);
                         PModificator.hideCustomPrice(container);
 
                         // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
