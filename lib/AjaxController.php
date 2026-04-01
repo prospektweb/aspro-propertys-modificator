@@ -48,6 +48,9 @@ class AjaxController
         $width      = isset($_POST['width'])   && $_POST['width']  !== ''  ? (int)$_POST['width']   : null;
         $height     = isset($_POST['height'])  && $_POST['height'] !== ''  ? (int)$_POST['height']  : null;
         $basketQty  = isset($_POST['basket_qty']) && (int)$_POST['basket_qty'] > 0 ? (int)$_POST['basket_qty'] : 1;
+        $visibleGroups = isset($_POST['visible_groups']) && is_array($_POST['visible_groups'])
+            ? array_values(array_unique(array_filter(array_map('intval', $_POST['visible_groups']), static fn($v) => $v > 0)))
+            : [];
         $otherProps = isset($_POST['other_props']) && is_array($_POST['other_props'])
             ? array_map('intval', $_POST['other_props'])
             : null;
@@ -117,7 +120,7 @@ class AjaxController
         }
 
         $mainPrice = !empty($rangePrices)
-            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups)
+            ? self::determineMainPriceFromRanges($rangePrices, $accessibleGroupIds, $basketQty, $catalogGroups, $visibleGroups)
             : self::determineMainPrice($rawPrices, $catalogGroups, $accessibleGroupIds);
 
         return [
@@ -330,14 +333,23 @@ class AjaxController
         array $rangePrices,
         array $accessibleIds,
         int $basketQty,
-        array $catalogGroups
+        array $catalogGroups,
+        array $visibleGroups = []
     ): ?array {
+        $visibleLookup = [];
+        foreach ($visibleGroups as $gid) {
+            $visibleLookup[(int)$gid] = true;
+        }
+
         $candidates = [];
         foreach ($rangePrices as $gid => $rows) {
             if (!is_array($rows) || empty($rows)) {
                 continue;
             }
             $gid = (int)$gid;
+            if (!empty($visibleLookup) && empty($visibleLookup[$gid])) {
+                continue;
+            }
             $selected = self::pickRangeForBasketQty($rows, $basketQty);
             if ($selected === null) {
                 continue;

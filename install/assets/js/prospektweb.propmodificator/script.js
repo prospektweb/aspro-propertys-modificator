@@ -1169,7 +1169,8 @@
                 catalogGroups,
                 canBuyGroups,
                 preferredGroupId,
-                1
+                1,
+                null
             );
             return desc ? desc.price : null;
         },
@@ -1187,14 +1188,24 @@
             return 0;
         },
 
-        getMainPriceDescriptor: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId, basketQty) {
+        getMainPriceDescriptor: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId, basketQty, allowedGroupIds) {
             basketQty = basketQty && basketQty > 0 ? basketQty : 1;
             var canBuyLookup = {};
             (canBuyGroups || []).forEach(function (gid) {
                 canBuyLookup[String(gid)] = true;
             });
+            var allowedLookup = null;
+            if (allowedGroupIds && allowedGroupIds.length) {
+                allowedLookup = {};
+                allowedGroupIds.forEach(function (gid) { allowedLookup[String(gid)] = true; });
+            }
 
-            if (preferredGroupId && interpolated[preferredGroupId] && interpolated[preferredGroupId].length) {
+            if (
+                preferredGroupId &&
+                interpolated[preferredGroupId] &&
+                interpolated[preferredGroupId].length &&
+                (!allowedLookup || allowedLookup[String(preferredGroupId)])
+            ) {
                 var prefRanges = interpolated[preferredGroupId];
                 var prefIdx = PModificator.getRangeIndexForQuantity(prefRanges, basketQty);
                 var prefRow = prefRanges[prefIdx] || prefRanges[0];
@@ -1209,6 +1220,7 @@
 
             var candidates = [];
             Object.keys(interpolated).forEach(function (gid) {
+                if (allowedLookup && !allowedLookup[String(gid)]) return;
                 var ranges = interpolated[gid];
                 if (!ranges || !ranges.length) return;
                 var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
@@ -1273,6 +1285,12 @@
             var body = new FormData();
             body.append('productId', state.productId);
             body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
+            var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
+            if (visibleGroups.length) {
+                visibleGroups.forEach(function (gid) {
+                    body.append('visible_groups[]', gid);
+                });
+            }
             if (state.customVolume)  body.append('volume',  state.customVolume);
             if (state.customWidth)   body.append('width',   state.customWidth);
             if (state.customHeight)  body.append('height',  state.customHeight);
@@ -1341,6 +1359,40 @@
             }
 
             return 1;
+        },
+
+        getVisiblePriceGroupIds: function (state) {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+            if (!popupPrice) return [];
+
+            var priceCodeOrder = null;
+            try {
+                var cfgAttr = popupPrice.getAttribute('data-price-config');
+                if (cfgAttr) {
+                    var cfg = JSON.parse(cfgAttr);
+                    priceCodeOrder = (cfg && cfg.PRICE_CODE) || null;
+                }
+            } catch (e) {}
+
+            if (!priceCodeOrder || !priceCodeOrder.length) return [];
+
+            var nameToGid = {};
+            Object.keys(state.catalogGroups || {}).forEach(function (gid) {
+                var g = state.catalogGroups[gid];
+                if (g && g.name) nameToGid[g.name] = gid;
+            });
+
+            var gids = [];
+            priceCodeOrder.forEach(function (name) {
+                var gid = nameToGid[name];
+                if (gid) gids.push(String(gid));
+            });
+            return gids;
         },
 
         /**
@@ -1593,7 +1645,8 @@
                 state.catalogGroups,
                 state.canBuyGroups,
                 state.mainPriceGroupId,
-                basketQty
+                basketQty,
+                orderedGids
             );
             var mainPrice = mainDesc ? mainDesc.price : null;
             var mainPriceUpdated = false;
