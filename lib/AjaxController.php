@@ -407,8 +407,14 @@ class AjaxController
             ];
         }
 
-        if (empty($candidates)) {
-            return null;
+        // 3) Fallback: базовая группа.
+        foreach ($allGids as $gid) {
+            if (!empty($catalogGroups[$gid]['base'])) {
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
+                }
+            }
         }
 
         $buyable = array_values(array_filter($candidates, static fn($c) => $c['canBuy'] === true));
@@ -424,10 +430,9 @@ class AjaxController
                 }
                 return $a['groupId'] <=> $b['groupId'];
             }
-            return $a['price'] <=> $b['price'];
-        });
+        }
 
-        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+        return null;
     }
 
     /**
