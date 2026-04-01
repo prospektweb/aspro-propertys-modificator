@@ -1310,6 +1310,40 @@
                 }
             }
 
+            // Приоритет: порядок групп, видимых в popup-таблице (как у Aspro).
+            if (allowedGroupIds && allowedGroupIds.length) {
+                for (var ai = 0; ai < allowedGroupIds.length; ai++) {
+                    var allowedGid = String(allowedGroupIds[ai]);
+                    var allowedRanges = interpolated[allowedGid];
+                    if (!allowedRanges || !allowedRanges.length) continue;
+                    if (!canBuyLookup[allowedGid]) continue;
+                    var allowedIdx = PModificator.getRangeIndexForQuantity(allowedRanges, basketQty);
+                    var allowedRow = allowedRanges[allowedIdx] || allowedRanges[0];
+                    if (allowedRow && allowedRow.price !== null && allowedRow.price !== undefined) {
+                        return {
+                            gid: allowedGid,
+                            rangeIndex: allowedIdx,
+                            price: Number(allowedRow.price),
+                        };
+                    }
+                }
+                // Если из visible-групп нет buyable — берём первую visible с ценой
+                for (var aj = 0; aj < allowedGroupIds.length; aj++) {
+                    var anyGid = String(allowedGroupIds[aj]);
+                    var anyRanges = interpolated[anyGid];
+                    if (!anyRanges || !anyRanges.length) continue;
+                    var anyIdx = PModificator.getRangeIndexForQuantity(anyRanges, basketQty);
+                    var anyRow = anyRanges[anyIdx] || anyRanges[0];
+                    if (anyRow && anyRow.price !== null && anyRow.price !== undefined) {
+                        return {
+                            gid: anyGid,
+                            rangeIndex: anyIdx,
+                            price: Number(anyRow.price),
+                        };
+                    }
+                }
+            }
+
             var candidates = [];
             Object.keys(interpolated).forEach(function (gid) {
                 if (allowedLookup && !allowedLookup[String(gid)]) return;
