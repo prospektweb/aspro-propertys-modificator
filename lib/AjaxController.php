@@ -414,8 +414,14 @@ class AjaxController
             ];
         }
 
-        if (empty($candidates)) {
-            return null;
+        // 3) Fallback: базовая группа.
+        foreach ($allGids as $gid) {
+            if (!empty($catalogGroups[$gid]['base'])) {
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
+                }
+            }
         }
 
         $buyable = [];
@@ -428,7 +434,7 @@ class AjaxController
 
         usort($pool, [self::class, 'compareMainPriceCandidates']);
 
-        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+        return null;
     }
 
     private static function compareMainPriceCandidates(array $a, array $b): int
