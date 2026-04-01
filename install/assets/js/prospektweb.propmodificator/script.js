@@ -1239,6 +1239,14 @@
                             state.canBuyGroups,
                             state.mainPriceGroupId
                         );
+                        // Если сервер не вернул mainPrice (legacy/старый backend),
+                        // выбираем минимальную цену по текущему диапазону из server-ranges.
+                        if (srvMain === null) {
+                            srvMain = PModificator.getMinPriceFromRanges(
+                                serverInterpolated,
+                                PModificator.getBasketQuantity(state.productId)
+                            );
+                        }
                         if (srvMain !== null) {
                             state.lastCalculatedPrice = srvMain;
                         }
@@ -1262,6 +1270,24 @@
                 }
             });
             return popupPrice;
+        },
+
+        getMinPriceFromRanges: function (interpolated, basketQty) {
+            basketQty = basketQty && basketQty > 0 ? basketQty : 1;
+            var best = null;
+            Object.keys(interpolated || {}).forEach(function (gid) {
+                var ranges = interpolated[gid];
+                if (!ranges || !ranges.length) return;
+                var idx = PModificator.getRangeIndexForQuantity(ranges, basketQty);
+                var row = ranges[idx] || ranges[0];
+                if (!row || row.price === null || row.price === undefined) return;
+                var price = Number(row.price);
+                if (isNaN(price)) return;
+                if (best === null || price < best) {
+                    best = price;
+                }
+            });
+            return best;
         },
 
         /**
