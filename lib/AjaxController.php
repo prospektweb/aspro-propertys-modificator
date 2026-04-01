@@ -429,8 +429,14 @@ class AjaxController
             ];
         }
 
-        if (empty($candidates)) {
-            return null;
+        // 3) Fallback: базовая группа.
+        foreach ($allGids as $gid) {
+            if (!empty($catalogGroups[$gid]['base'])) {
+                $selected = self::pickRangeForBasketQty($rowsByGroup[$gid], $basketQty);
+                if ($selected !== null) {
+                    return ['price' => (float)$selected['price'], 'groupId' => (int)$gid];
+                }
+            }
         }
 
         $buyable = [];
@@ -443,7 +449,87 @@ class AjaxController
 
         usort($pool, [self::class, 'compareMainPriceCandidates']);
 
-        return ['price' => $pool[0]['price'], 'groupId' => (int)$pool[0]['groupId']];
+        return null;
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
+    }
+
+    private static function fallbackMainPriceFromRanges(array $rangePrices, int $basketQty): ?array
+    {
+        $best = null;
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null || !isset($selected['price'])) {
+                continue;
+            }
+            $price = (float)$selected['price'];
+            if ($best === null || $price < $best['price']) {
+                $best = ['price' => $price, 'groupId' => (int)$gid];
+            }
+        }
+        return $best;
+    }
+
+    private static function compareMainPriceCandidates(array $a, array $b): int
+    {
+        if ($a['price'] === $b['price']) {
+            if ($a['ord'] !== $b['ord']) {
+                return $a['ord'] <=> $b['ord'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        }
+        return $a['price'] <=> $b['price'];
+    }
+
+    private static function fallbackMainPriceFromRanges(array $rangePrices, int $basketQty): ?array
+    {
+        $best = null;
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $selected = self::pickRangeForBasketQty($rows, $basketQty);
+            if ($selected === null || !isset($selected['price'])) {
+                continue;
+            }
+            $price = (float)$selected['price'];
+            if ($best === null || $price < $best['price']) {
+                $best = ['price' => $price, 'groupId' => (int)$gid];
+            }
+        }
+        return $best;
     }
 
     private static function compareMainPriceCandidates(array $a, array $b): int
