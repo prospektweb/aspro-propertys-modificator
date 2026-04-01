@@ -248,21 +248,19 @@ class prospektweb_propmodificator extends CModule
     private function installAsproLocalOverrides(): void
     {
         $docRoot = Application::getDocumentRoot();
-        $pairs = [
-            '/bitrix/templates/aspro-premier/js/select_offer_func.js'
-                => '/local/templates/aspro-premier/js/select_offer_func.js',
-            '/bitrix/templates/aspro-premier/ajax/js_item_detail.php'
-                => '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        $targets = [
+            'js/select_offer_func.js'   => '/local/templates/aspro-premier/js/select_offer_func.js',
+            'js/select_offer_func.min.js' => '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            'ajax/js_item_detail.php'   => '/local/templates/aspro-premier/ajax/js_item_detail.php',
         ];
 
-        foreach ($pairs as $srcRel => $dstRel) {
-            $src = $docRoot . $srcRel;
-            $dst = $docRoot . $dstRel;
-            $marker = $dst . '.pmod_installed';
-
-            if (!file_exists($src)) {
+        foreach ($targets as $relativeFile => $dstRel) {
+            $src = $this->resolveAsproTemplateSourceFile($relativeFile);
+            if (!$src) {
                 continue;
             }
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
 
             if (!is_dir(dirname($dst))) {
                 @mkdir(dirname($dst), 0755, true);
@@ -285,6 +283,27 @@ class prospektweb_propmodificator extends CModule
     }
 
     /**
+     * Ищет исходный файл шаблона Aspro Premier в типовых локациях.
+     */
+    private function resolveAsproTemplateSourceFile(string $relativeFile): ?string
+    {
+        $docRoot = Application::getDocumentRoot();
+        $candidates = [
+            $docRoot . '/local/templates/aspro-premier/' . $relativeFile,
+            $docRoot . '/bitrix/templates/aspro-premier/' . $relativeFile,
+            $docRoot . '/bitrix/wizards/aspro/premier/site/templates/aspro-premier/' . $relativeFile,
+        ];
+
+        foreach ($candidates as $file) {
+            if (file_exists($file)) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Удаляет только те override-файлы Аспро в /local/templates,
      * которые были скопированы установщиком модуля (по marker-файлу).
      */
@@ -293,6 +312,7 @@ class prospektweb_propmodificator extends CModule
         $docRoot = Application::getDocumentRoot();
         $targets = [
             '/local/templates/aspro-premier/js/select_offer_func.js',
+            '/local/templates/aspro-premier/js/select_offer_func.min.js',
             '/local/templates/aspro-premier/ajax/js_item_detail.php',
         ];
 
