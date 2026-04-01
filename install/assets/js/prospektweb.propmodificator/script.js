@@ -260,6 +260,9 @@
                 customHeight:     null,
                 customVolume:     null,
                 customMode:       false,
+                // AJAX state (AbortController + requestId для защиты от race conditions)
+                _ajaxAbortCtrl:   null,
+                _ajaxRequestId:   0,
             };
 
             // Найти блоки свойств
@@ -270,10 +273,21 @@
                 }
             }
 
+            var volumeInner = null;
             if (volumePropId) {
-                var volumeInner = container.querySelector('.sku-props__inner[data-id="' + volumePropId + '"]');
+                volumeInner = container.querySelector('.sku-props__inner[data-id="' + volumePropId + '"]');
                 if (volumeInner) {
                     PModificator.enhanceVolumeProp(volumeInner, state, container);
+                }
+            }
+
+            // Предзаполняем инпут тиража значением из URL (?pmod_volume=N)
+            if (productCfg.initialVolume && volumeInner && volumeInner._pmodVolumeInput) {
+                var initVol = parseInt(productCfg.initialVolume, 10);
+                if (!isNaN(initVol) && initVol > 0) {
+                    volumeInner._pmodVolumeInput.value = initVol;
+                    // Запускаем обработчик как будто пользователь вышел из поля
+                    volumeInner._pmodVolumeInput.dispatchEvent(new Event('blur'));
                 }
             }
 
@@ -1007,7 +1021,7 @@
             // Фильтруем предложения по активным «прочим» свойствам
             var filteredOffers = PModificator.filterOffersByProps(state.offers, state.activeOtherProps);
 
-            // Интерполируем все группы × диапазоны
+            // Интерполируем все группы × диапазоны (клиентский оптимистичный расчёт)
             var interpolated = PModificator.interpolateAllPrices(filteredOffers, v, state.roundingRules);
 
             console.log('[pmod price]', {
@@ -1032,7 +1046,41 @@
                 state.lastCalculatedPrice = mainPrice;
             }
 
+            // Показываем клиентский расчёт немедленно (оптимистичный UI)
             PModificator.showCustomPrice(container, interpolated, state);
+
+            // Если AJAX-URL настроен — уточняем цену на сервере
+            var cfg = window.pmodConfig;
+            if (cfg && cfg.ajaxUrl) {
+                PModificator.fetchServerPrice(state, function (data) {
+                    if (!data || !data.success || !state.customMode) return;
+
+                    // Преобразуем ответ сервера в формат, понятный applyPricesToDom
+                    var serverInterpolated = {};
+                    if (data.prices) {
+                        Object.keys(data.prices).forEach(function (gid) {
+                            var p = data.prices[gid];
+                            serverInterpolated[gid] = [{ from: null, to: null, price: p.raw }];
+                        });
+                    }
+
+                    if (!Object.keys(serverInterpolated).length) return;
+
+                    state.lastInterpolatedPrices = serverInterpolated;
+
+                    if (data.mainPrice) {
+                        state.lastCalculatedPrice = data.mainPrice.raw;
+                    } else {
+                        var srvMain = PModificator.getMainPrice(serverInterpolated, state.catalogGroups);
+                        if (srvMain !== null) {
+                            state.lastCalculatedPrice = srvMain;
+                        }
+                    }
+
+                    // Применяем серверные цены к DOM
+                    PModificator.applyServerPricesToDom(container, serverInterpolated, state);
+                });
+            }
         },
 
         /**
@@ -1055,6 +1103,111 @@
             if (!ranges || !ranges.length) return null;
 
             return ranges[0].price;
+        },
+
+        // ── Серверный пересчёт цены (AJAX) ───────────────────────────────────
+
+        /**
+         * Отправляет AJAX-запрос на сервер для точного пересчёта цены.
+         *
+         * Защита от race conditions:
+         *  - Отменяет предыдущий запрос через AbortController
+         *  - Сравнивает state._ajaxRequestId перед применением результата
+         *
+         * @param {Object}   state    — состояние контейнера
+         * @param {Function} callback — fn(data|null)
+         */
+        fetchServerPrice: function (state, callback) {
+            var cfg     = window.pmodConfig;
+            var ajaxUrl = cfg && cfg.ajaxUrl;
+            if (!ajaxUrl) {
+                callback(null);
+                return;
+            }
+
+            // Отменяем предыдущий запрос
+            if (state._ajaxAbortCtrl) {
+                state._ajaxAbortCtrl.abort();
+                state._ajaxAbortCtrl = null;
+            }
+
+            var requestId = ++state._ajaxRequestId;
+            var abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            state._ajaxAbortCtrl = abortCtrl;
+
+            var body = new FormData();
+            body.append('productId', state.productId);
+            if (state.customVolume)  body.append('volume',  state.customVolume);
+            if (state.customWidth)   body.append('width',   state.customWidth);
+            if (state.customHeight)  body.append('height',  state.customHeight);
+
+            if (state.activeOtherProps) {
+                Object.keys(state.activeOtherProps).forEach(function (propId) {
+                    body.append('other_props[' + propId + ']', state.activeOtherProps[propId]);
+                });
+            }
+
+            // CSRF-токен Bitrix
+            var sessid = (typeof BX !== 'undefined' && BX.bitrix_sessid)
+                ? BX.bitrix_sessid()
+                : ((typeof window.bitrix_sessid !== 'undefined') ? window.bitrix_sessid : '');
+            if (sessid) {
+                body.append('sessid', sessid);
+            }
+
+            var fetchOpts = { method: 'POST', body: body };
+            if (abortCtrl) {
+                fetchOpts.signal = abortCtrl.signal;
+            }
+
+            fetch(ajaxUrl, fetchOpts)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    // Игнорируем устаревший ответ (защита от race conditions)
+                    if (state._ajaxRequestId !== requestId) return;
+                    state._ajaxAbortCtrl = null;
+                    callback(data);
+                })
+                .catch(function (e) {
+                    if (e && e.name === 'AbortError') return;
+                    console.warn('[pmod] Server price fetch error:', e);
+                    callback(null);
+                });
+        },
+
+        /**
+         * Применяет серверные цены непосредственно в DOM, минуя MutationObserver.
+         * Вызывается когда сервер вернул финальный расчёт.
+         *
+         * @param {Element} container
+         * @param {Object}  interpolated — {groupId: [{from, to, price}]}
+         * @param {Object}  state
+         */
+        applyServerPricesToDom: function (container, interpolated, state) {
+            var popupPrice = null;
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (el.offsetParent !== null || el.offsetHeight > 0) {
+                    popupPrice = el;
+                }
+            });
+
+            if (!popupPrice) {
+                // Fallback: обновляем собственный элемент модуля
+                var mainPrice = PModificator.getMainPrice(interpolated, state.catalogGroups);
+                if (mainPrice === null) return;
+                var priceEl = container.querySelector('.pmod-custom-price');
+                if (priceEl && priceEl.style.display !== 'none') {
+                    priceEl.querySelector('.pmod-custom-price__value').textContent = formatPrice(mainPrice);
+                }
+                return;
+            }
+
+            // Отменяем ожидающий клиентский апдейт и сразу применяем серверные данные
+            PModificator.cancelPendingPriceUpdate(popupPrice);
+            popupPrice._pmodUpdating = true;
+            PModificator.applyPricesToDom(popupPrice, interpolated, state);
+            popupPrice._pmodUpdating = false;
+            popupPrice.classList.remove('pmod-price-loading');
         },
 
         /**

@@ -97,6 +97,57 @@ if (!$productId) {
     }
 }
 
+// Попытка через GetPageProperty — большинство компонентов Битрикс/Аспро
+// устанавливают element_id через $APPLICATION->SetPageProperty() во время рендера,
+// значение доступно в OnEpilog через GetPageProperty.
+if (!$productId) {
+    global $APPLICATION;
+    $pageElementId = (int)$APPLICATION->GetPageProperty('element_id');
+    if ($pageElementId > 0) {
+        // Проверяем: это ТП или товар?
+        if ($offersIblockId > 0) {
+            $rsEl = CIBlockElement::GetList(
+                [],
+                ['IBLOCK_ID' => $offersIblockId, 'ID' => $pageElementId, 'ACTIVE' => 'Y'],
+                false,
+                false,
+                ['ID', 'PROPERTY_CML2_LINK']
+            );
+            if ($arEl = $rsEl->Fetch()) {
+                // Это ТП — берём родительский товар
+                $productId = (int)($arEl['PROPERTY_CML2_LINK_VALUE'] ?? 0);
+            }
+        }
+        if (!$productId) {
+            // Возможно, element_id — это сам товар
+            $productId = $pageElementId;
+        }
+        PageHandler::debugLog('GetPageProperty(element_id)=' . $pageElementId . ' resolved to productId=' . $productId);
+    }
+}
+
+// URL-based detection: ищем товар по последнему сегменту URL (CODE элемента).
+// Покрывает типичные SEF-маршруты Аспро вида /catalog/section/product-code/.
+if (!$productId && $productsIblockId > 0) {
+    $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($requestPath) {
+        $lastSegment = basename(rtrim($requestPath, '/'));
+        if ($lastSegment && !is_numeric($lastSegment)) {
+            $rsEl = CIBlockElement::GetList(
+                [],
+                ['IBLOCK_ID' => $productsIblockId, 'CODE' => $lastSegment, 'ACTIVE' => 'Y'],
+                false,
+                ['nTopCount' => 1],
+                ['ID']
+            );
+            if ($arEl = $rsEl->Fetch()) {
+                $productId = (int)$arEl['ID'];
+                PageHandler::debugLog('URL CODE="' . $lastSegment . '" resolved to productId=' . $productId);
+            }
+        }
+    }
+}
+
 if (!$productId) {
     PageHandler::debugLog('No productId found, skipping. GET=' . json_encode($_GET));
     return;
@@ -300,8 +351,14 @@ while ($arOffer = $rsOffers->Fetch()) {
 // ─── Если URL указывает на X-ТП без тиража — редирект на базовый URL ─────────
 // Предотвращает отображение страницы с ценой 0.01 при прямой ссылке на X-ТП.
 // Если же в URL уже передан pmod_volume, разрешаем загрузку (JS установит тираж).
-$requestOid = (int)($_GET['oid'] ?? 0);
-if ($requestOid > 0 && empty($_GET['pmod_volume'])) {
+$requestOid    = (int)($_GET['oid'] ?? 0);
+$initialVolume = null;
+$pmodVolume    = isset($_GET['pmod_volume']) ? (int)$_GET['pmod_volume'] : 0;
+if ($pmodVolume > 0) {
+    $initialVolume = $pmodVolume;
+}
+
+if ($requestOid > 0 && $initialVolume === null) {
     foreach ($offers as $offerId => $offerData) {
         if ((int)$offerId === $requestOid && $offerData['volume'] === null) {
             // Убираем CR/LF для безопасности (защита от header injection)
@@ -387,6 +444,7 @@ try {
 // ─── Формируем конфиг для JS ──────────────────────────────────────────────────
 
 $pmodConfig = [
+    'ajaxUrl'  => '/ajax/prospektweb.propmodificator/calc_price.php',
     'products' => [
         $productId => [
             'formatPropId'    => $formatPropId,
@@ -399,6 +457,7 @@ $pmodConfig = [
             'catalogGroups'   => $catalogGroups,
             'allPropIds'      => array_keys($otherProps),
             'roundingRules'   => $roundingRules,
+            'initialVolume'   => $initialVolume,
         ],
     ],
 ];

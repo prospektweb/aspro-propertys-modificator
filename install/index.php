@@ -113,11 +113,25 @@ class prospektweb_propmodificator extends CModule
 
     public function installFiles(): bool
     {
+        // JS/CSS ассеты → /bitrix/js/prospektweb.propmodificator/
         $srcDir  = __DIR__ . '/assets/js/prospektweb.propmodificator';
         $destDir = '/bitrix/js/prospektweb.propmodificator';
 
         if (is_dir(Application::getDocumentRoot() . '/bitrix/js')) {
             CopyDirFiles($srcDir, Application::getDocumentRoot() . $destDir, true, true);
+        }
+
+        // AJAX-роутер → /ajax/prospektweb.propmodificator/
+        $ajaxSrc  = __DIR__ . '/assets/ajax/prospektweb.propmodificator';
+        $ajaxDest = Application::getDocumentRoot() . '/ajax/prospektweb.propmodificator';
+
+        if (is_dir($ajaxSrc)) {
+            if (!is_dir($ajaxDest)) {
+                @mkdir($ajaxDest, 0755, true);
+            }
+            if (is_dir($ajaxDest)) {
+                CopyDirFiles($ajaxSrc, $ajaxDest, true, true);
+            }
         }
 
         return true;
@@ -220,6 +234,7 @@ class prospektweb_propmodificator extends CModule
     public function uninstallFiles(): void
     {
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
+        DeleteDirFilesEx('/ajax/prospektweb.propmodificator');
     }
 
     public function uninstallFooter(): void
