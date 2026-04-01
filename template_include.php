@@ -463,6 +463,32 @@ try {
     PageHandler::debugLog('Failed to load catalog groups: ' . $e->getMessage());
 }
 
+// ─── Определяем типы цен, доступные пользователю для покупки ───────────────
+
+$canBuyGroupIds = [];
+global $USER;
+$userGroups = [];
+if (is_object($USER) && method_exists($USER, 'GetUserGroupArray')) {
+    $userGroups = (array)$USER->GetUserGroupArray();
+}
+if (empty($userGroups)) {
+    $userGroups = [2]; // гости
+}
+if (class_exists('CCatalogGroup')) {
+    try {
+        $perms = CCatalogGroup::GetGroupsPerms($userGroups);
+        if (is_array($perms)) {
+            foreach ($perms as $gid => $perm) {
+                if (isset($perm['buy']) && $perm['buy'] === 'Y') {
+                    $canBuyGroupIds[] = (int)$gid;
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        PageHandler::debugLog('Failed to load buy permissions for price groups: ' . $e->getMessage());
+    }
+}
+
 // ─── Загружаем правила округления цен ────────────────────────────────────────
 
 $roundingRules = [];
@@ -497,6 +523,7 @@ $pmodConfig = [
             'volumeEnumMap'   => $volumeEnumMap,
             'formatEnumMap'   => $formatEnumMap,
             'catalogGroups'   => $catalogGroups,
+            'canBuyGroups'    => array_values(array_unique($canBuyGroupIds)),
             'allPropIds'      => array_keys($otherProps),
             'roundingRules'   => $roundingRules,
             'initialVolume'   => $initialVolume,
@@ -522,4 +549,3 @@ Asset::getInstance()->addString(
 );
 
 PageHandler::debugLog('pmodConfig injected for productId=' . $productId . ', offers=' . count($offers));
-

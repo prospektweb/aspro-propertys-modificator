@@ -63,6 +63,11 @@ class AjaxController
 
         $interpolator = new PriceInterpolator($productId);
         $rawPrices    = $interpolator->interpolateAllGroups($width, $height, $volume, $otherProps);
+        $rangePrices  = $interpolator->interpolateAllGroupsWithRanges($width, $height, $volume, $otherProps);
+
+        if (!empty($rangePrices)) {
+            $rawPrices = self::extractMainPricesFromRanges($rangePrices);
+        }
 
         if (empty($rawPrices)) {
             return ['success' => false, 'error' => 'No prices could be calculated'];
@@ -80,6 +85,18 @@ class AjaxController
             }
         }
         unset($price);
+        foreach ($rangePrices as $gid => &$rows) {
+            if (empty($roundingRules[$gid]) || !is_array($rows)) {
+                continue;
+            }
+            foreach ($rows as &$row) {
+                if (isset($row['price'])) {
+                    $row['price'] = self::applyRounding((float)$row['price'], $roundingRules[$gid]);
+                }
+            }
+            unset($row);
+        }
+        unset($rows);
 
         // ── Определяем доступность типов цен для текущего пользователя ────────
 
@@ -103,6 +120,7 @@ class AjaxController
         return [
             'success'   => true,
             'prices'    => $pricesResult,
+            'ranges'    => $rangePrices,
             'mainPrice' => $mainPrice !== null ? [
                 'raw'       => round($mainPrice['price'], 2),
                 'formatted' => self::formatPrice($mainPrice['price']),
@@ -293,6 +311,28 @@ class AjaxController
         }
 
         return null;
+    }
+
+    /**
+     * Схлопывает диапазонные цены к «основной» цене группы
+     * (первая строка диапазонов после сортировки).
+     *
+     * @param array $rangePrices [groupId => [{from,to,price}, ...]]
+     * @return array [groupId => float]
+     */
+    private static function extractMainPricesFromRanges(array $rangePrices): array
+    {
+        $result = [];
+        foreach ($rangePrices as $gid => $rows) {
+            if (!is_array($rows) || empty($rows)) {
+                continue;
+            }
+            $first = reset($rows);
+            if (is_array($first) && isset($first['price'])) {
+                $result[(int)$gid] = (float)$first['price'];
+            }
+        }
+        return $result;
     }
 
     /**
