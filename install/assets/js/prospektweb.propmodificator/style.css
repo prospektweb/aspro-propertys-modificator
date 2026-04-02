@@ -81,6 +81,14 @@
     box-sizing: border-box;
 }
 
+
+.pmod-volume-measure {
+    font-size: 13px;
+    color: var(--secondary, #8D8D8D);
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
 /* ── Счётчик (кнопки − и + и поле ввода) ────────────────────────────────── */
 
 .pmod-counter {

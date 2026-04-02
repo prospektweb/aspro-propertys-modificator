@@ -13,9 +13,8 @@ $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_SELECT_IBLOCKS']          = 'Выбор
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_OFFERS_IBLOCK']           = 'Инфоблок торговых предложений (ТП)';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_OFFERS_IBLOCK_HINT']      = 'Инфоблок, где хранятся торговые предложения товаров';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_PRODUCTS_IBLOCK']         = 'Инфоблок товаров';
-$MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_PRODUCTS_IBLOCK_HINT']    = 'Родительский инфоблок товаров (для создания свойств SET_FORMAT, SET_VOLUME)';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_PRODUCTS_IBLOCK_HINT']    = 'Родительский инфоблок товаров (для создания свойства PMOD_CUSTOM_CONFIG)';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_VALIDATION_WARNINGS']     = 'Предупреждения по свойствам ТП';
-$MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_VALIDATION_OK']           = 'Свойства CALC_PROP_FORMAT и CALC_PROP_VOLUME найдены и корректны.';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_BTN_INSTALL']             = 'Установить';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP1_BTN_CANCEL']              = 'Отмена';
 
@@ -32,13 +31,13 @@ $MESS['PROSPEKTWEB_PROPMODIFICATOR_STEP3_LINK_MODULES']    = '← Вернуть
 
 // unstep1.php
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP1_WARNING']       = 'Вы собираетесь удалить модуль <b>prospektweb.propmodificator</b>. Это действие нельзя отменить.';
-$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP1_SAVE_DATA']     = 'Сохранить данные модуля (свойства SET_FORMAT, SET_VOLUME не будут удалены)';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP1_SAVE_DATA']     = 'Сохранить данные модуля (свойство PMOD_CUSTOM_CONFIG не будет удалено)';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP1_BTN_DELETE']    = 'Удалить';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP1_BTN_CANCEL']    = 'Отмена';
 
 // unstep2.php
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_ERROR']         = 'Ошибка при удалении модуля:';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_SUCCESS']       = 'Модуль <b>prospektweb.propmodificator</b> успешно удалён.';
-$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_SAVED']   = 'Свойства SET_FORMAT и SET_VOLUME сохранены.';
-$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_DELETED'] = 'Свойства SET_FORMAT и SET_VOLUME удалены.';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_SAVED']   = 'Свойство PMOD_CUSTOM_CONFIG сохранено.';
+$MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_PROPS_DELETED'] = 'Свойство PMOD_CUSTOM_CONFIG удалено.';
 $MESS['PROSPEKTWEB_PROPMODIFICATOR_UNSTEP2_LINK_MODULES']  = '← Вернуться к списку модулей';
