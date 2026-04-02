@@ -52,50 +52,6 @@ if ($offersIblockId > 0 && Loader::includeModule('catalog')) {
     }
 }
 
-// Проверяем наличие свойств CALC_PROP_FORMAT и CALC_PROP_VOLUME в инфоблоке ТП
-$validationIssues = [];
-if (Loader::includeModule('iblock') && $offersIblockId > 0) {
-    foreach (['CALC_PROP_FORMAT', 'CALC_PROP_VOLUME'] as $code) {
-        $rsProp = CIBlockProperty::GetList(
-            [],
-            ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code, 'ACTIVE' => 'Y']
-        );
-        $prop = $rsProp->Fetch();
-
-        if (!$prop) {
-            $validationIssues[] = "Свойство {$code} не найдено в инфоблоке ТП (ID={$offersIblockId})";
-            continue;
-        }
-
-        $rsEnum = CIBlockPropertyEnum::GetList(
-            ['SORT' => 'ASC'],
-            ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code]
-        );
-        $valid = false;
-        while ($arEnum = $rsEnum->Fetch()) {
-            $xmlId = $arEnum['XML_ID'];
-            if ($xmlId === 'X') {
-                // «X» — маркер произвольного значения, пропускаем
-                continue;
-            }
-            if ($code === 'CALC_PROP_FORMAT') {
-                if (preg_match('/^\d+x\d+$/i', $xmlId)) {
-                    $valid = true;
-                    break;
-                }
-            } else {
-                if (is_numeric($xmlId)) {
-                    $valid = true;
-                    break;
-                }
-            }
-        }
-
-        if (!$valid) {
-            $validationIssues[] = "Свойство {$code}: не найдено ни одного значения с корректным XML_ID";
-        }
-    }
-}
 ?>
 <form method="post" action="<?= $APPLICATION->GetCurPage() ?>">
     <?= bitrix_sessid_post() ?>
@@ -142,22 +98,6 @@ if (Loader::includeModule('iblock') && $offersIblockId > 0) {
                 </select>
             </td>
         </tr>
-        <?php if (!empty($validationIssues)): ?>
-        <tr class="heading">
-            <td colspan="2"><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_STEP1_VALIDATION_WARNINGS') ?></td>
-        </tr>
-        <tr>
-            <td colspan="2">
-                <div class="adm-info-message-wrap warn">
-                    <div class="adm-info-message">
-                        <?php foreach ($validationIssues as $issue): ?>
-                            <p><?= htmlspecialchars($issue) ?></p>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </td>
-        </tr>
-        <?php endif; ?>
     </table>
 
     <input type="submit" value="<?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_STEP1_BTN_INSTALL') ?>" class="adm-btn-save">

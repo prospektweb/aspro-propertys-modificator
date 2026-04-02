@@ -116,11 +116,7 @@ class BasketHandler
     }
 
     /**
-     * Валидируем пользовательские значения (мин/макс/шаг из SET_FORMAT и SET_VOLUME).
-     *
-     * @param array $calcData   Данные из запроса
-     * @param array $arFields   Поля позиции корзины (содержит PRODUCT_ID)
-     * @return bool
+     * Валидируем пользовательские значения по диапазонам из JSON-конфига товара.
      */
     private static function validateCalcData(array $calcData, array $arFields): bool
     {
@@ -221,59 +217,39 @@ class BasketHandler
     }
 
     /**
-     * Читаем настройки SET_FORMAT и SET_VOLUME из свойств товара.
+     * Читаем настройки формата/тиража из JSON в PMOD_CUSTOM_CONFIG.
      *
-     * @param int $productId
-     * @return array{format: array, volume: array}
+     * @return array{format: array<string,mixed>, volume: array<string,mixed>}
      */
     private static function getProductSettings(int $productId): array
     {
-        $formatCode = Config::getSetFormatPropCode();
-        $volumeCode = Config::getSetVolumePropCode();
-        $iblockId   = Config::getProductsIblockId();
+        $formatCode       = Config::getFormatPropCode();
+        $volumeCode       = Config::getVolumePropCode();
+        $customConfigCode = Config::getCustomConfigPropCode();
 
         $rsElement = \CIBlockElement::GetByID($productId);
         if (!($arElement = $rsElement->GetNextElement())) {
             return ['format' => [], 'volume' => []];
         }
 
-        // Получаем все свойства (Option C: без фильтра по CODE, чтобы избежать
-        // TypeError в mysqli::real_escape_string при передаче массива в CODE).
-        $arProps = $arElement->GetProperties([], []);
+        $props = $arElement->GetProperties([], ['CODE' => $customConfigCode]);
+        $payload = $props[$customConfigCode] ?? null;
+        $rawValue = null;
 
-        // Если SET_FORMAT/SET_VOLUME не найдены — возможно передан ID торгового предложения.
-        // Ищем родительский товар через CML2_LINK и берём свойства с него.
-        if (empty($arProps[$formatCode]['VALUE']) && empty($arProps[$volumeCode]['VALUE'])) {
-            $parentId = (int)($arProps['CML2_LINK']['VALUE'] ?? 0);
-            if ($parentId > 0 && $parentId !== $productId) {
-                $rsParent = \CIBlockElement::GetByID($parentId);
-                if ($arParent = $rsParent->GetNextElement()) {
-                    $arProps = $arParent->GetProperties([], []);
-                }
-            }
+        if (is_array($payload)) {
+            $rawValue = $payload['~VALUE'] ?? $payload['VALUE'] ?? null;
         }
 
-        $format = [];
-        $volume = [];
-
-        if (!empty($arProps[$formatCode]['VALUE'])) {
-            foreach ((array)$arProps[$formatCode]['VALUE'] as $idx => $key) {
-                $val = $arProps[$formatCode]['DESCRIPTION'][$idx] ?? null;
-                if ($key && $val !== null) {
-                    $format[strtoupper($key)] = (int)$val;
-                }
-            }
+        $customConfig = CustomConfig::parseFromPropertyValue($rawValue);
+        if (empty($customConfig)) {
+            return ['format' => [], 'volume' => []];
         }
 
-        if (!empty($arProps[$volumeCode]['VALUE'])) {
-            foreach ((array)$arProps[$volumeCode]['VALUE'] as $idx => $key) {
-                $val = $arProps[$volumeCode]['DESCRIPTION'][$idx] ?? null;
-                if ($key && $val !== null) {
-                    $volume[strtoupper($key)] = (int)$val;
-                }
-            }
-        }
+        $settings = CustomConfig::extractCalculatorSettings($customConfig, $formatCode, $volumeCode);
 
-        return ['format' => $format, 'volume' => $volume];
+        return [
+            'format' => $settings['formatSettings'] ?? [],
+            'volume' => $settings['volumeSettings'] ?? [],
+        ];
     }
 }
