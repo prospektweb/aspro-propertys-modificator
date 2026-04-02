@@ -78,17 +78,32 @@ if ($action === 'create_marker') {
         'XML_ID' => $xmlId,
     ])->Fetch();
 
+    $enum = new CIBlockPropertyEnum();
+
     if ($existing) {
-        echo json_encode(['success' => false, 'error' => 'XML_ID already exists'], JSON_UNESCAPED_UNICODE);
+        $enumId = (int)$existing['ID'];
+        $updated = $enum->Update($enumId, [
+            'PROPERTY_ID' => $propertyId,
+            'VALUE' => $value,
+            'XML_ID' => $xmlId,
+            'SORT' => 9999,
+            'DEF' => 'N',
+        ]);
+
+        if (!$updated) {
+            echo json_encode(['success' => false, 'error' => (string)$enum->LAST_ERROR], JSON_UNESCAPED_UNICODE);
+            die();
+        }
+
+        echo json_encode(['success' => true, 'enum_id' => $enumId, 'updated' => true], JSON_UNESCAPED_UNICODE);
         die();
     }
 
-    $enum = new CIBlockPropertyEnum();
     $enumId = (int)$enum->Add([
         'PROPERTY_ID' => $propertyId,
         'VALUE' => $value,
         'XML_ID' => $xmlId,
-        'SORT' => 500,
+        'SORT' => 9999,
         'DEF' => 'N',
     ]);
 
@@ -97,7 +112,7 @@ if ($action === 'create_marker') {
         die();
     }
 
-    echo json_encode(['success' => true, 'enum_id' => $enumId], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['success' => true, 'enum_id' => $enumId, 'updated' => false], JSON_UNESCAPED_UNICODE);
     die();
 }
 

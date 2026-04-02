@@ -9,19 +9,7 @@ class CustomConfig
      */
     public static function parseFromPropertyValue($rawValue): array
     {
-        $json = '';
-
-        if (is_array($rawValue)) {
-            if (isset($rawValue['TEXT'])) {
-                $json = (string)$rawValue['TEXT'];
-            } elseif (isset($rawValue['VALUE']) && is_string($rawValue['VALUE'])) {
-                $json = $rawValue['VALUE'];
-            }
-        } elseif (is_string($rawValue)) {
-            $json = $rawValue;
-        }
-
-        $json = trim($json);
+        $json = self::extractJsonString($rawValue);
         if ($json === '') {
             return [];
         }
@@ -73,6 +61,49 @@ class CustomConfig
         }
 
         return $result;
+    }
+
+    private static function extractJsonString($rawValue): string
+    {
+        $json = '';
+
+        if (is_array($rawValue)) {
+            $candidates = ['~VALUE', '~TEXT', 'TEXT', 'VALUE'];
+            foreach ($candidates as $key) {
+                if (!array_key_exists($key, $rawValue)) {
+                    continue;
+                }
+
+                if (is_array($rawValue[$key])) {
+                    if (isset($rawValue[$key]['TEXT']) && is_string($rawValue[$key]['TEXT'])) {
+                        $json = $rawValue[$key]['TEXT'];
+                        break;
+                    }
+                    if (isset($rawValue[$key]['~TEXT']) && is_string($rawValue[$key]['~TEXT'])) {
+                        $json = $rawValue[$key]['~TEXT'];
+                        break;
+                    }
+                    continue;
+                }
+
+                if (is_string($rawValue[$key])) {
+                    $json = $rawValue[$key];
+                    break;
+                }
+            }
+        } elseif (is_string($rawValue)) {
+            $json = $rawValue;
+        }
+
+        $json = trim((string)$json);
+        if ($json === '') {
+            return '';
+        }
+
+        $json = html_entity_decode($json, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $json = preg_replace('/^\xEF\xBB\xBF/', '', $json);
+
+        return trim((string)$json);
     }
 
     private static function normalizeInput(array $input): array

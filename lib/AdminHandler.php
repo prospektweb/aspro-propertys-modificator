@@ -53,9 +53,9 @@ class AdminHandler
         ];
 
         Asset::getInstance()->addCss('/bitrix/js/prospektweb.propmodificator/admin-builder.css');
-        Asset::getInstance()->addJs('/bitrix/js/prospektweb.propmodificator/admin-builder.js');
         Asset::getInstance()->addString(
             '<script>window.pmodAdminConfig = ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) . ';</script>'
         );
+        Asset::getInstance()->addJs('/bitrix/js/prospektweb.propmodificator/admin-builder.js');
     }
 }

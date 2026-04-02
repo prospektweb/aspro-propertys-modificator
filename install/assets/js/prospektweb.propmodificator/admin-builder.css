@@ -1,52 +1,124 @@
 .pmod-admin-root {
     margin: 12px 0;
-    padding: 12px;
-    border: 1px solid #d7d8da;
-    border-radius: 10px;
-    background: #fff;
+    padding: 14px;
+    border: 1px solid #d8dce2;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
 }
 
 .pmod-admin-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 
-.pmod-admin-head h3 { margin: 0; }
-.pmod-admin-head p { margin: 4px 0 0; color: #777; }
+.pmod-admin-head h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.pmod-admin-head p {
+    margin: 6px 0 0;
+    color: #6e7680;
+    font-size: 12px;
+}
+
+.pmod-admin-head__controls {
+    display: grid;
+    grid-template-columns: 210px 320px auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.pmod-admin-empty {
+    border: 1px dashed #c7ced8;
+    color: #596273;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fff;
+}
 
 .pmod-admin-card {
-    border: 1px solid #e2e3e5;
-    border-radius: 8px;
+    border: 1px solid #d9e0ea;
+    border-radius: 10px;
     padding: 10px;
     margin-bottom: 10px;
-    background: #fafafa;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.pmod-admin-card__title { font-weight: 600; margin-bottom: 8px; }
-.pmod-admin-err { color: #c0392b; font-size: 12px; }
+.pmod-admin-card__title {
+    font-weight: 600;
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
-.pmod-admin-binding { margin-bottom: 8px; }
-.pmod-admin-marker { display: flex; gap: 6px; margin-top: 6px; }
-.pmod-admin-marker input { width: 220px; }
+.pmod-admin-card__title small {
+    color: #6f7984;
+    font-weight: 400;
+}
+
+.pmod-admin-err {
+    color: #c43333;
+    font-size: 12px;
+}
+
+.pmod-admin-binding {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid #eef2f7;
+    border-radius: 8px;
+    background: #fbfdff;
+}
+
+.pmod-admin-binding__grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr 1fr 1fr;
+    gap: 8px;
+}
+
+.pmod-admin-binding__grid label {
+    font-size: 11px;
+    color: #5c6674;
+    display: grid;
+    gap: 4px;
+}
 
 .pmod-admin-row {
     display: grid;
-    grid-template-columns: 90px 90px 90px 140px 170px 180px 1fr;
+    grid-template-columns: 170px 80px 80px 80px 120px 150px 150px 1fr;
     gap: 8px;
     align-items: center;
     margin-bottom: 8px;
 }
 
-.pmod-admin-row .pmod-inp {
-    width: 100%;
-    min-height: 30px;
-    border: 1px solid #d7d8da;
-    border-radius: 6px;
-    padding: 4px 8px;
+.pmod-check {
+    font-size: 12px;
+    white-space: nowrap;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    color: #3f4a58;
 }
 
-.pmod-admin-row label { font-size: 12px; white-space: nowrap; }
-.pmod-admin-actions { display: flex; gap: 8px; }
+.pmod-admin-row .pmod-inp,
+.pmod-admin-head .pmod-inp,
+.pmod-admin-binding .pmod-inp {
+    width: 100%;
+    min-height: 30px;
+    border: 1px solid #cfd6e1;
+    border-radius: 6px;
+    padding: 4px 8px;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.pmod-admin-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}

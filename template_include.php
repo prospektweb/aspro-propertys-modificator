@@ -208,13 +208,14 @@ $volumePropId   = null;
 
 if ($arProduct && $customConfigCode !== '') {
     $arCustomProps = $arProduct->GetProperties([], ['CODE' => $customConfigCode]);
-    $rawConfigValue = $arCustomProps[$customConfigCode]['VALUE'] ?? null;
+    $propPayload = $arCustomProps[$customConfigCode] ?? null;
+    $rawConfigValue = null;
 
-    if (is_array($rawConfigValue) && isset($rawConfigValue['TEXT'])) {
-        $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue['TEXT']);
-    } else {
-        $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue);
+    if (is_array($propPayload)) {
+        $rawConfigValue = $propPayload['~VALUE'] ?? $propPayload['VALUE'] ?? null;
     }
+
+    $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue);
 
     if (!empty($customConfig)) {
         $extracted = CustomConfig::extractCalculatorSettings($customConfig, $formatPropCode, $volumePropCode);

@@ -17,8 +17,22 @@
         return n;
     }
 
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     function getTextarea() {
-        return q('textarea[name^="PROP[' + cfg.customConfigPropertyId + ']"], textarea[name*="PROP[' + cfg.customConfigPropertyId + ']"]');
+        var pid = String(cfg.customConfigPropertyId);
+
+        return q('textarea[name^="PROP[' + pid + ']"], textarea[name*="PROP[' + pid + ']"]')
+            || q('textarea[name*="PROP_' + pid + '"]')
+            || q('textarea[id*="PROP_' + pid + '"]')
+            || q('textarea[id*="' + pid + '_VALUE_TEXT"]');
     }
 
     function parseJsonSafe(raw) {
@@ -32,16 +46,105 @@
         }
     }
 
+
     function normalizeInput(input) {
         return {
-            label: input && input.label ? input.label : '',
+            label: input && input.label ? String(input.label) : '',
             min: input && input.min !== undefined ? input.min : '',
             step: input && input.step !== undefined ? input.step : '',
             max: input && input.max !== undefined ? input.max : '',
-            measure: input && input.measure ? input.measure : '',
+            measure: input && input.measure ? String(input.measure) : '',
             showMeasure: !!(input && input.showMeasure),
             hidePresetButtons: !!(input && input.hidePresetButtons)
         };
+    }
+
+    function normalizeField(field) {
+        var mode = (field && field.mode === 'group') ? 'group' : 'single';
+        var inputs = Array.isArray(field && field.inputs) ? field.inputs.map(normalizeInput) : [normalizeInput({})];
+        if (mode === 'single') {
+            inputs = [inputs[0] || normalizeInput({})];
+        } else if (inputs.length > 4) {
+            inputs = inputs.slice(0, 4);
+        } else if (inputs.length === 0) {
+            inputs = [normalizeInput({})];
+        }
+
+        var replaceKeys = Array.isArray(field && field.replaceKeys) ? field.replaceKeys : [];
+        var normalizedReplace = inputs.map(function (_, idx) {
+            var rk = replaceKeys[idx] || {};
+            return {
+                key: rk.key ? String(rk.key) : '',
+                inputIndex: idx
+            };
+        });
+
+        return {
+            id: (field && field.id) ? String(field.id) : ('f_' + Date.now() + '_' + Math.round(Math.random() * 100000)),
+            name: (field && field.name) ? String(field.name) : '',
+            mode: mode,
+            binding: {
+                skuPropertyId: Number(field && field.binding && field.binding.skuPropertyId ? field.binding.skuPropertyId : 0) || 0,
+                skuPropertyCode: (field && field.binding && field.binding.skuPropertyCode) ? String(field.binding.skuPropertyCode) : '',
+                marker: {
+                    xmlId: (field && field.binding && field.binding.marker && field.binding.marker.xmlId) ? String(field.binding.marker.xmlId) : '',
+                    value: (field && field.binding && field.binding.marker && field.binding.marker.value) ? String(field.binding.marker.value) : ''
+                }
+            },
+            replaceKeys: normalizedReplace,
+            inputs: inputs
+        };
+    }
+
+    function normalizeState(rawState) {
+        var state = {
+            version: 1,
+            fields: []
+        };
+        if (!rawState || !Array.isArray(rawState.fields)) return state;
+
+        state.fields = rawState.fields.filter(function (f) { return f && typeof f === 'object'; }).map(normalizeField);
+        return state;
+    }
+
+    function saveJson(textarea, state) {
+        textarea.value = JSON.stringify({ version: 1, fields: state.fields }, null, 2);
+        try {
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+            var evt = document.createEvent('HTMLEvents');
+            evt.initEvent('change', true, false);
+            textarea.dispatchEvent(evt);
+        }
+    }
+
+    function validateField(field) {
+        if (!field.binding || !field.binding.skuPropertyCode) return 'Выберите list-свойство ТП для привязки';
+        if (!field.binding.marker || !field.binding.marker.xmlId || !field.binding.marker.value) return 'Заполните XML_ID и VALUE маркера';
+        if (!field.inputs || !field.inputs.length) return 'Добавьте хотя бы один инпут';
+        if (field.mode === 'single' && field.inputs.length !== 1) return 'Режим single должен иметь 1 инпут';
+        if (field.mode === 'group' && (field.inputs.length < 1 || field.inputs.length > 4)) return 'Режим group: от 1 до 4 инпутов';
+
+        for (var i = 0; i < field.inputs.length; i++) {
+            var inp = field.inputs[i] || {};
+            var min = inp.min === '' ? null : Number(inp.min);
+            var max = inp.max === '' ? null : Number(inp.max);
+            var step = inp.step === '' ? null : Number(inp.step);
+            if (min !== null && isNaN(min)) return 'MIN должен быть числом';
+            if (max !== null && isNaN(max)) return 'MAX должен быть числом';
+            if (step !== null && isNaN(step)) return 'STEP должен быть числом';
+            if (min !== null && max !== null && min > max) return 'MIN не может быть больше MAX';
+            if (step !== null && step <= 0) return 'STEP должен быть > 0';
+        }
+
+        return '';
+    }
+
+    function renderPropertyOptions(props, selectedCode) {
+        return props.map(function (p) {
+            var sel = p.code === selectedCode ? ' selected' : '';
+            return '<option value="' + escapeHtml(p.code) + '" data-id="' + p.id + '"' + sel + '>' + escapeHtml(p.name + ' (' + p.code + ')') + '</option>';
+        }).join('');
     }
 
     function fetchMeta(cb) {
@@ -51,192 +154,235 @@
 
         fetch(cfg.apiUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(function (json) { cb(json && json.success ? json.properties : []); })
+            .then(function (json) { cb((json && json.success && Array.isArray(json.properties)) ? json.properties : []); })
             .catch(function () { cb([]); });
-    }
-
-    function saveJson(textarea, state) {
-        textarea.value = JSON.stringify({ version: 1, fields: state.fields }, null, 2);
-    }
-
-    function validateField(field) {
-        if (!field.binding || !field.binding.skuPropertyCode) return 'Не выбрано свойство ТП';
-        if (!field.inputs || !field.inputs.length) return 'Добавьте хотя бы один инпут';
-        if (field.mode === 'single' && field.inputs.length !== 1) return 'Single-поле должно иметь 1 инпут';
-        if (field.mode === 'group' && (field.inputs.length < 1 || field.inputs.length > 4)) return 'Группа: от 1 до 4 инпутов';
-
-        for (var i = 0; i < field.inputs.length; i++) {
-            var inp = field.inputs[i];
-            var min = inp.min === '' ? null : Number(inp.min);
-            var max = inp.max === '' ? null : Number(inp.max);
-            var step = inp.step === '' ? null : Number(inp.step);
-            if (min !== null && max !== null && min > max) return 'MIN не может быть больше MAX';
-            if (step !== null && step <= 0) return 'STEP должен быть > 0';
-        }
-
-        return '';
-    }
-
-    function createField(properties) {
-        var mode = window.prompt('Тип поля: single или group', 'single');
-        if (!mode || (mode !== 'single' && mode !== 'group')) return null;
-
-        var bindCode = window.prompt('Код свойства ТП (list) для привязки', mode === 'single' ? cfg.volumePropCode : cfg.formatPropCode);
-        if (!bindCode) return null;
-
-        var bindProp = properties.find(function (p) { return p.code === bindCode; });
-        if (!bindProp) {
-            alert('Свойство не найдено в списке list-свойств ТП');
-            return null;
-        }
-
-        var markerXml = window.prompt('XML_ID маркера произвольного значения', 'CUSTOM_' + bindCode);
-        var markerVal = window.prompt('VALUE маркера произвольного значения', 'Произвольное значение');
-        if (!markerXml || !markerVal) return null;
-
-        var groupSize = mode === 'group' ? Number(window.prompt('Сколько инпутов в группе (1-4)', '2')) : 1;
-        if (mode === 'group' && (groupSize < 1 || groupSize > 4)) return null;
-
-        var inputs = [];
-        for (var i = 0; i < groupSize; i++) {
-            inputs.push(normalizeInput({ label: mode === 'group' ? ('Поле ' + (i + 1)) : 'Значение' }));
-        }
-
-        return {
-            id: 'f_' + Date.now() + '_' + Math.round(Math.random() * 1000),
-            name: bindProp.name,
-            mode: mode,
-            binding: {
-                skuPropertyId: bindProp.id,
-                skuPropertyCode: bindProp.code,
-                marker: { xmlId: markerXml, value: markerVal }
-            },
-            replaceKeys: inputs.map(function (_, idx) { return { key: '', inputIndex: idx }; }),
-            inputs: inputs
-        };
     }
 
     function createMarker(field, done) {
         var fd = new FormData();
         fd.append('action', 'create_marker');
         fd.append('sessid', cfg.sessid);
-        fd.append('property_id', String(field.binding.skuPropertyId));
-        fd.append('xml_id', field.binding.marker.xmlId || '');
-        fd.append('value', field.binding.marker.value || '');
+        fd.append('property_id', String(field.binding.skuPropertyId || 0));
+        fd.append('xml_id', String(field.binding.marker.xmlId || ''));
+        fd.append('value', String(field.binding.marker.value || ''));
 
         fetch(cfg.apiUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (json) {
-                if (!json.success) {
-                    alert('Не удалось создать маркер: ' + (json.error || 'unknown'));
+                if (!json || !json.success) {
+                    alert('Не удалось создать/обновить маркер: ' + ((json && json.error) || 'unknown'));
                 } else {
-                    alert('Маркер создан');
+                    alert('Маркер готов: #' + json.enum_id + (json.updated ? ' (обновлён)' : ' (создан)'));
                 }
                 done();
             })
             .catch(function () {
-                alert('Ошибка запроса создания маркера');
+                alert('Ошибка запроса к admin_config.php');
                 done();
             });
     }
 
-    function renderEditor(root, textarea, state, properties) {
+    function makeNewField(mode, propCode, props) {
+        var prop = null;
+        for (var i = 0; i < props.length; i++) {
+            if (props[i].code === propCode) {
+                prop = props[i];
+                break;
+            }
+        }
+
+        var inputs = [normalizeInput({ label: mode === 'group' ? 'Поле 1' : 'Значение' })];
+        if (mode === 'group') {
+            inputs.push(normalizeInput({ label: 'Поле 2' }));
+        }
+
+        return normalizeField({
+            id: 'f_' + Date.now() + '_' + Math.round(Math.random() * 1000),
+            name: prop ? prop.name : '',
+            mode: mode,
+            binding: {
+                skuPropertyId: prop ? Number(prop.id) : 0,
+                skuPropertyCode: prop ? prop.code : '',
+                marker: {
+                    xmlId: prop ? ('CUSTOM_' + prop.code) : '',
+                    value: 'Произвольное значение'
+                }
+            },
+            replaceKeys: inputs.map(function (_, idx) { return { key: '', inputIndex: idx }; }),
+            inputs: inputs
+        });
+    }
+
+    function renderHeader(root, textarea, state, props, rerender) {
+        var head = el('div', 'pmod-admin-head');
+        head.innerHTML =
+            '<div class="pmod-admin-head__text">'
+            + '<h3>Конструктор произвольных полей</h3>'
+            + '<p>MIN | STEP | MAX | MEASURE | чекбоксы | отдельный REPLACE_KEY на каждый инпут</p>'
+            + '</div>'
+            + '<div class="pmod-admin-head__controls">'
+            + '<select class="pmod-inp" data-role="new-mode"><option value="single">Одиночное поле</option><option value="group">Групповое поле (до 4)</option></select>'
+            + '<select class="pmod-inp" data-role="new-bind">' + renderPropertyOptions(props, cfg.volumePropCode || '') + '</select>'
+            + '<button type="button" class="adm-btn adm-btn-save" data-role="add-field">Добавить поле</button>'
+            + '</div>';
+
+        head.querySelector('[data-role="new-mode"]').onchange = function () {
+            var bind = head.querySelector('[data-role="new-bind"]');
+            if (this.value === 'group' && cfg.formatPropCode) bind.value = cfg.formatPropCode;
+            if (this.value === 'single' && cfg.volumePropCode) bind.value = cfg.volumePropCode;
+        };
+
+        head.querySelector('[data-role="add-field"]').onclick = function () {
+            if (!props.length) {
+                alert('Нет list-свойств в инфоблоке ТП. Проверьте настройки инфоблока предложений.');
+                return;
+            }
+            var mode = head.querySelector('[data-role="new-mode"]').value;
+            var bindCode = head.querySelector('[data-role="new-bind"]').value;
+            state.fields.push(makeNewField(mode, bindCode, props));
+            saveJson(textarea, state);
+            rerender();
+        };
+
+        root.appendChild(head);
+    }
+
+    function bindRowEvents(row, field, input, inputIdx, textarea, state) {
+        row.querySelector('[data-k="min"]').oninput = function () { input.min = this.value; saveJson(textarea, state); };
+        row.querySelector('[data-k="step"]').oninput = function () { input.step = this.value; saveJson(textarea, state); };
+        row.querySelector('[data-k="max"]').oninput = function () { input.max = this.value; saveJson(textarea, state); };
+        row.querySelector('[data-k="measure"]').oninput = function () { input.measure = this.value; saveJson(textarea, state); };
+        row.querySelector('[data-k="show"]').onchange = function () { input.showMeasure = !!this.checked; saveJson(textarea, state); };
+        row.querySelector('[data-k="hide"]').onchange = function () { input.hidePresetButtons = !!this.checked; saveJson(textarea, state); };
+        row.querySelector('[data-k="replace"]').oninput = function () {
+            field.replaceKeys[inputIdx] = field.replaceKeys[inputIdx] || { key: '', inputIndex: inputIdx };
+            field.replaceKeys[inputIdx].key = this.value;
+            saveJson(textarea, state);
+        };
+        row.querySelector('[data-k="label"]').oninput = function () { input.label = this.value; saveJson(textarea, state); };
+    }
+
+    function renderEditor(root, textarea, rawState, props) {
+        var state = normalizeState(rawState);
         root.innerHTML = '';
 
-        var head = el('div', 'pmod-admin-head', '<h3>Конструктор произвольных полей</h3><p>MIN | STEP | MAX | MEASURE | чекбоксы | REPLACE_KEY</p>');
-        var addBtn = el('button', 'adm-btn pmod-admin-btn', 'Добавить поле');
-        addBtn.type = 'button';
-        addBtn.onclick = function () {
-            var field = createField(properties);
-            if (!field) return;
-            state.fields.push(field);
-            saveJson(textarea, state);
-            renderEditor(root, textarea, state, properties);
-        };
-        head.appendChild(addBtn);
-        root.appendChild(head);
+        function rerender() {
+            renderEditor(root, textarea, state, props);
+        }
+
+        renderHeader(root, textarea, state, props, rerender);
+
+        if (!state.fields.length) {
+            root.appendChild(el('div', 'pmod-admin-empty', 'Пока нет полей. Добавьте первое поле сверху.'));
+        }
 
         state.fields.forEach(function (field, fieldIdx) {
             var card = el('div', 'pmod-admin-card');
             var err = validateField(field);
-            card.appendChild(el('div', 'pmod-admin-card__title', (field.name || 'Поле') + ' <small>(' + field.mode + ')</small>' + (err ? ' <span class="pmod-admin-err">' + err + '</span>' : '')));
+
+            card.appendChild(el(
+                'div',
+                'pmod-admin-card__title',
+                escapeHtml(field.name || 'Поле без названия')
+                + ' <small>(' + escapeHtml(field.mode) + ')</small>'
+                + (err ? ' <span class="pmod-admin-err">' + escapeHtml(err) + '</span>' : '')
+            ));
 
             var binding = el('div', 'pmod-admin-binding');
-            binding.innerHTML = '<div><b>Привязка:</b> ' + (field.binding.skuPropertyCode || '-') + '</div>' +
-                '<div class="pmod-admin-marker"><input type="text" placeholder="XML_ID" value="' + (field.binding.marker && field.binding.marker.xmlId ? field.binding.marker.xmlId : '') + '"> <input type="text" placeholder="VALUE" value="' + (field.binding.marker && field.binding.marker.value ? field.binding.marker.value : '') + '"> <button type="button" class="adm-btn">Создать маркер</button></div>';
+            var propOptions = renderPropertyOptions(props, field.binding.skuPropertyCode || '');
+            binding.innerHTML =
+                '<div class="pmod-admin-binding__grid">'
+                + '<label>Название поля<input class="pmod-inp" data-k="name" value="' + escapeHtml(field.name || '') + '"></label>'
+                + '<label>Привязка к свойству ТП<select class="pmod-inp" data-k="prop">' + propOptions + '</select></label>'
+                + '<label>XML_ID маркера<input class="pmod-inp" data-k="xml" value="' + escapeHtml(field.binding.marker.xmlId || '') + '"></label>'
+                + '<label>VALUE маркера<input class="pmod-inp" data-k="val" value="' + escapeHtml(field.binding.marker.value || '') + '"></label>'
+                + '</div>'
+                + '<div class="pmod-admin-actions">'
+                + '<button type="button" class="adm-btn" data-k="create-marker">Создать / обновить маркер</button>'
+                + '</div>';
 
-            var markerInputs = binding.querySelectorAll('input');
-            markerInputs[0].oninput = function () { field.binding.marker.xmlId = this.value; saveJson(textarea, state); };
-            markerInputs[1].oninput = function () { field.binding.marker.value = this.value; saveJson(textarea, state); };
-            binding.querySelector('button').onclick = function () { createMarker(field, function () {}); };
+            binding.querySelector('[data-k="name"]').oninput = function () { field.name = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="xml"]').oninput = function () { field.binding.marker.xmlId = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="val"]').oninput = function () { field.binding.marker.value = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="prop"]').onchange = function () {
+                var selected = props.filter(function (p) { return p.code === this.value; }.bind(this))[0] || null;
+                field.binding.skuPropertyCode = selected ? selected.code : '';
+                field.binding.skuPropertyId = selected ? Number(selected.id) : 0;
+                if (!field.name && selected) field.name = selected.name;
+                saveJson(textarea, state);
+                rerender();
+            };
+            binding.querySelector('[data-k="create-marker"]').onclick = function () {
+                createMarker(field, function () { saveJson(textarea, state); });
+            };
             card.appendChild(binding);
 
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
                 row.innerHTML =
-                    '<input class="pmod-inp" placeholder="MIN" value="' + (input.min === '' ? '' : input.min) + '">' +
-                    '<input class="pmod-inp" placeholder="STEP" value="' + (input.step === '' ? '' : input.step) + '">' +
-                    '<input class="pmod-inp" placeholder="MAX" value="' + (input.max === '' ? '' : input.max) + '">' +
-                    '<input class="pmod-inp pmod-measure" placeholder="MEASURE" value="' + (input.measure || '') + '">' +
-                    '<label><input type="checkbox" ' + (input.showMeasure ? 'checked' : '') + '> Показывать ед.</label>' +
-                    '<label><input type="checkbox" ' + (input.hidePresetButtons ? 'checked' : '') + '> Скрывать пресеты</label>' +
-                    '<input class="pmod-inp pmod-replace" placeholder="REPLACE_KEY" value="' + ((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
+                    '<input class="pmod-inp" data-k="label" placeholder="LABEL" value="' + escapeHtml(input.label || '') + '">'
+                    + '<input class="pmod-inp" data-k="min" placeholder="MIN" value="' + escapeHtml(input.min) + '">'
+                    + '<input class="pmod-inp" data-k="step" placeholder="STEP" value="' + escapeHtml(input.step) + '">'
+                    + '<input class="pmod-inp" data-k="max" placeholder="MAX" value="' + escapeHtml(input.max) + '">'
+                    + '<input class="pmod-inp" data-k="measure" placeholder="MEASURE" value="' + escapeHtml(input.measure || '') + '">'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед.</label>'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать пресеты</label>'
+                    + '<input class="pmod-inp" data-k="replace" placeholder="REPLACE_KEY" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
 
-                var controls = row.querySelectorAll('input');
-                controls[0].oninput = function () { input.min = this.value; saveJson(textarea, state); };
-                controls[1].oninput = function () { input.step = this.value; saveJson(textarea, state); };
-                controls[2].oninput = function () { input.max = this.value; saveJson(textarea, state); };
-                controls[3].oninput = function () { input.measure = this.value; saveJson(textarea, state); };
-                controls[4].onchange = function () { input.showMeasure = this.checked; saveJson(textarea, state); };
-                controls[5].onchange = function () { input.hidePresetButtons = this.checked; saveJson(textarea, state); };
-                controls[6].oninput = function () {
-                    field.replaceKeys[inputIdx] = field.replaceKeys[inputIdx] || { key: '', inputIndex: inputIdx };
-                    field.replaceKeys[inputIdx].key = this.value;
-                    saveJson(textarea, state);
-                };
-
+                bindRowEvents(row, field, input, inputIdx, textarea, state);
                 card.appendChild(row);
             });
 
             var actions = el('div', 'pmod-admin-actions');
-            var addInput = el('button', 'adm-btn', '+ Инпут');
-            addInput.type = 'button';
-            addInput.onclick = function () {
-                if (field.mode !== 'group' || field.inputs.length >= 4) return;
-                field.inputs.push(normalizeInput({}));
+            actions.innerHTML =
+                '<button type="button" class="adm-btn" data-k="add-input">+ Инпут</button>'
+                + '<button type="button" class="adm-btn" data-k="remove-input">− Инпут</button>'
+                + '<button type="button" class="adm-btn adm-btn-delete" data-k="remove-field">Удалить поле</button>';
+
+            actions.querySelector('[data-k="add-input"]').onclick = function () {
+                if (field.mode !== 'group') return;
+                if (field.inputs.length >= 4) return alert('В группе максимум 4 инпута');
+                field.inputs.push(normalizeInput({ label: 'Поле ' + (field.inputs.length + 1) }));
                 field.replaceKeys.push({ key: '', inputIndex: field.inputs.length - 1 });
                 saveJson(textarea, state);
-                renderEditor(root, textarea, state, properties);
+                rerender();
             };
 
-            var removeField = el('button', 'adm-btn', 'Удалить поле');
-            removeField.type = 'button';
-            removeField.onclick = function () {
+            actions.querySelector('[data-k="remove-input"]').onclick = function () {
+                if (field.inputs.length <= 1) return;
+                field.inputs.pop();
+                field.replaceKeys.pop();
+                saveJson(textarea, state);
+                rerender();
+            };
+
+            actions.querySelector('[data-k="remove-field"]').onclick = function () {
                 state.fields.splice(fieldIdx, 1);
                 saveJson(textarea, state);
-                renderEditor(root, textarea, state, properties);
+                rerender();
             };
 
-            actions.appendChild(addInput);
-            actions.appendChild(removeField);
             card.appendChild(actions);
-
             root.appendChild(card);
         });
+
+        saveJson(textarea, state);
     }
 
     ready(function () {
         var textarea = getTextarea();
-        if (!textarea) return;
+        if (!textarea) {
+            console.warn('pmod admin builder: textarea not found for property', cfg.customConfigPropertyId);
+            return;
+        }
 
         textarea.style.display = 'none';
         var root = el('div', 'pmod-admin-root');
         textarea.parentNode.insertBefore(root, textarea);
 
         fetchMeta(function (properties) {
-            var state = parseJsonSafe(textarea.value);
+            var state = normalizeState(parseJsonSafe(textarea.value));
             renderEditor(root, textarea, state, properties || []);
-            saveJson(textarea, state);
         });
     });
 })();
