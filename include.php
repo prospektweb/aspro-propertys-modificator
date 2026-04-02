@@ -15,4 +15,5 @@ Loader::registerAutoloadClasses('prospektweb.propmodificator', [
     'Prospektweb\\PropModificator\\BasketHandler'      => 'lib/BasketHandler.php',
     'Prospektweb\\PropModificator\\PageHandler'        => 'lib/PageHandler.php',
     'Prospektweb\\PropModificator\\AjaxController'     => 'lib/AjaxController.php',
+    'Prospektweb\\PropModificator\\CustomConfig'       => 'lib/CustomConfig.php',
 ]);

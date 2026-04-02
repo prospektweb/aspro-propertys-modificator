@@ -19,7 +19,7 @@
  *
  * Файл:
  *  1. Подключает JS и CSS модуля через Asset API (совместимо с кешем/композитом)
- *  2. Читает свойства текущего товара (SET_FORMAT, SET_VOLUME)
+ *  2. Читает JSON-конфиг конструктора полей из свойства товара (Text/HTML)
  *  3. Читает все ТП с их свойствами и ценами
  *  4. Инжектирует конфигурационный объект window.pmodConfig в <head> страницы
  */
@@ -30,6 +30,7 @@ use Bitrix\Main\Page\AssetLocation;
 use Prospektweb\PropModificator\Config;
 use Prospektweb\PropModificator\PageHandler;
 use Prospektweb\PropModificator\PropertyValidator;
+use Prospektweb\PropModificator\CustomConfig;
 use Bitrix\Catalog\PriceTable;
 use Bitrix\Catalog\GroupTable;
 use Bitrix\Catalog\RoundingTable;
@@ -49,8 +50,7 @@ $offersIblockId   = Config::getOffersIblockId();
 $productsIblockId = Config::getProductsIblockId();
 $formatPropCode   = Config::getFormatPropCode();
 $volumePropCode   = Config::getVolumePropCode();
-$setFormatCode    = Config::getSetFormatPropCode();
-$setVolumeCode    = Config::getSetVolumePropCode();
+$customConfigCode = Config::getCustomConfigPropCode();
 $priceTypeId      = Config::getPriceTypeId();
 
 // ─── Определяем текущий товар ─────────────────────────────────────────────────
@@ -195,44 +195,37 @@ if (!$productId) {
     return;
 }
 
-// ─── Читаем настройки товара (SET_FORMAT, SET_VOLUME) ─────────────────────────
+// ─── Читаем JSON-конфиг товара (Text/HTML) ───────────────────────────────────
 
 $rsProduct = CIBlockElement::GetByID($productId);
 $arProduct = $rsProduct->GetNextElement();
 
 $formatSettings = [];
 $volumeSettings = [];
+$customConfig   = [];
 $formatPropId   = null;
 $volumePropId   = null;
 
-if ($arProduct) {
-    // Загружаем свойства по одному с фильтром по CODE (строка, не массив)
-    // чтобы избежать TypeError в старых версиях API и не загружать все свойства
-    $arFormatProps = $arProduct->GetProperties([], ['CODE' => $setFormatCode]);
-    $arVolumeProps = $arProduct->GetProperties([], ['CODE' => $setVolumeCode]);
+if ($arProduct && $customConfigCode !== '') {
+    $arCustomProps = $arProduct->GetProperties([], ['CODE' => $customConfigCode]);
+    $rawConfigValue = $arCustomProps[$customConfigCode]['VALUE'] ?? null;
 
-    if (!empty($arFormatProps[$setFormatCode]['VALUE'])) {
-        foreach ((array)$arFormatProps[$setFormatCode]['VALUE'] as $idx => $key) {
-            $val = $arFormatProps[$setFormatCode]['DESCRIPTION'][$idx] ?? null;
-            if ($key && $val !== null) {
-                $formatSettings[strtoupper(trim($key))] = (int)$val;
-            }
-        }
+    if (is_array($rawConfigValue) && isset($rawConfigValue['TEXT'])) {
+        $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue['TEXT']);
+    } else {
+        $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue);
     }
 
-    if (!empty($arVolumeProps[$setVolumeCode]['VALUE'])) {
-        foreach ((array)$arVolumeProps[$setVolumeCode]['VALUE'] as $idx => $key) {
-            $val = $arVolumeProps[$setVolumeCode]['DESCRIPTION'][$idx] ?? null;
-            if ($key && $val !== null) {
-                $volumeSettings[strtoupper(trim($key))] = (int)$val;
-            }
-        }
+    if (!empty($customConfig)) {
+        $extracted = CustomConfig::extractCalculatorSettings($customConfig, $formatPropCode, $volumePropCode);
+        $formatSettings = $extracted['formatSettings'];
+        $volumeSettings = $extracted['volumeSettings'];
     }
 }
 
 // Если нет настроек — модуль не нужен для этого товара
 if (empty($formatSettings) && empty($volumeSettings)) {
-    PageHandler::debugLog('No SET_FORMAT/SET_VOLUME settings for productId=' . $productId . ', skipping');
+    PageHandler::debugLog('No custom JSON settings for productId=' . $productId . ', skipping');
     return;
 }
 
@@ -527,6 +520,7 @@ $pmodConfig = [
             'allPropIds'      => array_keys($otherProps),
             'roundingRules'   => $roundingRules,
             'initialVolume'   => $initialVolume,
+            'customConfig'    => $customConfig,
         ],
     ],
 ];

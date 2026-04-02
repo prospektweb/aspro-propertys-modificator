@@ -102,6 +102,8 @@ class prospektweb_propmodificator extends CModule
             Option::set($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', $productsIblockId);
         }
 
+        Option::set($this->MODULE_ID, 'CUSTOM_CONFIG_PROP_CODE', 'PMOD_CUSTOM_CONFIG');
+
         $this->validateOffersProperties($offersIblockId);
 
         if ($productsIblockId) {
@@ -218,7 +220,7 @@ class prospektweb_propmodificator extends CModule
             if (Loader::includeModule('iblock')) {
                 $productsIblockId = (int)Option::get($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', 0);
                 if ($productsIblockId > 0) {
-                    foreach (['SET_FORMAT', 'SET_VOLUME'] as $code) {
+                    foreach (['PMOD_CUSTOM_CONFIG'] as $code) {
                         $rsProp = CIBlockProperty::GetList(
                             [],
                             ['IBLOCK_ID' => $productsIblockId, 'CODE' => $code]
@@ -594,7 +596,7 @@ PHP;
     }
 
     /**
-     * Создаём SET_FORMAT и SET_VOLUME в инфоблоке товаров (если не существуют).
+     * Создаём свойство JSON-конфига PMOD_CUSTOM_CONFIG в инфоблоке товаров.
      */
     public function createProductProperties(int $productsIblockId): void
     {
@@ -604,30 +606,18 @@ PHP;
 
         $propsToCreate = [
             [
-                'CODE'             => 'SET_FORMAT',
-                'NAME'             => 'Настройки формата (для калькулятора)',
+                'CODE'             => 'PMOD_CUSTOM_CONFIG',
+                'NAME'             => 'Конструктор произвольных полей (JSON)',
                 'IBLOCK_ID'        => $productsIblockId,
                 'PROPERTY_TYPE'    => 'S',
-                'MULTIPLE'         => 'Y',
-                'WITH_DESCRIPTION' => 'Y',
+                'USER_TYPE'        => 'HTML',
+                'MULTIPLE'         => 'N',
+                'WITH_DESCRIPTION' => 'N',
                 'ACTIVE'           => 'Y',
                 'SORT'             => 500,
                 'FILTRABLE'        => 'N',
                 'IS_REQUIRED'      => 'N',
-                'HINT'             => 'Ключи: MIN_WIDTH, MAX_WIDTH, MIN_HEIGHT, MAX_HEIGHT, STEP. Значения — в описании.',
-            ],
-            [
-                'CODE'             => 'SET_VOLUME',
-                'NAME'             => 'Настройки тиража (для калькулятора)',
-                'IBLOCK_ID'        => $productsIblockId,
-                'PROPERTY_TYPE'    => 'S',
-                'MULTIPLE'         => 'Y',
-                'WITH_DESCRIPTION' => 'Y',
-                'ACTIVE'           => 'Y',
-                'SORT'             => 510,
-                'FILTRABLE'        => 'N',
-                'IS_REQUIRED'      => 'N',
-                'HINT'             => 'Ключи: MIN, MAX, STEP. Значения — в описании.',
+                'HINT'             => 'JSON-конфиг конструктора полей. Редактируется UI-редактором модуля.',
             ],
         ];
 
