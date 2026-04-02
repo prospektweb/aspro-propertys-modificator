@@ -25,6 +25,15 @@
     font-size: 12px;
 }
 
+.pmod-admin-status {
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.pmod-admin-status--error { color: #c43333; }
+.pmod-admin-status--success { color: #1e7f2d; }
+.pmod-admin-status--info { color: #6e7680; }
+
 .pmod-admin-head__controls {
     display: grid;
     grid-template-columns: 210px 320px auto;
