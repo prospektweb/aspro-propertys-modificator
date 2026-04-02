@@ -157,16 +157,6 @@ if (Loader::includeModule('iblock') && $offersIblockId > 0) {
                 </div>
             </td>
         </tr>
-        <?php else: ?>
-        <tr>
-            <td colspan="2">
-                <div class="adm-info-message-wrap success">
-                    <div class="adm-info-message">
-                        <?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_STEP1_VALIDATION_OK') ?>
-                    </div>
-                </div>
-            </td>
-        </tr>
         <?php endif; ?>
     </table>
 
