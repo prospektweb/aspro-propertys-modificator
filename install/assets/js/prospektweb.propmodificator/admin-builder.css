@@ -1,0 +1,52 @@
+.pmod-admin-root {
+    margin: 12px 0;
+    padding: 12px;
+    border: 1px solid #d7d8da;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.pmod-admin-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.pmod-admin-head h3 { margin: 0; }
+.pmod-admin-head p { margin: 4px 0 0; color: #777; }
+
+.pmod-admin-card {
+    border: 1px solid #e2e3e5;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+
+.pmod-admin-card__title { font-weight: 600; margin-bottom: 8px; }
+.pmod-admin-err { color: #c0392b; font-size: 12px; }
+
+.pmod-admin-binding { margin-bottom: 8px; }
+.pmod-admin-marker { display: flex; gap: 6px; margin-top: 6px; }
+.pmod-admin-marker input { width: 220px; }
+
+.pmod-admin-row {
+    display: grid;
+    grid-template-columns: 90px 90px 90px 140px 170px 180px 1fr;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.pmod-admin-row .pmod-inp {
+    width: 100%;
+    min-height: 30px;
+    border: 1px solid #d7d8da;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+.pmod-admin-row label { font-size: 12px; white-space: nowrap; }
+.pmod-admin-actions { display: flex; gap: 8px; }

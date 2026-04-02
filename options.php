@@ -46,8 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         'PRODUCTS_IBLOCK_ID',
         'FORMAT_PROP_CODE',
         'VOLUME_PROP_CODE',
-        'SET_FORMAT_PROP_CODE',
-        'SET_VOLUME_PROP_CODE',
+        'CUSTOM_CONFIG_PROP_CODE',
         'PRICE_TYPE_ID',
         'CATALOG_PATH_FILTER',
     ];
@@ -134,24 +133,12 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_FORMAT_PROP_CODE_HINT') ?></small>
+            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CUSTOM_CONFIG_PROP_CODE') ?></b><br>
+            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CUSTOM_CONFIG_PROP_CODE_HINT') ?></small>
         </td>
         <td class="adm-detail-content-cell-r">
-            <input type="text" name="SET_FORMAT_PROP_CODE"
-                   value="<?= htmlspecialchars($options['SET_FORMAT_PROP_CODE']) ?>"
-                   size="30" maxlength="100">
-        </td>
-    </tr>
-
-    <tr>
-        <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SET_VOLUME_PROP_CODE_HINT') ?></small>
-        </td>
-        <td class="adm-detail-content-cell-r">
-            <input type="text" name="SET_VOLUME_PROP_CODE"
-                   value="<?= htmlspecialchars($options['SET_VOLUME_PROP_CODE']) ?>"
+            <input type="text" name="CUSTOM_CONFIG_PROP_CODE"
+                   value="<?= htmlspecialchars($options['CUSTOM_CONFIG_PROP_CODE']) ?>"
                    size="30" maxlength="100">
         </td>
     </tr>
