@@ -445,6 +445,8 @@
             var minH   = fmtCfg.MIN_HEIGHT || 10;
             var maxH   = fmtCfg.MAX_HEIGHT || 1200;
             var step   = fmtCfg.STEP       || 1;
+            var formatMeasure = fmtCfg.MEASURE || 'мм';
+            var showFormatMeasure = fmtCfg.SHOW_MEASURE === 'Y';
 
             // Начальное значение: активная кнопка или первая
             var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
@@ -469,7 +471,7 @@
             ui.innerHTML = [
                 '<div class="pmod-format-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Ширина, мм</label>',
+                    '<label class="pmod-label">Ширина' + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить ширину">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-width"',
@@ -480,7 +482,7 @@
                   '</div>',
                   '<span class="pmod-format-x">&#215;</span>',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Высота, мм</label>',
+                    '<label class="pmod-label">Высота' + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить высоту">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-height"',
@@ -613,9 +615,14 @@
             var minV   = volCfg.MIN  || 10;
             var maxV   = volCfg.MAX  || 100000;
             var step   = volCfg.STEP || 1;
+            var volumeMeasure = volCfg.MEASURE || 'шт';
+            var showVolumeMeasure = volCfg.SHOW_MEASURE === 'Y';
+            var hidePresetButtons = volCfg.HIDE_PRESET_BUTTONS === 'Y';
 
-            // Скрываем стандартные кнопки пресетов (остаются в DOM)
-            valuesEl.classList.add('pmod-preset-buttons--hidden');
+            // Скрываем стандартные кнопки пресетов только если включен флаг
+            if (hidePresetButtons) {
+                valuesEl.classList.add('pmod-preset-buttons--hidden');
+            }
 
             // Собираем пресеты из скрытых кнопок
             var presetBtns = valuesEl.querySelectorAll('.sku-props__value');
@@ -647,6 +654,7 @@
                            ' aria-label="Тираж">',
                     '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить тираж">+</button>',
                   '</div>',
+                  (showVolumeMeasure ? '<span class="pmod-volume-measure">' + volumeMeasure + '</span>' : ''),
                 '</div>',
             ].join('');
 
@@ -689,17 +697,19 @@
             }
 
             // ── Показать/скрыть кнопки пресетов при фокусе/потере фокуса ────────
-            volumeInput.addEventListener('focus', function () {
-                valuesEl.classList.remove('pmod-preset-buttons--hidden');
-                valuesEl.classList.add('pmod-preset-buttons--floating');
-            });
+            if (hidePresetButtons) {
+                volumeInput.addEventListener('focus', function () {
+                    valuesEl.classList.remove('pmod-preset-buttons--hidden');
+                    valuesEl.classList.add('pmod-preset-buttons--floating');
+                });
 
-            volumeInput.addEventListener('blur', function () {
-                setTimeout(function () {
-                    valuesEl.classList.add('pmod-preset-buttons--hidden');
-                    valuesEl.classList.remove('pmod-preset-buttons--floating');
-                }, 200);
-            });
+                volumeInput.addEventListener('blur', function () {
+                    setTimeout(function () {
+                        valuesEl.classList.add('pmod-preset-buttons--hidden');
+                        valuesEl.classList.remove('pmod-preset-buttons--floating');
+                    }, 200);
+                });
+            }
 
             // ── Обработчик изменения инпута ────────────────────────────────────
             function onVolumeChange(isImmediate) {

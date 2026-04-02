@@ -81,19 +81,11 @@ class Config
     }
 
     /**
-     * Символьный код свойства НАСТРОЙКИ ФОРМАТА в инфоблоке товаров.
+     * Символьный код свойства JSON-конфига кастомных полей в инфоблоке товаров.
      */
-    public static function getSetFormatPropCode(): string
+    public static function getCustomConfigPropCode(): string
     {
-        return self::get('SET_FORMAT_PROP_CODE', 'SET_FORMAT');
-    }
-
-    /**
-     * Символьный код свойства НАСТРОЙКИ ТИРАЖА в инфоблоке товаров.
-     */
-    public static function getSetVolumePropCode(): string
-    {
-        return self::get('SET_VOLUME_PROP_CODE', 'SET_VOLUME');
+        return self::get('CUSTOM_CONFIG_PROP_CODE', 'PMOD_CUSTOM_CONFIG');
     }
 
     /**
