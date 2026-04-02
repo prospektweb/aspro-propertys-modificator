@@ -44,6 +44,7 @@
             if (name.indexOf('PROP_' + pid) !== -1) score += 40;
             if (id.indexOf('PROP_' + pid) !== -1) score += 30;
             if (id.indexOf(pid + '_VALUE_TEXT') !== -1) score += 35;
+            if (id.indexOf('_PROP_' + pid + '_') !== -1) score += 42;
             if (name.indexOf('PROP[') !== -1 && name.indexOf('][VALUE][TEXT]') !== -1 && name.indexOf('[' + pid + ']') !== -1) score += 45;
             if (name.indexOf('PROP[') !== -1 && name.indexOf('][~VALUE][TEXT]') !== -1 && name.indexOf('[' + pid + ']') !== -1) score += 45;
             if (pcode && (nm.indexOf(pcode) !== -1 || im.indexOf(pcode) !== -1)) score += 15;
@@ -59,6 +60,18 @@
 
     function getTextarea() {
         var found = collectTextareaCandidates();
+        if (!found.length && cfg.customConfigPropertyCode) {
+            var lbl = qa('label, b, td, span').find(function (n) {
+                return String(n.textContent || '').toUpperCase().indexOf(String(cfg.customConfigPropertyCode).toUpperCase()) !== -1;
+            });
+            if (lbl) {
+                var ctx = lbl.closest('tr') || lbl.closest('.adm-detail-content-cell-r') || lbl.parentNode;
+                if (ctx) {
+                    var near = q('textarea', ctx);
+                    if (near) return near;
+                }
+            }
+        }
         return found.length ? found[0] : null;
     }
 
@@ -408,14 +421,32 @@
         saveJson(textarea, state);
     }
 
+    function findMountHost(textarea) {
+        return textarea.closest('.adm-detail-content-cell-r')
+            || textarea.closest('td')
+            || textarea.parentNode;
+    }
+
     function mountBuilder() {
         var textarea = getTextarea();
         if (!textarea || !textarea.parentNode) return false;
         if (textarea._pmodBuilderMounted) return true;
 
-        textarea.style.display = 'none';
+        var sourceWrap = textarea.closest('.typehtml')
+            || textarea.closest('.adm-detail-content-cell-r')
+            || textarea.parentNode;
+
+        if (sourceWrap) {
+            sourceWrap.classList.add('pmod-admin-source--hidden');
+        } else {
+            textarea.style.display = 'none';
+        }
+
+        var mountHost = findMountHost(textarea);
+        if (!mountHost) return false;
+
         var root = el('div', 'pmod-admin-root');
-        textarea.parentNode.insertBefore(root, textarea);
+        mountHost.insertBefore(root, mountHost.firstChild || null);
         textarea._pmodBuilderMounted = true;
 
         fetchMeta(function (properties) {
@@ -430,11 +461,16 @@
         var maxAttempts = 25;
         var attempts = 0;
         var observer = null;
+        var timer = null;
 
         function stopObserver() {
             if (observer) {
                 observer.disconnect();
                 observer = null;
+            }
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
             }
         }
 
@@ -451,7 +487,7 @@
         }
 
         tryMount();
-        var timer = setInterval(function () {
+        timer = setInterval(function () {
             if (attempts >= maxAttempts) {
                 clearInterval(timer);
                 return;

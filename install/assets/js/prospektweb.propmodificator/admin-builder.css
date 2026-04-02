@@ -1,9 +1,22 @@
 .pmod-admin-root {
-    margin: 12px 0;
-    padding: 14px;
-    border: 1px solid #d8dce2;
-    border-radius: 12px;
-    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    margin: 12px 0 16px;
+    padding: 16px;
+    border: 1px solid #dbe4ee;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    box-shadow: 0 8px 20px rgba(31, 41, 55, .08);
+    animation: pmod-fade-in .22s ease-out;
+}
+
+.pmod-admin-source--hidden .typehtml,
+.pmod-admin-source--hidden > .typehtml,
+.pmod-admin-source--hidden textarea {
+    display: none !important;
+}
+
+@keyframes pmod-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .pmod-admin-head {
@@ -55,7 +68,13 @@
     padding: 10px;
     margin-bottom: 10px;
     background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 8px rgba(17, 24, 39, 0.06);
+    transition: box-shadow .2s ease, transform .2s ease;
+}
+
+.pmod-admin-card:hover {
+    box-shadow: 0 8px 18px rgba(17, 24, 39, 0.10);
+    transform: translateY(-1px);
 }
 
 .pmod-admin-card__title {

@@ -232,7 +232,7 @@ class BasketHandler
             return ['format' => [], 'volume' => []];
         }
 
-        $props = $arElement->GetProperties([], ['CODE' => $customConfigCode]);
+        $props = $arElement->GetProperties([], []);
         $payload = $props[$customConfigCode] ?? null;
         $rawValue = null;
 
