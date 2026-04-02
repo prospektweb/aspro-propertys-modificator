@@ -136,6 +136,19 @@ class prospektweb_propmodificator extends CModule
             }
         }
 
+
+        // Admin tools endpoint → /bitrix/tools/prospektweb.propmodificator/
+        $toolsSrc = __DIR__ . '/assets/tools/prospektweb.propmodificator';
+        $toolsDest = Application::getDocumentRoot() . '/bitrix/tools/prospektweb.propmodificator';
+        if (is_dir($toolsSrc)) {
+            if (!is_dir($toolsDest)) {
+                @mkdir($toolsDest, 0755, true);
+            }
+            if (is_dir($toolsDest)) {
+                CopyDirFiles($toolsSrc, $toolsDest, true, true);
+            }
+        }
+
         // Aspro local overrides (копия шаблонных файлов в /local/templates/aspro-premier)
         $this->installAsproLocalOverrides();
 
@@ -177,6 +190,14 @@ class prospektweb_propmodificator extends CModule
             $this->MODULE_ID,
             'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
+        );
+
+        $eventManager->registerEventHandler(
+            'main',
+            'OnProlog',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\AdminHandler',
+            'onProlog'
         );
     }
 
@@ -241,6 +262,7 @@ class prospektweb_propmodificator extends CModule
         $this->uninstallAsproLocalOverrides();
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
         DeleteDirFilesEx('/ajax/prospektweb.propmodificator');
+        DeleteDirFilesEx('/bitrix/tools/prospektweb.propmodificator');
     }
 
     /**
@@ -450,6 +472,14 @@ PHP;
             $this->MODULE_ID,
             'Prospektweb\\PropModificator\\BasketHandler',
             'onBeforeSaleBasketItemSetFields'
+        );
+
+        $eventManager->unRegisterEventHandler(
+            'main',
+            'OnProlog',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\AdminHandler',
+            'onProlog'
         );
     }
 
