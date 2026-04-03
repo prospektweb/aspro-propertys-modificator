@@ -353,25 +353,44 @@
         },
 
         runFixedHeaderRefresh: function () {
-            if (window.BX &&
+            var fixedRoot = document.querySelector('#headerfixed');
+            if (!fixedRoot) return;
+
+            // Если фикс-шапка ещё не построена Аспро, сначала даём ей построиться штатно.
+            var hasAjaxHeader = !!fixedRoot.querySelector('.ajax-header');
+            if (!hasAjaxHeader &&
+                window.BX &&
                 BX.Aspro &&
                 BX.Aspro.Header &&
                 BX.Aspro.Header.Detail &&
                 typeof BX.Aspro.Header.Detail.set === 'function') {
                 BX.Aspro.Header.Detail.set();
-                return;
             }
 
-            // Fallback: как минимум синхронизируем заголовок fixed header из main title/h1
-            var fixedTitleEl = document.querySelector('#headerfixed .detail-header__info-title .visible-by-block-presence__condition');
-            if (!fixedTitleEl) return;
-
+            // 1) Синхронизируем title из главного блока
             var sourceTitleEl = document.querySelector('.main .catalog-detail__top-info .js-popup-title') || document.querySelector('h1');
-            if (!sourceTitleEl) return;
+            var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
+            if (sourceTitleEl && fixedTitleEl) {
+                var titleText = sourceTitleEl.textContent ? sourceTitleEl.textContent.trim() : '';
+                if (titleText) {
+                    fixedTitleEl.textContent = titleText;
+                }
+            }
 
-            var titleText = sourceTitleEl.textContent ? sourceTitleEl.textContent.trim() : '';
-            if (!titleText) return;
-            fixedTitleEl.textContent = titleText;
+            // 2) Синхронизируем цену из актуального pmod-блока (если есть)
+            var sourcePrice = document.querySelector('.main .catalog-detail__top-info .js-popup-price') ||
+                              document.querySelector('.main .catalog-detail__top-info .prices');
+            var sourceVat   = document.querySelector('.main .catalog-detail__top-info .vat');
+            var fixedPriceInner = fixedRoot.querySelector('.detail-header__price > .line-block');
+
+            if (sourcePrice && fixedPriceInner) {
+                var sourcePriceClone = sourcePrice.cloneNode(true);
+                var html = sourcePriceClone.outerHTML;
+                if (sourceVat) {
+                    html += sourceVat.outerHTML;
+                }
+                fixedPriceInner.innerHTML = html;
+            }
         },
 
         hookFixedHeaderSync: function () {
