@@ -10,6 +10,14 @@
     }
 
     function q(sel, root) { return (root || document).querySelector(sel); }
+    function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+    function logWarn(msg, extra) {
+        if (extra !== undefined) {
+            console.warn('pmod admin builder:', msg, extra);
+        } else {
+            console.warn('pmod admin builder:', msg);
+        }
+    }
     function el(tag, cls, html) {
         var n = document.createElement(tag);
         if (cls) n.className = cls;
@@ -26,13 +34,52 @@
             .replace(/'/g, '&#039;');
     }
 
-    function getTextarea() {
+    function collectTextareaCandidates() {
         var pid = String(cfg.customConfigPropertyId);
+        var pcode = String(cfg.customConfigPropertyCode || '').toUpperCase();
+        var all = qa('textarea');
+        var scoreMap = [];
 
-        return q('textarea[name^="PROP[' + pid + ']"], textarea[name*="PROP[' + pid + ']"]')
-            || q('textarea[name*="PROP_' + pid + '"]')
-            || q('textarea[id*="PROP_' + pid + '"]')
-            || q('textarea[id*="' + pid + '_VALUE_TEXT"]');
+        all.forEach(function (node) {
+            var name = String(node.getAttribute('name') || '');
+            var id = String(node.getAttribute('id') || '');
+            var nm = name.toUpperCase();
+            var im = id.toUpperCase();
+            var score = 0;
+
+            if (name.indexOf('PROP[' + pid + ']') !== -1) score += 50;
+            if (name.indexOf('PROP_' + pid) !== -1) score += 40;
+            if (id.indexOf('PROP_' + pid) !== -1) score += 30;
+            if (id.indexOf(pid + '_VALUE_TEXT') !== -1) score += 35;
+            if (id.indexOf('_PROP_' + pid + '_') !== -1) score += 42;
+            if (name.indexOf('PROP[') !== -1 && name.indexOf('][VALUE][TEXT]') !== -1 && name.indexOf('[' + pid + ']') !== -1) score += 45;
+            if (name.indexOf('PROP[') !== -1 && name.indexOf('][~VALUE][TEXT]') !== -1 && name.indexOf('[' + pid + ']') !== -1) score += 45;
+            if (pcode && (nm.indexOf(pcode) !== -1 || im.indexOf(pcode) !== -1)) score += 15;
+
+            if (score > 0) {
+                scoreMap.push({ node: node, score: score });
+            }
+        });
+
+        scoreMap.sort(function (a, b) { return b.score - a.score; });
+        return scoreMap.map(function (x) { return x.node; });
+    }
+
+    function getTextarea() {
+        var found = collectTextareaCandidates();
+        if (!found.length && cfg.customConfigPropertyCode) {
+            var lbl = qa('label, b, td, span').find(function (n) {
+                return String(n.textContent || '').toUpperCase().indexOf(String(cfg.customConfigPropertyCode).toUpperCase()) !== -1;
+            });
+            if (lbl) {
+                var ctx = lbl.closest('tr') || lbl.closest('.adm-detail-content-cell-r') || lbl.parentNode;
+                if (ctx) {
+                    var near = q('textarea', ctx);
+                    if (near) return near;
+                }
+            }
+        }
+        return found.length ? found[0] : null;
     }
 
     function parseJsonSafe(raw) {
@@ -158,6 +205,13 @@
             .catch(function () { cb([]); });
     }
 
+    function setStatus(root, message, type) {
+        var box = q('[data-role="status"]', root);
+        if (!box) return;
+        box.className = 'pmod-admin-status pmod-admin-status--' + (type || 'info');
+        box.textContent = message || '';
+    }
+
     function createMarker(field, done) {
         var fd = new FormData();
         fd.append('action', 'create_marker');
@@ -170,15 +224,13 @@
             .then(function (r) { return r.json(); })
             .then(function (json) {
                 if (!json || !json.success) {
-                    alert('Не удалось создать/обновить маркер: ' + ((json && json.error) || 'unknown'));
+                    done(false, 'Не удалось создать/обновить маркер: ' + ((json && json.error) || 'unknown'));
                 } else {
-                    alert('Маркер готов: #' + json.enum_id + (json.updated ? ' (обновлён)' : ' (создан)'));
+                    done(true, 'Маркер готов: #' + json.enum_id + (json.updated ? ' (обновлён)' : ' (создан)'));
                 }
-                done();
             })
             .catch(function () {
-                alert('Ошибка запроса к admin_config.php');
-                done();
+                done(false, 'Ошибка запроса к admin_config.php');
             });
     }
 
@@ -219,6 +271,7 @@
             '<div class="pmod-admin-head__text">'
             + '<h3>Конструктор произвольных полей</h3>'
             + '<p>MIN | STEP | MAX | MEASURE | чекбоксы | отдельный REPLACE_KEY на каждый инпут</p>'
+            + '<div class="pmod-admin-status pmod-admin-status--info" data-role="status"></div>'
             + '</div>'
             + '<div class="pmod-admin-head__controls">'
             + '<select class="pmod-inp" data-role="new-mode"><option value="single">Одиночное поле</option><option value="group">Групповое поле (до 4)</option></select>'
@@ -234,7 +287,7 @@
 
         head.querySelector('[data-role="add-field"]').onclick = function () {
             if (!props.length) {
-                alert('Нет list-свойств в инфоблоке ТП. Проверьте настройки инфоблока предложений.');
+                setStatus(root, 'Нет list-свойств в инфоблоке ТП. Проверьте настройки инфоблока предложений.', 'error');
                 return;
             }
             var mode = head.querySelector('[data-role="new-mode"]').value;
@@ -313,7 +366,10 @@
                 rerender();
             };
             binding.querySelector('[data-k="create-marker"]').onclick = function () {
-                createMarker(field, function () { saveJson(textarea, state); });
+                createMarker(field, function (ok, msg) {
+                    setStatus(root, msg, ok ? 'success' : 'error');
+                    saveJson(textarea, state);
+                });
             };
             card.appendChild(binding);
 
@@ -341,7 +397,10 @@
 
             actions.querySelector('[data-k="add-input"]').onclick = function () {
                 if (field.mode !== 'group') return;
-                if (field.inputs.length >= 4) return alert('В группе максимум 4 инпута');
+                if (field.inputs.length >= 4) {
+                    setStatus(root, 'В группе максимум 4 инпута.', 'error');
+                    return;
+                }
                 field.inputs.push(normalizeInput({ label: 'Поле ' + (field.inputs.length + 1) }));
                 field.replaceKeys.push({ key: '', inputIndex: field.inputs.length - 1 });
                 saveJson(textarea, state);
@@ -369,20 +428,115 @@
         saveJson(textarea, state);
     }
 
-    ready(function () {
-        var textarea = getTextarea();
-        if (!textarea) {
-            console.warn('pmod admin builder: textarea not found for property', cfg.customConfigPropertyId);
-            return;
+    function findPropertyCell(textarea) {
+        var pid = String(cfg.customConfigPropertyId || '');
+        var byId = q('#tr_PROPERTY_' + pid + ' .adm-detail-content-cell-r');
+        if (byId) return byId;
+
+        var row = textarea.closest('tr[id^="tr_PROPERTY_"]');
+        if (row) {
+            var c = q('.adm-detail-content-cell-r', row) || q('td:last-child', row);
+            if (c) return c;
         }
 
-        textarea.style.display = 'none';
+        return textarea.closest('.adm-detail-content-cell-r')
+            || textarea.closest('td')
+            || textarea.parentNode;
+    }
+
+    function hideSourceEditor(cell, textarea) {
+        if (!cell) return;
+        var pid = String(cfg.customConfigPropertyId || '');
+        var selector = 'table.nopadding, .bx-ed-type-selector, .bx-html-editor, textarea[name*="PROP_' + pid + '"], textarea[id*="PROP_' + pid + '"]';
+        var blocks = qa(selector, cell);
+        blocks.forEach(function (node) {
+            if (node && node.classList && node.classList.contains('pmod-admin-root')) return;
+            node.style.display = 'none';
+        });
+        if (textarea) {
+            textarea.style.display = 'none';
+        }
+    }
+
+    function mountBuilder() {
+        var textarea = getTextarea();
+        if (!textarea || !textarea.parentNode) return false;
+        if (textarea._pmodBuilderMounted && textarea._pmodBuilderRoot && document.contains(textarea._pmodBuilderRoot)) {
+            return true;
+        }
+        textarea._pmodBuilderMounted = false;
+        textarea._pmodBuilderRoot = null;
+
+        var mountHost = findPropertyCell(textarea);
+        if (!mountHost) return false;
+
         var root = el('div', 'pmod-admin-root');
-        textarea.parentNode.insertBefore(root, textarea);
+        mountHost.insertBefore(root, mountHost.firstChild || null);
+        hideSourceEditor(mountHost, textarea);
+        textarea._pmodBuilderMounted = true;
+        textarea._pmodBuilderRoot = root;
 
         fetchMeta(function (properties) {
             var state = normalizeState(parseJsonSafe(textarea.value));
             renderEditor(root, textarea, state, properties || []);
         });
-    });
+
+        return true;
+    }
+
+    function bootstrapWithRetry() {
+        var maxAttempts = 25;
+        var attempts = 0;
+        var observer = null;
+        var timer = null;
+
+        function stopObserver() {
+            if (observer) {
+                observer.disconnect();
+                observer = null;
+            }
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        }
+
+        function tryMount() {
+            try {
+                attempts += 1;
+                if (mountBuilder()) {
+                    stopObserver();
+                    return;
+                }
+            } catch (e) {
+                logWarn('mount failed with exception', e);
+            }
+            if (attempts >= maxAttempts) {
+                stopObserver();
+                logWarn('textarea not found for property #' + cfg.customConfigPropertyId + ' code=' + cfg.customConfigPropertyCode);
+            }
+        }
+
+        tryMount();
+        timer = setInterval(function () {
+            if (attempts >= maxAttempts) {
+                clearInterval(timer);
+                return;
+            }
+            tryMount();
+            if (attempts >= maxAttempts) {
+                clearInterval(timer);
+            }
+        }, 300);
+
+        if (window.MutationObserver) {
+            observer = new MutationObserver(function () {
+                if (attempts >= maxAttempts) return;
+                tryMount();
+            });
+            observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+        }
+    }
+
+    ready(bootstrapWithRetry);
 })();
