@@ -12,8 +12,10 @@
 
     // ── Константы ─────────────────────────────────────────────────────────────
 
-    var DEBOUNCE_MS              = 300;
-    var PRICE_UPDATE_TIMEOUT_MS  = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
+    var DEBOUNCE_MS                   = 300;
+    var PRICE_UPDATE_TIMEOUT_MS       = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
+    var FIXED_HEADER_REFRESH_DELAY_MS = 80;  // Дебаунс для синхронизации fixed header
+    var PMOD_MAIN_DOM_APPLIED_EVENT   = 'onPmodMainDomApplied';
 
     // ── Утилиты ───────────────────────────────────────────────────────────────
 
@@ -236,6 +238,10 @@
             // После обновления SKU в Аспро повторно применяем кастомную цену,
             // чтобы "техническая" цена X-ТП не перетирала расчёт pmod.
             PModificator.hookAsproSkuFinalAction();
+
+            // Синхронизируем fixed header с уже обновлённым главным блоком карточки
+            // (цены/заголовок могут догоняться асинхронно).
+            PModificator.hookFixedHeaderSync();
         },
 
         /**
@@ -334,6 +340,72 @@
 
         // ── События Аспро ────────────────────────────────────────────────────
 
+        notifyMainDomApplied: function (payload) {
+            if (window.BX && typeof BX.onCustomEvent === 'function') {
+                BX.onCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, [payload || {}]);
+            }
+
+            if (typeof window.CustomEvent === 'function') {
+                window.dispatchEvent(new CustomEvent('pmod:main-dom-applied', {
+                    detail: payload || {}
+                }));
+            }
+        },
+
+        runFixedHeaderRefresh: function () {
+            if (window.BX &&
+                BX.Aspro &&
+                BX.Aspro.Header &&
+                BX.Aspro.Header.Detail &&
+                typeof BX.Aspro.Header.Detail.set === 'function') {
+                BX.Aspro.Header.Detail.set();
+                return;
+            }
+
+            // Fallback: как минимум синхронизируем заголовок fixed header из main title/h1
+            var fixedTitleEl = document.querySelector('#headerfixed .detail-header__info-title .visible-by-block-presence__condition');
+            if (!fixedTitleEl) return;
+
+            var sourceTitleEl = document.querySelector('.main .catalog-detail__top-info .js-popup-title') || document.querySelector('h1');
+            if (!sourceTitleEl) return;
+
+            var titleText = sourceTitleEl.textContent ? sourceTitleEl.textContent.trim() : '';
+            if (!titleText) return;
+            fixedTitleEl.textContent = titleText;
+        },
+
+        hookFixedHeaderSync: function () {
+            if (window._pmodFixedHeaderSyncHooked) {
+                return;
+            }
+            window._pmodFixedHeaderSyncHooked = true;
+
+            var refreshDebounced = debounce(function () {
+                PModificator.runFixedHeaderRefresh();
+            }, FIXED_HEADER_REFRESH_DELAY_MS);
+
+            // 1) Явный сигнал от pmod о завершённом применении в main DOM
+            if (window.BX && typeof BX.addCustomEvent === 'function') {
+                BX.addCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, function () {
+                    refreshDebounced();
+                });
+            }
+
+            // 2) Браузерное событие (fallback/внешние подписчики)
+            window.addEventListener('pmod:main-dom-applied', function () {
+                refreshDebounced();
+            });
+
+            // 3) Страховочная подписка на изменения ключевого блока карточки
+            var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
+            if (mainTopInfo) {
+                var observer = new MutationObserver(function () {
+                    refreshDebounced();
+                });
+                observer.observe(mainTopInfo, { childList: true, subtree: true, characterData: true });
+            }
+        },
+
         hookAsproSkuFinalAction: function () {
             if (window._pmodAsproFinalActionHooked) {
                 return;
@@ -419,6 +491,11 @@
             h1.textContent = newText;
             h1.title       = newText;
             h1._pmodUpdatingTitle = false;
+
+            PModificator.notifyMainDomApplied({
+                source: 'updateH1WithVolume',
+                title: newText
+            });
         },
 
         /**
@@ -1984,6 +2061,12 @@
                     }
                 }
             }
+
+            PModificator.notifyMainDomApplied({
+                source: 'applyPricesToDom',
+                productId: state && state.productId ? state.productId : null,
+                hasMainPrice: mainPrice !== null
+            });
         },
 
         hideCustomPrice: function (container) {
