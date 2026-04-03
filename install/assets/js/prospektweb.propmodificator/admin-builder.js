@@ -383,13 +383,13 @@
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
                 row.innerHTML =
-                    '<input class="pmod-inp" data-k="label" placeholder="LABEL" value="' + escapeHtml(input.label || '') + '">'
-                    + '<input class="pmod-inp" data-k="min" placeholder="MIN" value="' + escapeHtml(input.min) + '">'
-                    + '<input class="pmod-inp" data-k="step" placeholder="STEP" value="' + escapeHtml(input.step) + '">'
-                    + '<input class="pmod-inp" data-k="max" placeholder="MAX" value="' + escapeHtml(input.max) + '">'
-                    + '<input class="pmod-inp" data-k="measure" placeholder="MEASURE" value="' + escapeHtml(input.measure || '') + '">'
-                    + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед.</label>'
-                    + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать пресеты</label>'
+                    '<input class="pmod-inp" data-k="label" placeholder="Значение" value="' + escapeHtml(input.label || '') + '">'
+                    + '<input class="pmod-inp" data-k="min" placeholder="Минимум" value="' + escapeHtml(input.min) + '">'
+                    + '<input class="pmod-inp" data-k="step" placeholder="Шаг" value="' + escapeHtml(input.step) + '">'
+                    + '<input class="pmod-inp" data-k="max" placeholder="Максимум" value="' + escapeHtml(input.max) + '">'
+                    + '<input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '">'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед. изм.</label>'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать варианты</label>'
                     + '<input class="pmod-inp" data-k="replace" placeholder="REPLACE_KEY" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
 
                 bindRowEvents(row, field, input, inputIdx, textarea, state);
