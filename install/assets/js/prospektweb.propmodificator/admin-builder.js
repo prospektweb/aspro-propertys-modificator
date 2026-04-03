@@ -308,7 +308,6 @@
             field.replaceKeys[inputIdx].key = this.value;
             saveJson(textarea, state);
         };
-        row.querySelector('[data-k="label"]').oninput = function () { input.label = this.value; saveJson(textarea, state); };
     }
 
     function renderEditor(root, textarea, rawState, props) {
@@ -375,8 +374,7 @@
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
                 row.innerHTML =
-                    '<input class="pmod-inp" data-k="label" placeholder="Значение" value="' + escapeHtml(input.label || '') + '">'
-                    + '<input class="pmod-inp" data-k="min" placeholder="Минимум" value="' + escapeHtml(input.min) + '">'
+                    '<input class="pmod-inp" data-k="min" placeholder="Минимум" value="' + escapeHtml(input.min) + '">'
                     + '<input class="pmod-inp" data-k="step" placeholder="Шаг" value="' + escapeHtml(input.step) + '">'
                     + '<input class="pmod-inp" data-k="max" placeholder="Максимум" value="' + escapeHtml(input.max) + '">'
                     + '<input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '">'
