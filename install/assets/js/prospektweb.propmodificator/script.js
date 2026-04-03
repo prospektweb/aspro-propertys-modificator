@@ -258,6 +258,8 @@
 
             var formatPropId = productCfg.formatPropId;
             var volumePropId = productCfg.volumePropId;
+            var formatPropCode = productCfg.formatPropCode || '';
+            var volumePropCode = productCfg.volumePropCode || '';
             var allPropIds   = productCfg.allPropIds || [];
             var catalogGroups = productCfg.catalogGroups || {};
 
@@ -277,6 +279,11 @@
                 offers:           productCfg.offers || [],
                 formatCfg:        productCfg.formatSettings || {},
                 volumeCfg:        productCfg.volumeSettings || {},
+                formatPropId:     formatPropId,
+                volumePropId:     volumePropId,
+                formatPropCode:   formatPropCode,
+                volumePropCode:   volumePropCode,
+                customConfig:     productCfg.customConfig || {},
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
                 catalogGroups:    catalogGroups,
@@ -298,6 +305,8 @@
 
             // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
             state.containerEl = container;
+            var initialH1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            state.baseTitleTemplate = initialH1 && initialH1.textContent ? initialH1.textContent.trim() : '';
 
             // Найти блоки свойств
             if (formatPropId) {
@@ -612,23 +621,112 @@
             obs.observe(h1, { childList: true, characterData: true, subtree: true });
         },
 
+        getCurrentFormatTitleValue: function (state) {
+            if (!state || !state.containerEl) return '';
+            if (state.customWidth !== null && state.customHeight !== null) {
+                return state.customWidth + 'x' + state.customHeight;
+            }
+
+            var formatInner = state.containerEl.querySelector('.sku-props__inner[data-id="' + state.formatPropId + '"]');
+            if (!formatInner) return '';
+
+            var activeBtn = formatInner.querySelector('.sku-props__value--active');
+            if (!activeBtn) return '';
+
+            var enumId = activeBtn.dataset.onevalue || '';
+            var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
+                ? state.formatEnumMap[enumId]
+                : (activeBtn.dataset.title || '');
+
+            return fmtXmlId === 'X' ? '' : String(fmtXmlId || '');
+        },
+
+        getCurrentVolumeTitleValue: function (state, fallbackVolumeStr) {
+            if (!state || !state.containerEl) return fallbackVolumeStr || '';
+            if (state.customVolume !== null) {
+                return String(state.customVolume);
+            }
+
+            var volumeInner = state.containerEl.querySelector('.sku-props__inner[data-id="' + state.volumePropId + '"]');
+            if (!volumeInner) return fallbackVolumeStr || '';
+
+            var activeBtn = volumeInner.querySelector('.sku-props__value--active');
+            if (!activeBtn) return fallbackVolumeStr || '';
+
+            var enumId = activeBtn.dataset.onevalue || '';
+            var rawVolXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
+                ? state.volumeEnumMap[enumId]
+                : (activeBtn.dataset.title || '');
+
+            if (rawVolXmlId === 'X') return fallbackVolumeStr || '';
+            return String(rawVolXmlId || fallbackVolumeStr || '');
+        },
+
+        replaceTokenAll: function (str, token, value) {
+            if (!token) return str;
+            return String(str).split(token).join(value);
+        },
+
+        buildTitleByReplaceKeys: function (state, volumeStr) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return null;
+
+            var template = state.baseTitleTemplate || '';
+            if (!template) return null;
+
+            var valuesByCode = {};
+            valuesByCode[String(state.volumePropCode || '').toUpperCase()] = PModificator.getCurrentVolumeTitleValue(state, volumeStr);
+            valuesByCode[String(state.formatPropCode || '').toUpperCase()] = PModificator.getCurrentFormatTitleValue(state);
+
+            var applied = false;
+
+            state.customConfig.fields.forEach(function (field) {
+                if (!field || !field.binding || !Array.isArray(field.replaceKeys)) return;
+
+                var propCode = String(field.binding.skuPropertyCode || '').toUpperCase();
+                if (!propCode) return;
+
+                var replaceValue = valuesByCode[propCode];
+                if (replaceValue === undefined || replaceValue === null || replaceValue === '') return;
+
+                field.replaceKeys.forEach(function (rk) {
+                    var key = rk && rk.key ? String(rk.key).trim() : '';
+                    if (!key) return;
+
+                    var before = template;
+                    template = PModificator.replaceTokenAll(template, '{{' + key + '}}', replaceValue);
+                    template = PModificator.replaceTokenAll(template, '{' + key + '}', replaceValue);
+                    template = PModificator.replaceTokenAll(template, '%' + key + '%', replaceValue);
+                    template = PModificator.replaceTokenAll(template, key, replaceValue);
+                    if (template !== before) {
+                        applied = true;
+                    }
+                });
+            });
+
+            return applied ? template : null;
+        },
+
         /**
-         * Заменяет последний сегмент в h1 (после « | ») на volumeStr
-         * и синхронно обновляет и textContent, и title.
+         * Обновляет h1 после изменения тиража:
+         *  - при наличии replaceKeys собирает заголовок по шаблону;
+         *  - иначе fallback: заменяет последний сегмент после « | ».
          *
          * @param {string} volumeStr  — например «4 950 экз»
+         * @param {Object=} state
          */
-        updateH1WithVolume: function (volumeStr) {
+        updateH1WithVolume: function (volumeStr, state) {
             var h1 = document.querySelector('h1.pmod-title-clamp');
             if (!h1) h1 = document.querySelector('h1');
             if (!h1) return;
 
-            var text  = h1.textContent.trim();
-            var parts = text.split(' | ');
-            if (parts.length < 2) return;
-
-            parts[parts.length - 1] = volumeStr;
-            var newText = parts.join(' | ');
+            var newText = PModificator.buildTitleByReplaceKeys(state, volumeStr);
+            if (!newText) {
+                var text  = h1.textContent.trim();
+                var parts = text.split(' | ');
+                if (parts.length < 2) return;
+                parts[parts.length - 1] = volumeStr;
+                newText = parts.join(' | ');
+            }
 
             h1._pmodUpdatingTitle = true;
             h1.textContent = newText;
@@ -637,6 +735,27 @@
 
             PModificator.notifyMainDomApplied({
                 source: 'updateH1WithVolume',
+                title: newText
+            });
+        },
+
+        refreshH1ByReplaceKeys: function (state) {
+            var h1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            if (!h1) return;
+
+            var text = (h1.textContent || '').trim();
+            var parts = text.split(' | ');
+            var fallbackVolume = parts.length > 1 ? parts[parts.length - 1] : '';
+            var newText = PModificator.buildTitleByReplaceKeys(state, fallbackVolume);
+            if (!newText || newText === text) return;
+
+            h1._pmodUpdatingTitle = true;
+            h1.textContent = newText;
+            h1.title = newText;
+            h1._pmodUpdatingTitle = false;
+
+            PModificator.notifyMainDomApplied({
+                source: 'refreshH1ByReplaceKeys',
                 title: newText
             });
         },
@@ -964,7 +1083,7 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = presetStr;
                     }
-                    PModificator.updateH1WithVolume(presetStr + ' экз');
+                    PModificator.updateH1WithVolume(presetStr + ' экз', state);
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
@@ -1001,7 +1120,7 @@
                             if (volumeLabelSpan) {
                                 volumeLabelSpan.textContent = str;
                             }
-                            PModificator.updateH1WithVolume(str + ' экз');
+                            PModificator.updateH1WithVolume(str + ' экз', state);
                             state._volumeLabelTimer = null;
                         }, PRICE_UPDATE_TIMEOUT_MS);
                     }(customStr));
@@ -1112,6 +1231,7 @@
                         PModificator.recomputeCustomMode(state);
                         PModificator.hideCustomPrice(container);
                     }
+                    PModificator.refreshH1ByReplaceKeys(state);
 
                 } else if (String(propId) === String(volumePropId)) {
                     // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
@@ -1154,7 +1274,7 @@
                             if (labelSpan) {
                                 labelSpan.textContent = presetLabelStr;
                             }
-                            PModificator.updateH1WithVolume(presetLabelStr + ' экз');
+                            PModificator.updateH1WithVolume(presetLabelStr + ' экз', state);
                         }
                     }
 
