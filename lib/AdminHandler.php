@@ -4,6 +4,7 @@ namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
 use Bitrix\Main\Page\Asset;
+use Bitrix\Main\Application;
 
 class AdminHandler
 {
@@ -53,9 +54,26 @@ class AdminHandler
         ];
 
         Asset::getInstance()->addCss('/bitrix/js/prospektweb.propmodificator/admin-builder.css');
+        self::injectInlineCssFallback('/bitrix/js/prospektweb.propmodificator/admin-builder.css');
         Asset::getInstance()->addString(
             '<script>window.pmodAdminConfig = ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) . ';</script>'
         );
         Asset::getInstance()->addJs('/bitrix/js/prospektweb.propmodificator/admin-builder.js');
+    }
+
+    private static function injectInlineCssFallback(string $publicPath): void
+    {
+        $absPath = Application::getDocumentRoot() . $publicPath;
+        if (!is_file($absPath) || !is_readable($absPath)) {
+            return;
+        }
+
+        $css = (string)file_get_contents($absPath);
+        if ($css === '') {
+            return;
+        }
+
+        $css = str_replace('</style', '<\\/style', $css);
+        Asset::getInstance()->addString('<style id="pmod-admin-builder-inline">' . $css . '</style>');
     }
 }
