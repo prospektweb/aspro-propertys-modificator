@@ -14,7 +14,7 @@ class CustomConfig
             return [];
         }
 
-        $decoded = json_decode($json, true);
+        $decoded = self::decodeJson($json);
         if (!is_array($decoded)) {
             return [];
         }
@@ -104,6 +104,31 @@ class CustomConfig
         $json = preg_replace('/^\xEF\xBB\xBF/', '', $json);
 
         return trim((string)$json);
+    }
+
+    private static function decodeJson(string $json): ?array
+    {
+        $decoded = json_decode($json, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $normalized = trim((string)preg_replace('/^\xEF\xBB\xBF/', '', $json));
+        $normalized = html_entity_decode($normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $normalized = str_replace(["\r\n", "\r"], "\n", $normalized);
+
+        $decoded = json_decode($normalized, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        $stripped = stripslashes($normalized);
+        $decoded = json_decode($stripped, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        return null;
     }
 
     private static function normalizeInput(array $input): array
