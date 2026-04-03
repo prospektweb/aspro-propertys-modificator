@@ -11,6 +11,13 @@
 
     function q(sel, root) { return (root || document).querySelector(sel); }
     function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+    function logWarn(msg, extra) {
+        if (extra !== undefined) {
+            console.warn('pmod admin builder:', msg, extra);
+        } else {
+            console.warn('pmod admin builder:', msg);
+        }
+    }
     function el(tag, cls, html) {
         var n = document.createElement(tag);
         if (cls) n.className = cls;
@@ -421,33 +428,53 @@
         saveJson(textarea, state);
     }
 
-    function findMountHost(textarea) {
+    function findPropertyCell(textarea) {
+        var pid = String(cfg.customConfigPropertyId || '');
+        var byId = q('#tr_PROPERTY_' + pid + ' .adm-detail-content-cell-r');
+        if (byId) return byId;
+
+        var row = textarea.closest('tr[id^="tr_PROPERTY_"]');
+        if (row) {
+            var c = q('.adm-detail-content-cell-r', row) || q('td:last-child', row);
+            if (c) return c;
+        }
+
         return textarea.closest('.adm-detail-content-cell-r')
             || textarea.closest('td')
             || textarea.parentNode;
     }
 
+    function hideSourceEditor(cell, textarea) {
+        if (!cell) return;
+        var pid = String(cfg.customConfigPropertyId || '');
+        var selector = 'table.nopadding, .bx-ed-type-selector, .bx-html-editor, textarea[name*="PROP_' + pid + '"], textarea[id*="PROP_' + pid + '"]';
+        var blocks = qa(selector, cell);
+        blocks.forEach(function (node) {
+            if (node && node.classList && node.classList.contains('pmod-admin-root')) return;
+            node.style.display = 'none';
+        });
+        if (textarea) {
+            textarea.style.display = 'none';
+        }
+    }
+
     function mountBuilder() {
         var textarea = getTextarea();
         if (!textarea || !textarea.parentNode) return false;
-        if (textarea._pmodBuilderMounted) return true;
-
-        var sourceWrap = textarea.closest('.typehtml')
-            || textarea.closest('.adm-detail-content-cell-r')
-            || textarea.parentNode;
-
-        if (sourceWrap) {
-            sourceWrap.classList.add('pmod-admin-source--hidden');
-        } else {
-            textarea.style.display = 'none';
+        if (textarea._pmodBuilderMounted && textarea._pmodBuilderRoot && document.contains(textarea._pmodBuilderRoot)) {
+            return true;
         }
+        textarea._pmodBuilderMounted = false;
+        textarea._pmodBuilderRoot = null;
 
-        var mountHost = findMountHost(textarea);
+        var mountHost = findPropertyCell(textarea);
         if (!mountHost) return false;
 
         var root = el('div', 'pmod-admin-root');
         mountHost.insertBefore(root, mountHost.firstChild || null);
+        hideSourceEditor(mountHost, textarea);
         textarea._pmodBuilderMounted = true;
+        textarea._pmodBuilderRoot = root;
 
         fetchMeta(function (properties) {
             var state = normalizeState(parseJsonSafe(textarea.value));
@@ -475,14 +502,18 @@
         }
 
         function tryMount() {
-            attempts += 1;
-            if (mountBuilder()) {
-                stopObserver();
-                return;
+            try {
+                attempts += 1;
+                if (mountBuilder()) {
+                    stopObserver();
+                    return;
+                }
+            } catch (e) {
+                logWarn('mount failed with exception', e);
             }
             if (attempts >= maxAttempts) {
                 stopObserver();
-                console.warn('pmod admin builder: textarea not found for property #' + cfg.customConfigPropertyId + ' code=' + cfg.customConfigPropertyCode);
+                logWarn('textarea not found for property #' + cfg.customConfigPropertyId + ' code=' + cfg.customConfigPropertyCode);
             }
         }
 
