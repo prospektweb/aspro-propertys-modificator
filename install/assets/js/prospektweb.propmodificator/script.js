@@ -355,21 +355,45 @@
             }
         },
 
-        ensureFixedHeaderBuilt: function () {
-            var fixedRoot = document.querySelector('#headerfixed');
-            if (!fixedRoot) return null;
-
-            // Если фикс-шапка ещё не построена Аспро, сначала даём ей построиться штатно.
-            var hasAjaxHeader = !!fixedRoot.querySelector('.ajax-header');
-            if (!hasAjaxHeader &&
+        getAsproHeaderDetail: function () {
+            if (
                 window.BX &&
                 BX.Aspro &&
                 BX.Aspro.Header &&
-                BX.Aspro.Header.Detail &&
-                typeof BX.Aspro.Header.Detail.set === 'function') {
-                BX.Aspro.Header.Detail.set();
+                BX.Aspro.Header.Detail
+            ) {
+                return BX.Aspro.Header.Detail;
             }
-            return fixedRoot;
+            return null;
+        },
+
+        ensureMainPopupTitleFromH1: function () {
+            var titleText = PModificator.getMainResolvedTitleText();
+            if (!titleText) return;
+
+            var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
+            if (!mainTopInfo) return;
+
+            var popupTitle = mainTopInfo.querySelector('.js-popup-title');
+            if (!popupTitle) return;
+
+            if (popupTitle.textContent.trim() !== titleText) {
+                popupTitle.textContent = titleText;
+            }
+        },
+
+        ensureFixedHeaderBuilt: function () {
+            var fixedRoot = document.querySelector('#headerfixed');
+            var detail = PModificator.getAsproHeaderDetail();
+            if (
+                fixedRoot &&
+                detail &&
+                typeof detail.set === 'function' &&
+                !fixedRoot.querySelector('.ajax-header')
+            ) {
+                detail.set();
+            }
+            return document.querySelector('#headerfixed');
         },
 
         getMainResolvedTitleText: function () {
@@ -393,28 +417,29 @@
             return mainTopInfo.querySelector('.js-popup-price') || mainTopInfo.querySelector('.prices');
         },
 
-        syncFixedHeaderTitleFromMain: function (fixedRoot) {
-            fixedRoot = fixedRoot || PModificator.ensureFixedHeaderBuilt();
-            if (!fixedRoot) return;
+        applyFixedHeaderTitleFromMain: function () {
+            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return false;
 
             var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
-            if (!fixedTitleEl) return;
+            if (!fixedTitleEl) return false;
 
             var titleText = PModificator.getMainResolvedTitleText();
             if (titleText) {
                 fixedTitleEl.textContent = titleText;
             }
+            return !!titleText;
         },
 
-        syncFixedHeaderPriceFromMain: function (fixedRoot) {
-            fixedRoot = fixedRoot || PModificator.ensureFixedHeaderBuilt();
-            if (!fixedRoot) return;
+        applyFixedHeaderPriceFromMain: function () {
+            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return false;
 
             var sourcePrice = PModificator.getMainResolvedPriceNode();
             var sourceVat   = document.querySelector('.main .catalog-detail__top-info .vat');
             var fixedPriceInner = fixedRoot.querySelector('.detail-header__price > .line-block');
 
-            if (!sourcePrice || !fixedPriceInner) return;
+            if (!sourcePrice || !fixedPriceInner) return false;
 
             var sourcePriceClone = sourcePrice.cloneNode(true);
             fixedPriceInner.innerHTML = '';
@@ -423,14 +448,52 @@
             if (sourceVat) {
                 fixedPriceInner.appendChild(sourceVat.cloneNode(true));
             }
+            return true;
         },
 
-        syncFixedHeaderFromMain: function () {
-            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
-            if (!fixedRoot) return;
+        patchAsproHeaderDetail: function () {
+            if (window._pmodAsproHeaderDetailPatched) return true;
 
-            PModificator.syncFixedHeaderTitleFromMain(fixedRoot);
-            PModificator.syncFixedHeaderPriceFromMain(fixedRoot);
+            var detail = PModificator.getAsproHeaderDetail();
+            if (!detail) return false;
+
+            var originalSetTitle = typeof detail.setTitle === 'function' ? detail.setTitle : null;
+            var originalSetPrice = typeof detail.setPrice === 'function' ? detail.setPrice : null;
+
+            detail.setTitle = function () {
+                PModificator.ensureMainPopupTitleFromH1();
+
+                if (originalSetTitle) {
+                    originalSetTitle.apply(this, arguments);
+                }
+
+                PModificator.applyFixedHeaderTitleFromMain();
+            };
+
+            detail.setPrice = function () {
+                var applied = PModificator.applyFixedHeaderPriceFromMain();
+                if (!applied && originalSetPrice) {
+                    originalSetPrice.apply(this, arguments);
+                    PModificator.applyFixedHeaderPriceFromMain();
+                }
+            };
+
+            window._pmodAsproHeaderDetailPatched = true;
+            return true;
+        },
+
+        refreshAsproFixedHeader: function () {
+            PModificator.patchAsproHeaderDetail();
+
+            var detail = PModificator.getAsproHeaderDetail();
+            if (detail && typeof detail.set === 'function') {
+                detail.set();
+                return;
+            }
+
+            // Fallback, если BX.Aspro.Header.Detail ещё не готов.
+            PModificator.applyFixedHeaderTitleFromMain();
+            PModificator.applyFixedHeaderPriceFromMain();
         },
 
         waitMainDomStable: function (payload) {
@@ -450,7 +513,7 @@
         finalizeMainDomUpdate: function (_payload) {
             // Доп. defer, чтобы попасть после batch-рендера Aspro/BX.
             setTimeout(function () {
-                PModificator.syncFixedHeaderFromMain();
+                PModificator.refreshAsproFixedHeader();
             }, 0);
         },
 
@@ -459,6 +522,7 @@
                 return;
             }
             window._pmodFixedHeaderSyncHooked = true;
+            PModificator.patchAsproHeaderDetail();
 
             // 1) Явный сигнал от pmod о завершённом применении в main DOM
             if (window.BX && typeof BX.addCustomEvent === 'function') {
