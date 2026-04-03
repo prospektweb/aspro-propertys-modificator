@@ -274,8 +274,7 @@
         var head = el('div', 'pmod-admin-head');
         head.innerHTML =
             '<div class="pmod-admin-head__text">'
-            + '<h3>Конструктор произвольных полей</h3>'
-            + '<p>MIN | STEP | MAX | MEASURE | чекбоксы | отдельный REPLACE_KEY на каждый инпут</p>'
+            + '<h3>Редактор полей для произвольных значений</h3>'
             + '<div class="pmod-admin-status pmod-admin-status--info" data-role="status"></div>'
             + '</div>'
             + '<div class="pmod-admin-head__controls">'
@@ -337,6 +336,8 @@
         state.fields.forEach(function (field, fieldIdx) {
             var card = el('div', 'pmod-admin-card');
             var err = validateField(field);
+            var body = el('div', 'pmod-admin-card__body');
+            var collapsed = true;
 
             card.appendChild(el(
                 'div',
@@ -344,6 +345,7 @@
                 escapeHtml(field.name || 'Поле без названия')
                 + ' <small>(' + escapeHtml(field.mode) + ')</small>'
                 + (err ? ' <span class="pmod-admin-err">' + escapeHtml(err) + '</span>' : '')
+                + ' <button type="button" class="adm-btn pmod-admin-card__toggle" data-k="toggle-body">Настроить</button>'
             ));
 
             var binding = el('div', 'pmod-admin-binding');
@@ -376,7 +378,7 @@
                     saveJson(textarea, state);
                 });
             };
-            card.appendChild(binding);
+            body.appendChild(binding);
 
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
@@ -391,7 +393,7 @@
                     + '<input class="pmod-inp" data-k="replace" placeholder="REPLACE_KEY" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
 
                 bindRowEvents(row, field, input, inputIdx, textarea, state);
-                card.appendChild(row);
+                body.appendChild(row);
             });
 
             var actions = el('div', 'pmod-admin-actions');
@@ -426,7 +428,14 @@
                 rerender();
             };
 
-            card.appendChild(actions);
+            body.appendChild(actions);
+            body.style.display = collapsed ? 'none' : '';
+            card.querySelector('[data-k="toggle-body"]').onclick = function () {
+                collapsed = !collapsed;
+                body.style.display = collapsed ? 'none' : '';
+                this.textContent = collapsed ? 'Настроить' : 'Свернуть';
+            };
+            card.appendChild(body);
             root.appendChild(card);
         });
 
@@ -463,6 +472,13 @@
         }
     }
 
+    function findPropertyRow(textarea) {
+        var pid = String(cfg.customConfigPropertyId || '');
+        var row = q('#tr_PROPERTY_' + pid);
+        if (row) return row;
+        return textarea.closest('tr');
+    }
+
     function mountBuilder() {
         var textarea = getTextarea();
         if (!textarea || !textarea.parentNode) return false;
@@ -474,9 +490,32 @@
 
         var mountHost = findPropertyCell(textarea);
         if (!mountHost) return false;
+        var propertyRow = findPropertyRow(textarea);
 
         var root = el('div', 'pmod-admin-root');
-        mountHost.insertBefore(root, mountHost.firstChild || null);
+        var hostRow = null;
+        if (propertyRow && propertyRow.parentNode && !q('.pmod-admin-host-row', propertyRow.parentNode)) {
+            hostRow = document.createElement('tr');
+            hostRow.className = 'pmod-admin-host-row';
+            var hostCell = document.createElement('td');
+            hostCell.colSpan = 2;
+            hostCell.className = 'adm-detail-content-cell-r';
+            hostCell.appendChild(root);
+            hostRow.appendChild(hostCell);
+            propertyRow.parentNode.insertBefore(hostRow, propertyRow.nextSibling);
+            propertyRow.style.display = 'none';
+        } else if (propertyRow && propertyRow.parentNode) {
+            var existedHost = q('.pmod-admin-host-row .adm-detail-content-cell-r', propertyRow.parentNode);
+            if (existedHost) {
+                existedHost.appendChild(root);
+            } else {
+                mountHost.insertBefore(root, mountHost.firstChild || null);
+            }
+            propertyRow.style.display = 'none';
+        } else {
+            mountHost.insertBefore(root, mountHost.firstChild || null);
+        }
+
         hideSourceEditor(mountHost, textarea);
         textarea._pmodBuilderMounted = true;
         textarea._pmodBuilderRoot = root;

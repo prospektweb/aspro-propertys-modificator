@@ -8,6 +8,8 @@
     animation: pmod-fade-in .22s ease-out;
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     color: #111827;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .pmod-admin-source--hidden .typehtml,
@@ -43,6 +45,10 @@
     font-size: 13px;
 }
 
+.pmod-admin-host-row > td {
+    padding: 14px 10px 4px !important;
+}
+
 .pmod-admin-status {
     margin-top: 8px;
     font-size: 12px;
@@ -54,9 +60,10 @@
 
 .pmod-admin-head__controls {
     display: grid;
-    grid-template-columns: 210px 320px auto;
+    grid-template-columns: minmax(220px, 260px) minmax(320px, 1fr) auto;
     gap: 10px;
     align-items: center;
+    width: min(100%, 920px);
 }
 
 .pmod-admin-empty {
@@ -90,6 +97,16 @@
     gap: 8px;
 }
 
+.pmod-admin-card__toggle {
+    margin-left: auto;
+}
+
+.pmod-admin-card__body {
+    border-top: 1px solid #eef3fb;
+    margin-top: 10px;
+    padding-top: 12px;
+}
+
 .pmod-admin-card__title small {
     color: #6f7984;
     font-weight: 400;
@@ -110,7 +127,7 @@
 
 .pmod-admin-binding__grid {
     display: grid;
-    grid-template-columns: 1fr 1.2fr 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
     gap: 8px;
 }
 
@@ -200,7 +217,8 @@
 }
 
 @media (max-width: 1400px) {
-    .pmod-admin-head__controls { grid-template-columns: 1fr 1fr; }
+    .pmod-admin-head__controls { grid-template-columns: 1fr; width: 100%; }
     .pmod-admin-head__controls .adm-btn-save { grid-column: 1 / -1; }
     .pmod-admin-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pmod-admin-binding__grid { grid-template-columns: 1fr; }
 }
