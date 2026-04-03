@@ -104,8 +104,6 @@ class prospektweb_propmodificator extends CModule
 
         Option::set($this->MODULE_ID, 'CUSTOM_CONFIG_PROP_CODE', 'PMOD_CUSTOM_CONFIG');
 
-        $this->validateOffersProperties($offersIblockId);
-
         if ($productsIblockId) {
             $this->createProductProperties($productsIblockId);
         }
@@ -546,83 +544,6 @@ PHP;
         }
 
         return 14;
-    }
-
-    /**
-     * Проверяем наличие и валидность свойств CALC_PROP_FORMAT и CALC_PROP_VOLUME
-     * в инфоблоке торговых предложений.
-     * Если значение-маркер «X» отсутствует в перечислении свойства — создаём его автоматически.
-     */
-    public function validateOffersProperties(int $offersIblockId): array
-    {
-        $issues = [];
-
-        if (!Loader::includeModule('iblock') || $offersIblockId <= 0) {
-            return $issues;
-        }
-
-        $propCodes = ['CALC_PROP_FORMAT', 'CALC_PROP_VOLUME'];
-
-        foreach ($propCodes as $code) {
-            $rsProp = CIBlockProperty::GetList(
-                [],
-                ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code, 'ACTIVE' => 'Y']
-            );
-            $prop = $rsProp->Fetch();
-
-            if (!$prop) {
-                $issues[] = "Свойство {$code} не найдено в инфоблоке ТП (ID={$offersIblockId})";
-                continue;
-            }
-
-            $propId = (int)$prop['ID'];
-
-            $rsEnum = CIBlockPropertyEnum::GetList(
-                ['SORT' => 'ASC'],
-                ['IBLOCK_ID' => $offersIblockId, 'CODE' => $code]
-            );
-
-            $valid    = false;
-            $hasXmark = false;
-            while ($arEnum = $rsEnum->Fetch()) {
-                $xmlId = $arEnum['XML_ID'];
-                if ($xmlId === 'X') {
-                    $hasXmark = true;
-                } elseif ($code === 'CALC_PROP_FORMAT') {
-                    if (preg_match('/^\d+x\d+$/i', $xmlId)) {
-                        $valid = true;
-                    }
-                } else {
-                    if (is_numeric($xmlId)) {
-                        $valid = true;
-                    }
-                }
-                // Прерываем перебор как только нашли оба флага
-                if ($valid && $hasXmark) {
-                    break;
-                }
-            }
-
-            if (!$valid) {
-                $issues[] = "Свойство {$code}: не найдено ни одного значения с корректным XML_ID";
-            }
-
-            // Если маркер произвольного значения «X» отсутствует — создаём его
-            if (!$hasXmark && $propId > 0) {
-                $oEnum = new CIBlockPropertyEnum();
-                $oEnum->Add([
-                    'PROPERTY_ID' => $propId,
-                    'VALUE'       => 'Произвольное',
-                    'XML_ID'      => 'X',
-                    'SORT'        => 999,
-                    'DEF'         => 'N',
-                ]);
-            }
-        }
-
-        Option::set($this->MODULE_ID, 'VALIDATION_ISSUES', implode("\n", $issues));
-
-        return $issues;
     }
 
     /**
