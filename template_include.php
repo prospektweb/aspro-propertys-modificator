@@ -207,13 +207,11 @@ $formatPropId   = null;
 $volumePropId   = null;
 
 if ($arProduct && $customConfigCode !== '') {
-    $arCustomProps = $arProduct->GetProperties([], ['CODE' => $customConfigCode]);
-    $propPayload = $arCustomProps[$customConfigCode] ?? null;
-    $rawConfigValue = null;
-
-    if (is_array($propPayload)) {
-        $rawConfigValue = $propPayload['~VALUE'] ?? $propPayload['VALUE'] ?? null;
-    }
+    $props = $arProduct->GetProperties([], []);
+    $propPayload = $props[$customConfigCode] ?? null;
+    $rawConfigValue = is_array($propPayload)
+        ? ($propPayload['~VALUE'] ?? $propPayload['VALUE'] ?? null)
+        : null;
 
     $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue);
 

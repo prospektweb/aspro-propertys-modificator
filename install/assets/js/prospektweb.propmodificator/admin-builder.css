@@ -1,52 +1,92 @@
 .pmod-admin-root {
-    margin: 12px 0;
-    padding: 14px;
-    border: 1px solid #d8dce2;
-    border-radius: 12px;
-    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    margin: 12px 0 16px;
+    padding: 18px;
+    border: 1px solid #e7edf6;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, .10);
+    animation: pmod-fade-in .22s ease-out;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #111827;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pmod-admin-source--hidden .typehtml,
+.pmod-admin-source--hidden > .typehtml,
+.pmod-admin-source--hidden textarea {
+    display: none !important;
+}
+
+@keyframes pmod-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .pmod-admin-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
 }
 
 .pmod-admin-head h3 {
     margin: 0;
     font-size: 18px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
 }
 
 .pmod-admin-head p {
-    margin: 6px 0 0;
-    color: #6e7680;
+    margin: 10px 0 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.pmod-admin-host-row > td {
+    padding: 14px 10px 4px !important;
+}
+
+.pmod-admin-status {
+    margin-top: 8px;
     font-size: 12px;
 }
 
+.pmod-admin-status--error { color: #c43333; }
+.pmod-admin-status--success { color: #1e7f2d; }
+.pmod-admin-status--info { color: #6e7680; }
+
 .pmod-admin-head__controls {
     display: grid;
-    grid-template-columns: 210px 320px auto;
-    gap: 8px;
+    grid-template-columns: minmax(220px, 260px) minmax(320px, 1fr) auto;
+    gap: 10px;
     align-items: center;
+    width: min(100%, 920px);
 }
 
 .pmod-admin-empty {
-    border: 1px dashed #c7ced8;
-    color: #596273;
-    border-radius: 8px;
-    padding: 16px;
+    border: 1px dashed #d6e1f0;
+    color: #64748b;
+    border-radius: 12px;
+    padding: 18px;
     background: #fff;
 }
 
 .pmod-admin-card {
-    border: 1px solid #d9e0ea;
-    border-radius: 10px;
-    padding: 10px;
-    margin-bottom: 10px;
+    border: 1px solid #e5ecf6;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
     background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 6px 16px rgba(17, 24, 39, 0.06);
+    transition: box-shadow .2s ease, transform .2s ease;
+}
+
+.pmod-admin-card:hover {
+    box-shadow: 0 16px 32px rgba(17, 24, 39, 0.12);
+    transform: translateY(-1px);
 }
 
 .pmod-admin-card__title {
@@ -55,6 +95,16 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.pmod-admin-card__toggle {
+    margin-left: auto;
+}
+
+.pmod-admin-card__body {
+    border-top: 1px solid #eef3fb;
+    margin-top: 10px;
+    padding-top: 12px;
 }
 
 .pmod-admin-card__title small {
@@ -68,16 +118,16 @@
 }
 
 .pmod-admin-binding {
-    margin-bottom: 10px;
-    padding: 8px;
-    border: 1px solid #eef2f7;
-    border-radius: 8px;
-    background: #fbfdff;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid #ebf1fa;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f9fbff 100%);
 }
 
 .pmod-admin-binding__grid {
     display: grid;
-    grid-template-columns: 1fr 1.2fr 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
     gap: 8px;
 }
 
@@ -90,35 +140,85 @@
 
 .pmod-admin-row {
     display: grid;
-    grid-template-columns: 170px 80px 80px 80px 120px 150px 150px 1fr;
-    gap: 8px;
+    grid-template-columns: 1.2fr .7fr .7fr .7fr .9fr auto auto 1fr;
+    gap: 10px;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .pmod-check {
-    font-size: 12px;
+    font-size: 13px;
     white-space: nowrap;
     display: flex;
     gap: 6px;
     align-items: center;
-    color: #3f4a58;
+    color: #374151;
+    padding: 6px 10px;
+    border: 1px solid #e7edf7;
+    border-radius: 10px;
+    background: #f9fbff;
 }
 
 .pmod-admin-row .pmod-inp,
 .pmod-admin-head .pmod-inp,
 .pmod-admin-binding .pmod-inp {
     width: 100%;
-    min-height: 30px;
-    border: 1px solid #cfd6e1;
-    border-radius: 6px;
-    padding: 4px 8px;
+    min-height: 38px;
+    border: 1px solid #d7e0ec;
+    border-radius: 10px;
+    padding: 8px 10px;
     background: #fff;
     box-sizing: border-box;
+    font-size: 14px;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.pmod-admin-root .pmod-inp:focus {
+    border-color: #3b82f6;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .18);
+}
+
+.pmod-admin-root .adm-btn {
+    min-height: 38px;
+    border-radius: 10px;
+    border: 1px solid #d5deea;
+    background: linear-gradient(180deg, #ffffff 0%, #f3f6fb 100%);
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    padding: 8px 14px;
+    transition: all .15s ease;
+}
+
+.pmod-admin-root .adm-btn:hover {
+    border-color: #c3d0e3;
+    box-shadow: 0 6px 14px rgba(59, 130, 246, .12);
+    transform: translateY(-1px);
+}
+
+.pmod-admin-root .adm-btn.adm-btn-save {
+    background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+    border-color: #15803d;
+    color: #fff;
+}
+
+.pmod-admin-root .adm-btn.adm-btn-delete {
+    color: #b91c1c;
+    border-color: #fecaca;
+    background: linear-gradient(180deg, #fff5f5 0%, #ffe9e9 100%);
 }
 
 .pmod-admin-actions {
     display: flex;
     gap: 8px;
     margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1400px) {
+    .pmod-admin-head__controls { grid-template-columns: 1fr; width: 100%; }
+    .pmod-admin-head__controls .adm-btn-save { grid-column: 1 / -1; }
+    .pmod-admin-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pmod-admin-binding__grid { grid-template-columns: 1fr; }
 }
