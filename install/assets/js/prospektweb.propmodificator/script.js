@@ -14,7 +14,7 @@
 
     var DEBOUNCE_MS                   = 300;
     var PRICE_UPDATE_TIMEOUT_MS       = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
-    var FIXED_HEADER_REFRESH_DELAY_MS = 80;  // Дебаунс для синхронизации fixed header
+    var FIXED_HEADER_REFRESH_DELAY_MS = 80;  // Пауза "тишины" main DOM перед sync fixed header
     var PMOD_MAIN_DOM_APPLIED_EVENT   = 'onPmodMainDomApplied';
 
     // ── Утилиты ───────────────────────────────────────────────────────────────
@@ -341,6 +341,9 @@
         // ── События Аспро ────────────────────────────────────────────────────
 
         notifyMainDomApplied: function (payload) {
+            // Единая точка входа в post-render sync пайплайн.
+            PModificator.scheduleMainDomSync(payload || {});
+
             if (window.BX && typeof BX.onCustomEvent === 'function') {
                 BX.onCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, [payload || {}]);
             }
@@ -352,9 +355,9 @@
             }
         },
 
-        runFixedHeaderRefresh: function () {
+        ensureFixedHeaderBuilt: function () {
             var fixedRoot = document.querySelector('#headerfixed');
-            if (!fixedRoot) return;
+            if (!fixedRoot) return null;
 
             // Если фикс-шапка ещё не построена Аспро, сначала даём ей построиться штатно.
             var hasAjaxHeader = !!fixedRoot.querySelector('.ajax-header');
@@ -366,31 +369,89 @@
                 typeof BX.Aspro.Header.Detail.set === 'function') {
                 BX.Aspro.Header.Detail.set();
             }
+            return fixedRoot;
+        },
 
-            // 1) Синхронизируем title из главного блока
-            var sourceTitleEl = document.querySelector('.main .catalog-detail__top-info .js-popup-title') || document.querySelector('h1');
-            var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
-            if (sourceTitleEl && fixedTitleEl) {
-                var titleText = sourceTitleEl.textContent ? sourceTitleEl.textContent.trim() : '';
-                if (titleText) {
-                    fixedTitleEl.textContent = titleText;
+        getMainResolvedTitleText: function () {
+            var h1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            if (!h1) return '';
+            return h1.textContent ? h1.textContent.trim() : '';
+        },
+
+        getMainResolvedPriceNode: function () {
+            var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
+            if (!mainTopInfo) return null;
+
+            var visiblePopupPrice = null;
+            mainTopInfo.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (!visiblePopupPrice && (el.offsetParent !== null || el.offsetHeight > 0)) {
+                    visiblePopupPrice = el;
                 }
-            }
+            });
 
-            // 2) Синхронизируем цену из актуального pmod-блока (если есть)
-            var sourcePrice = document.querySelector('.main .catalog-detail__top-info .js-popup-price') ||
-                              document.querySelector('.main .catalog-detail__top-info .prices');
+            if (visiblePopupPrice) return visiblePopupPrice;
+            return mainTopInfo.querySelector('.js-popup-price') || mainTopInfo.querySelector('.prices');
+        },
+
+        syncFixedHeaderTitleFromMain: function (fixedRoot) {
+            fixedRoot = fixedRoot || PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return;
+
+            var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
+            if (!fixedTitleEl) return;
+
+            var titleText = PModificator.getMainResolvedTitleText();
+            if (titleText) {
+                fixedTitleEl.textContent = titleText;
+            }
+        },
+
+        syncFixedHeaderPriceFromMain: function (fixedRoot) {
+            fixedRoot = fixedRoot || PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return;
+
+            var sourcePrice = PModificator.getMainResolvedPriceNode();
             var sourceVat   = document.querySelector('.main .catalog-detail__top-info .vat');
             var fixedPriceInner = fixedRoot.querySelector('.detail-header__price > .line-block');
 
-            if (sourcePrice && fixedPriceInner) {
-                var sourcePriceClone = sourcePrice.cloneNode(true);
-                var html = sourcePriceClone.outerHTML;
-                if (sourceVat) {
-                    html += sourceVat.outerHTML;
-                }
-                fixedPriceInner.innerHTML = html;
+            if (!sourcePrice || !fixedPriceInner) return;
+
+            var sourcePriceClone = sourcePrice.cloneNode(true);
+            fixedPriceInner.innerHTML = '';
+            fixedPriceInner.appendChild(sourcePriceClone);
+
+            if (sourceVat) {
+                fixedPriceInner.appendChild(sourceVat.cloneNode(true));
             }
+        },
+
+        syncFixedHeaderFromMain: function () {
+            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return;
+
+            PModificator.syncFixedHeaderTitleFromMain(fixedRoot);
+            PModificator.syncFixedHeaderPriceFromMain(fixedRoot);
+        },
+
+        waitMainDomStable: function (payload) {
+            window._pmodMainDomStablePayload = payload || {};
+            if (window._pmodMainDomStableTimer) {
+                clearTimeout(window._pmodMainDomStableTimer);
+            }
+            window._pmodMainDomStableTimer = setTimeout(function () {
+                PModificator.finalizeMainDomUpdate(window._pmodMainDomStablePayload || {});
+            }, FIXED_HEADER_REFRESH_DELAY_MS);
+        },
+
+        scheduleMainDomSync: function (payload) {
+            PModificator.waitMainDomStable(payload || {});
+        },
+
+        finalizeMainDomUpdate: function (_payload) {
+            // Доп. defer, чтобы попасть после batch-рендера Aspro/BX.
+            setTimeout(function () {
+                PModificator.syncFixedHeaderFromMain();
+            }, 0);
         },
 
         hookFixedHeaderSync: function () {
@@ -399,30 +460,29 @@
             }
             window._pmodFixedHeaderSyncHooked = true;
 
-            var refreshDebounced = debounce(function () {
-                PModificator.runFixedHeaderRefresh();
-            }, FIXED_HEADER_REFRESH_DELAY_MS);
-
             // 1) Явный сигнал от pmod о завершённом применении в main DOM
             if (window.BX && typeof BX.addCustomEvent === 'function') {
-                BX.addCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, function () {
-                    refreshDebounced();
+                BX.addCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, function (payload) {
+                    PModificator.scheduleMainDomSync(payload || {});
                 });
             }
 
             // 2) Браузерное событие (fallback/внешние подписчики)
-            window.addEventListener('pmod:main-dom-applied', function () {
-                refreshDebounced();
+            window.addEventListener('pmod:main-dom-applied', function (event) {
+                PModificator.scheduleMainDomSync(event && event.detail ? event.detail : {});
             });
 
             // 3) Страховочная подписка на изменения ключевого блока карточки
             var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
             if (mainTopInfo) {
                 var observer = new MutationObserver(function () {
-                    refreshDebounced();
+                    PModificator.scheduleMainDomSync({ source: 'main-top-info-mutation' });
                 });
                 observer.observe(mainTopInfo, { childList: true, subtree: true, characterData: true });
             }
+
+            // Первичный sync после инициализации.
+            PModificator.scheduleMainDomSync({ source: 'hookFixedHeaderSync:init' });
         },
 
         hookAsproSkuFinalAction: function () {
