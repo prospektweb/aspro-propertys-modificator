@@ -1,8 +1,13 @@
 ;(function () {
     'use strict';
 
-    var cfg = window.pmodAdminConfig;
-    if (!cfg || !cfg.customConfigPropertyId) return;
+    var cfg = null;
+
+    function resolveCfg() {
+        var c = window.pmodAdminConfig || null;
+        if (c && c.customConfigPropertyId) return c;
+        return null;
+    }
 
     function ready(fn) {
         if (document.readyState !== 'loading') fn();
@@ -504,6 +509,14 @@
         function tryMount() {
             try {
                 attempts += 1;
+                cfg = resolveCfg();
+                if (!cfg) {
+                    if (attempts >= maxAttempts) {
+                        stopObserver();
+                        logWarn('window.pmodAdminConfig not ready');
+                    }
+                    return;
+                }
                 if (mountBuilder()) {
                     stopObserver();
                     return;
