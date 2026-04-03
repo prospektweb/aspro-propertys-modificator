@@ -60,7 +60,7 @@
 
 .pmod-admin-head__controls {
     display: grid;
-    grid-template-columns: minmax(220px, 260px) minmax(320px, 1fr) auto;
+    grid-template-columns: minmax(320px, 1fr) auto;
     gap: 10px;
     align-items: center;
     width: min(100%, 920px);

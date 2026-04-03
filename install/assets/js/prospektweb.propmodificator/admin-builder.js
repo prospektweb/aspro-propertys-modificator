@@ -112,15 +112,13 @@
     }
 
     function normalizeField(field) {
-        var mode = (field && field.mode === 'group') ? 'group' : 'single';
         var inputs = Array.isArray(field && field.inputs) ? field.inputs.map(normalizeInput) : [normalizeInput({})];
-        if (mode === 'single') {
-            inputs = [inputs[0] || normalizeInput({})];
-        } else if (inputs.length > 4) {
+        if (inputs.length > 4) {
             inputs = inputs.slice(0, 4);
         } else if (inputs.length === 0) {
             inputs = [normalizeInput({})];
         }
+        var mode = inputs.length > 1 ? 'group' : 'single';
 
         var replaceKeys = Array.isArray(field && field.replaceKeys) ? field.replaceKeys : [];
         var normalizedReplace = inputs.map(function (_, idx) {
@@ -146,6 +144,11 @@
             replaceKeys: normalizedReplace,
             inputs: inputs
         };
+    }
+
+    function syncFieldMode(field) {
+        if (!field || !Array.isArray(field.inputs)) return;
+        field.mode = field.inputs.length > 1 ? 'group' : 'single';
     }
 
     function normalizeState(rawState) {
@@ -239,7 +242,7 @@
             });
     }
 
-    function makeNewField(mode, propCode, props) {
+    function makeNewField(propCode, props) {
         var prop = null;
         for (var i = 0; i < props.length; i++) {
             if (props[i].code === propCode) {
@@ -248,15 +251,12 @@
             }
         }
 
-        var inputs = [normalizeInput({ label: mode === 'group' ? 'Поле 1' : 'Значение' })];
-        if (mode === 'group') {
-            inputs.push(normalizeInput({ label: 'Поле 2' }));
-        }
+        var inputs = [normalizeInput({ label: 'Значение' })];
 
         return normalizeField({
             id: 'f_' + Date.now() + '_' + Math.round(Math.random() * 1000),
             name: prop ? prop.name : '',
-            mode: mode,
+            mode: 'single',
             binding: {
                 skuPropertyId: prop ? Number(prop.id) : 0,
                 skuPropertyCode: prop ? prop.code : '',
@@ -278,25 +278,17 @@
             + '<div class="pmod-admin-status pmod-admin-status--info" data-role="status"></div>'
             + '</div>'
             + '<div class="pmod-admin-head__controls">'
-            + '<select class="pmod-inp" data-role="new-mode"><option value="single">Одиночное поле</option><option value="group">Групповое поле (до 4)</option></select>'
             + '<select class="pmod-inp" data-role="new-bind">' + renderPropertyOptions(props, cfg.volumePropCode || '') + '</select>'
             + '<button type="button" class="adm-btn adm-btn-save" data-role="add-field">Добавить поле</button>'
             + '</div>';
-
-        head.querySelector('[data-role="new-mode"]').onchange = function () {
-            var bind = head.querySelector('[data-role="new-bind"]');
-            if (this.value === 'group' && cfg.formatPropCode) bind.value = cfg.formatPropCode;
-            if (this.value === 'single' && cfg.volumePropCode) bind.value = cfg.volumePropCode;
-        };
 
         head.querySelector('[data-role="add-field"]').onclick = function () {
             if (!props.length) {
                 setStatus(root, 'Нет list-свойств в инфоблоке ТП. Проверьте настройки инфоблока предложений.', 'error');
                 return;
             }
-            var mode = head.querySelector('[data-role="new-mode"]').value;
             var bindCode = head.querySelector('[data-role="new-bind"]').value;
-            state.fields.push(makeNewField(mode, bindCode, props));
+            state.fields.push(makeNewField(bindCode, props));
             saveJson(textarea, state);
             rerender();
         };
@@ -390,7 +382,7 @@
                     + '<input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '">'
                     + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед. изм.</label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать варианты</label>'
-                    + '<input class="pmod-inp" data-k="replace" placeholder="REPLACE_KEY" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
+                    + '<input class="pmod-inp" data-k="replace" title="Ключ, по которому подставляется пользовательское значение в шаблон/замену." placeholder="Подстановка по ключу" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
 
                 bindRowEvents(row, field, input, inputIdx, textarea, state);
                 body.appendChild(row);
@@ -403,13 +395,13 @@
                 + '<button type="button" class="adm-btn adm-btn-delete" data-k="remove-field">Удалить поле</button>';
 
             actions.querySelector('[data-k="add-input"]').onclick = function () {
-                if (field.mode !== 'group') return;
                 if (field.inputs.length >= 4) {
                     setStatus(root, 'В группе максимум 4 инпута.', 'error');
                     return;
                 }
                 field.inputs.push(normalizeInput({ label: 'Поле ' + (field.inputs.length + 1) }));
                 field.replaceKeys.push({ key: '', inputIndex: field.inputs.length - 1 });
+                syncFieldMode(field);
                 saveJson(textarea, state);
                 rerender();
             };
@@ -418,6 +410,7 @@
                 if (field.inputs.length <= 1) return;
                 field.inputs.pop();
                 field.replaceKeys.pop();
+                syncFieldMode(field);
                 saveJson(textarea, state);
                 rerender();
             };
