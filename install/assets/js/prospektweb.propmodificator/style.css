@@ -17,6 +17,10 @@
 }
 
 .pmod-volume-ui {
+    margin-bottom: 0;
+}
+
+.pmod-volume-ui--with-options {
     margin-bottom: 12px;
 }
 
