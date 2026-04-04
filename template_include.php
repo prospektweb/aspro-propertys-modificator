@@ -305,6 +305,14 @@ while ($arProp = $rsPropList->Fetch()) {
     }
 }
 
+$propCodeById = $otherProps;
+if ($formatPropId) {
+    $propCodeById[$formatPropId] = $formatPropCode;
+}
+if ($volumePropId) {
+    $propCodeById[$volumePropId] = $volumePropCode;
+}
+
 // ─── Загружаем ТП товара ──────────────────────────────────────────────────────
 
 $offers = [];
@@ -519,6 +527,7 @@ $pmodConfig = [
             'catalogGroups'   => $catalogGroups,
             'canBuyGroups'    => array_values(array_unique($canBuyGroupIds)),
             'allPropIds'      => array_keys($otherProps),
+            'propCodeById'    => $propCodeById,
             'roundingRules'   => $roundingRules,
             'initialVolume'   => $initialVolume,
             'customConfig'    => $customConfig,
