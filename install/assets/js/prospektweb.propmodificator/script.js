@@ -394,6 +394,16 @@
         },
 
         ensureFixedHeaderBuilt: function () {
+            var fixedRoot = document.querySelector('#headerfixed');
+            var detail = PModificator.getAsproHeaderDetail();
+            if (
+                fixedRoot &&
+                detail &&
+                typeof detail.set === 'function' &&
+                !fixedRoot.querySelector('.ajax-header')
+            ) {
+                detail.set();
+            }
             return document.querySelector('#headerfixed');
         },
 
@@ -452,36 +462,31 @@
             return true;
         },
 
-        syncFixedHeaderFromMainPostRender: function () {
-            PModificator.ensureMainPopupTitleFromH1();
-            PModificator.applyFixedHeaderTitleFromMain();
-            PModificator.applyFixedHeaderPriceFromMain();
-        },
-
         patchAsproHeaderDetail: function () {
             if (window._pmodAsproHeaderDetailPatched) return true;
 
             var detail = PModificator.getAsproHeaderDetail();
             if (!detail) return false;
 
-            var originalSet = typeof detail.set === 'function' ? detail.set : null;
-            if (!originalSet) return false;
+            var originalSetTitle = typeof detail.setTitle === 'function' ? detail.setTitle : null;
+            var originalSetPrice = typeof detail.setPrice === 'function' ? detail.setPrice : null;
 
-            detail.set = function () {
-                var result = originalSet.apply(this, arguments);
+            detail.setTitle = function () {
+                PModificator.ensureMainPopupTitleFromH1();
 
-                if (window._pmodAsproSetSyncInProgress) {
-                    return result;
+                if (originalSetTitle) {
+                    originalSetTitle.apply(this, arguments);
                 }
 
-                window._pmodAsproSetSyncInProgress = true;
-                try {
-                    PModificator.syncFixedHeaderFromMainPostRender();
-                } finally {
-                    window._pmodAsproSetSyncInProgress = false;
-                }
+                PModificator.applyFixedHeaderTitleFromMain();
+            };
 
-                return result;
+            detail.setPrice = function () {
+                var applied = PModificator.applyFixedHeaderPriceFromMain();
+                if (!applied && originalSetPrice) {
+                    originalSetPrice.apply(this, arguments);
+                    PModificator.applyFixedHeaderPriceFromMain();
+                }
             };
 
             window._pmodAsproHeaderDetailPatched = true;
@@ -498,7 +503,8 @@
             }
 
             // Fallback, если BX.Aspro.Header.Detail ещё не готов.
-            PModificator.syncFixedHeaderFromMainPostRender();
+            PModificator.applyFixedHeaderTitleFromMain();
+            PModificator.applyFixedHeaderPriceFromMain();
         },
 
         waitMainDomStable: function (payload) {
