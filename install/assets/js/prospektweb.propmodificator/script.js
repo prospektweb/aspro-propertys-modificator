@@ -492,6 +492,22 @@
         },
 
         getDisplayValueParts: function (container, state, skuCode, count) {
+            // Для тиража приоритет отдаем текущему лейблу в заголовке свойства
+            // (он отражает реальное значение в инпуте даже если активная кнопка ТП — "X"/"Другое количество").
+            if (state && state.volumePropCode && String(skuCode) === String(state.volumePropCode)) {
+                var volumePropId = state.skuPropCodeToId && state.skuPropCodeToId[skuCode];
+                if (volumePropId) {
+                    var volumeInner = container.querySelector('.sku-props__inner[data-id="' + volumePropId + '"]');
+                    if (volumeInner) {
+                        var volumeLabel = volumeInner.querySelector('.sku-props__title .sku-props__js-size');
+                        var volumeText = volumeLabel ? String(volumeLabel.textContent || '').trim() : '';
+                        if (volumeText) {
+                            return [volumeText];
+                        }
+                    }
+                }
+            }
+
             var raw = PModificator.getCurrentSkuDisplayValue(container, state, skuCode);
             if (!raw) return new Array(count).fill('');
             var compact = String(raw).trim();
