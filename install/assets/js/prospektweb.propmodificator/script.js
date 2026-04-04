@@ -781,6 +781,13 @@
 
             var volumeInput = ui.querySelector('.pmod-input-volume');
 
+            function setVolumeUiMarginByPresetVisibility() {
+                var hasVisiblePresetButtons = !hidePresetButtons || !valuesEl.classList.contains('pmod-preset-buttons--hidden');
+                ui.classList.toggle('pmod-volume-ui--with-options', hasVisiblePresetButtons);
+            }
+
+            setVolumeUiMarginByPresetVisibility();
+
             // ── Предварительно строим карту xmlId → кнопка для быстрого поиска ──
             var xmlIdToBtnMap = {};
             presetBtns.forEach(function (btn) {
@@ -820,12 +827,14 @@
                 volumeInput.addEventListener('focus', function () {
                     valuesEl.classList.remove('pmod-preset-buttons--hidden');
                     valuesEl.classList.add('pmod-preset-buttons--floating');
+                    setVolumeUiMarginByPresetVisibility();
                 });
 
                 volumeInput.addEventListener('blur', function () {
                     setTimeout(function () {
                         valuesEl.classList.add('pmod-preset-buttons--hidden');
                         valuesEl.classList.remove('pmod-preset-buttons--floating');
+                        setVolumeUiMarginByPresetVisibility();
                     }, 200);
                 });
             }
