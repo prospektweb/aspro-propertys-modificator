@@ -509,6 +509,8 @@ $pmodConfig = [
         $productId => [
             'formatPropId'    => $formatPropId,
             'volumePropId'    => $volumePropId,
+            'formatPropCode'  => $formatPropCode,
+            'volumePropCode'  => $volumePropCode,
             'formatSettings'  => $formatSettings,
             'volumeSettings'  => $volumeSettings,
             'offers'          => array_values($offers),
@@ -517,6 +519,10 @@ $pmodConfig = [
             'catalogGroups'   => $catalogGroups,
             'canBuyGroups'    => array_values(array_unique($canBuyGroupIds)),
             'allPropIds'      => array_keys($otherProps),
+            'skuPropCodeToId' => array_flip(array_filter(array_merge(
+                $otherProps,
+                [$formatPropId => $formatPropCode, $volumePropId => $volumePropCode]
+            ))),
             'roundingRules'   => $roundingRules,
             'initialVolume'   => $initialVolume,
             'customConfig'    => $customConfig,

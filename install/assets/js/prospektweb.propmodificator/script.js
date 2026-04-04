@@ -271,8 +271,12 @@
                 offers:           productCfg.offers || [],
                 formatCfg:        productCfg.formatSettings || {},
                 volumeCfg:        productCfg.volumeSettings || {},
+                formatPropCode:   productCfg.formatPropCode || '',
+                volumePropCode:   productCfg.volumePropCode || '',
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
+                customConfig:     productCfg.customConfig || {},
+                skuPropCodeToId:  productCfg.skuPropCodeToId || {},
                 catalogGroups:    catalogGroups,
                 canBuyGroups:     productCfg.canBuyGroups || [],
                 allPropIds:       allPropIds,
@@ -288,6 +292,8 @@
                 _ajaxRequestId:   0,
                 _volumeLabelTimer: null,
                 _otherPropRecalcTimer: null,
+                customValuesBySkuPropertyCode: {},
+                baseTitleTemplate: '',
             };
 
             // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
@@ -330,6 +336,9 @@
 
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
+
+            // Первичная сборка заголовка по универсальному JSON-конфигу.
+            PModificator.refreshH1ByCustomConfig(container, state);
         },
 
         // ── События Аспро ────────────────────────────────────────────────────
@@ -357,12 +366,19 @@
 
                 var states = window._pmodActiveStates || [];
                 states.forEach(function (state) {
-                    if (!state || !state.customMode || !state.containerEl) return;
+                    if (!state || !state.containerEl) return;
 
                     // Если wrapper известен — применяем только к затронутому контейнеру
                     if (wrapperEl && !wrapperEl.contains(state.containerEl) && wrapperEl !== state.containerEl) {
                         return;
                     }
+
+                    if (state.customConfig && Array.isArray(state.customConfig.fields) && state.customConfig.fields.length) {
+                        setTimeout(function () {
+                            PModificator.refreshH1ByCustomConfig(state.containerEl, state);
+                        }, PRICE_UPDATE_TIMEOUT_MS);
+                    }
+                    if (!state.customMode) return;
 
                     // Один отложенный re-apply после асинхронного апдейта Аспро
                     // заметно снижает визуальное "моргание" цены.
@@ -398,27 +414,111 @@
         },
 
         /**
-         * Заменяет последний сегмент в h1 (после « | ») на volumeStr
-         * и синхронно обновляет и textContent, и title.
-         *
-         * @param {string} volumeStr  — например «4 950 экз»
+         * Универсально обновляет h1 по customConfig.fields[].replaceKeys.
+         * Источник подстановок:
+         *  1) state.customValuesBySkuPropertyCode (кастомный ввод),
+         *  2) текущее отображаемое значение активного SKU-свойства (fallback).
          */
-        updateH1WithVolume: function (volumeStr) {
+        refreshH1ByCustomConfig: function (container, state) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return;
             var h1 = document.querySelector('h1.pmod-title-clamp');
             if (!h1) h1 = document.querySelector('h1');
             if (!h1) return;
 
-            var text  = h1.textContent.trim();
-            var parts = text.split(' | ');
-            if (parts.length < 2) return;
+            if (!state.baseTitleTemplate) {
+                state.baseTitleTemplate = h1.textContent.trim();
+            }
 
-            parts[parts.length - 1] = volumeStr;
-            var newText = parts.join(' | ');
+            var newText = state.baseTitleTemplate;
+            var self = this;
 
+            state.customConfig.fields.forEach(function (field) {
+                var skuCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
+                if (!skuCode) return;
+                var replaceKeys = Array.isArray(field.replaceKeys) ? field.replaceKeys : [];
+                if (!replaceKeys.length) return;
+
+                var fallbackParts = self.getDisplayValueParts(container, state, skuCode, replaceKeys.length);
+                replaceKeys.forEach(function (rk, idx) {
+                    var key = String(rk && rk.key || '').trim();
+                    if (!key) return;
+                    var customVal = self.getCustomValueByIndex(state, skuCode, idx);
+                    var replacement = customVal !== null && customVal !== undefined && customVal !== ''
+                        ? String(customVal)
+                        : (fallbackParts[idx] !== undefined ? String(fallbackParts[idx]) : '');
+                    newText = newText.split(key).join(replacement);
+                });
+            });
+
+            if (!newText) return;
             h1._pmodUpdatingTitle = true;
             h1.textContent = newText;
             h1.title       = newText;
             h1._pmodUpdatingTitle = false;
+        },
+
+        getCustomValueByIndex: function (state, skuCode, inputIdx) {
+            var map = state.customValuesBySkuPropertyCode || {};
+            var bucket = map[skuCode];
+            if (bucket === null || bucket === undefined) return null;
+            if (typeof bucket === 'object') {
+                if (bucket[inputIdx] !== undefined && bucket[inputIdx] !== null && bucket[inputIdx] !== '') {
+                    return bucket[inputIdx];
+                }
+                return null;
+            }
+            return inputIdx === 0 ? bucket : null;
+        },
+
+        setCustomValuesForSkuCode: function (state, skuCode, values) {
+            if (!state.customValuesBySkuPropertyCode) {
+                state.customValuesBySkuPropertyCode = {};
+            }
+            if (!values || !values.length) {
+                delete state.customValuesBySkuPropertyCode[skuCode];
+                return;
+            }
+            var valueMap = {};
+            values.forEach(function (val, idx) {
+                if (val !== null && val !== undefined && val !== '') {
+                    valueMap[idx] = String(val);
+                }
+            });
+            if (!Object.keys(valueMap).length) {
+                delete state.customValuesBySkuPropertyCode[skuCode];
+                return;
+            }
+            state.customValuesBySkuPropertyCode[skuCode] = valueMap;
+        },
+
+        getDisplayValueParts: function (container, state, skuCode, count) {
+            var raw = PModificator.getCurrentSkuDisplayValue(container, state, skuCode);
+            if (!raw) return new Array(count).fill('');
+            var compact = String(raw).trim();
+            if (count <= 1) return [compact];
+
+            var parts = compact.split(/[xх×]/i).map(function (p) { return p.trim(); }).filter(Boolean);
+            if (parts.length >= count) return parts.slice(0, count);
+
+            var numbers = compact.match(/[\d]+(?:[.,]\d+)?/g);
+            if (numbers && numbers.length >= count) return numbers.slice(0, count);
+
+            var out = [];
+            for (var i = 0; i < count; i++) {
+                out[i] = parts[i] || ((numbers && numbers[i]) ? numbers[i] : compact);
+            }
+            return out;
+        },
+
+        getCurrentSkuDisplayValue: function (container, state, skuCode) {
+            var map = state.skuPropCodeToId || {};
+            var propId = map[skuCode];
+            if (!propId) return '';
+            var inner = container.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+            if (!inner) return '';
+            var activeBtn = inner.querySelector('.sku-props__value--active') || inner.querySelector('.sku-props__value');
+            if (!activeBtn) return '';
+            return String(activeBtn.dataset.title || activeBtn.textContent || '').trim();
         },
 
         /**
@@ -530,10 +630,12 @@
                     }
                     state.customWidth  = null;
                     state.customHeight = null;
+                    PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, null);
                     PModificator.recomputeCustomMode(state);
                 } else {
                     state.customWidth  = w;
                     state.customHeight = h;
+                    PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [w, h]);
                     PModificator.recomputeCustomMode(state);
 
                     // Выбираем кнопку «Произвольный формат» или ближайший пресет
@@ -551,6 +653,7 @@
                     }
                 }
 
+                PModificator.refreshH1ByCustomConfig(container, state);
                 PModificator.updatePriceDisplay(container, state);
             }
 
@@ -736,6 +839,7 @@
                         matchedBtn.click();
                     }
                     state.customVolume = null;
+                    PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
 
@@ -744,10 +848,10 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = presetStr;
                     }
-                    PModificator.updateH1WithVolume(presetStr + ' экз');
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
+                    PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, [v]);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(v);
 
@@ -781,12 +885,13 @@
                             if (volumeLabelSpan) {
                                 volumeLabelSpan.textContent = str;
                             }
-                            PModificator.updateH1WithVolume(str + ' экз');
+                            PModificator.refreshH1ByCustomConfig(container, state);
                             state._volumeLabelTimer = null;
                         }, PRICE_UPDATE_TIMEOUT_MS);
                     }(customStr));
                 }
 
+                PModificator.refreshH1ByCustomConfig(container, state);
                 PModificator.updatePriceDisplay(container, state);
             }
 
@@ -876,7 +981,11 @@
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
                         state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
                         state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
+                        if (state.customWidth !== null && state.customHeight !== null) {
+                            PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [state.customWidth, state.customHeight]);
+                        }
                         PModificator.recomputeCustomMode(state);
+                        PModificator.refreshH1ByCustomConfig(container, state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету FORMAT — обновляем поля ширины/высоты
@@ -889,7 +998,9 @@
                         }
                         state.customWidth  = null;
                         state.customHeight = null;
+                        PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, null);
                         PModificator.recomputeCustomMode(state);
+                        PModificator.refreshH1ByCustomConfig(container, state);
                         PModificator.hideCustomPrice(container);
                     }
 
@@ -908,7 +1019,11 @@
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
+                        if (state.customVolume !== null) {
+                            PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, [state.customVolume]);
+                        }
                         PModificator.recomputeCustomMode(state);
+                        PModificator.refreshH1ByCustomConfig(container, state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
                         // Клик по пресету VOLUME — обновляем поле тиража
@@ -917,6 +1032,7 @@
                             vInput.value = volXmlId;
                         }
                         state.customVolume = null;
+                        PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
                         if (state._volumeLabelTimer) {
                             clearTimeout(state._volumeLabelTimer);
@@ -934,8 +1050,8 @@
                             if (labelSpan) {
                                 labelSpan.textContent = presetLabelStr;
                             }
-                            PModificator.updateH1WithVolume(presetLabelStr + ' экз');
                         }
+                        PModificator.refreshH1ByCustomConfig(container, state);
                     }
 
                 } else if (state.allPropIds && state.allPropIds.indexOf(parseInt(propId, 10)) !== -1) {
@@ -944,6 +1060,7 @@
                     if (!isNaN(otherEnumId)) {
                         state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
                     }
+                    PModificator.refreshH1ByCustomConfig(container, state);
                     if (state.customMode) {
                         // 1) мгновенная переоценка
                         PModificator.updatePriceDisplay(container, state);
