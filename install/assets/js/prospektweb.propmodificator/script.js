@@ -14,7 +14,7 @@
 
     var DEBOUNCE_MS                   = 300;
     var PRICE_UPDATE_TIMEOUT_MS       = 400; // Fallback таймаут ожидания AJAX-обновления Аспро
-    var FIXED_HEADER_REFRESH_DELAY_MS = 80;  // Дебаунс для синхронизации fixed header
+    var FIXED_HEADER_REFRESH_DELAY_MS = 80;  // Пауза "тишины" main DOM перед sync fixed header
     var PMOD_MAIN_DOM_APPLIED_EVENT   = 'onPmodMainDomApplied';
 
     // ── Утилиты ───────────────────────────────────────────────────────────────
@@ -258,6 +258,8 @@
 
             var formatPropId = productCfg.formatPropId;
             var volumePropId = productCfg.volumePropId;
+            var formatPropCode = productCfg.formatPropCode || '';
+            var volumePropCode = productCfg.volumePropCode || '';
             var allPropIds   = productCfg.allPropIds || [];
             var catalogGroups = productCfg.catalogGroups || {};
 
@@ -277,6 +279,12 @@
                 offers:           productCfg.offers || [],
                 formatCfg:        productCfg.formatSettings || {},
                 volumeCfg:        productCfg.volumeSettings || {},
+                formatPropId:     formatPropId,
+                volumePropId:     volumePropId,
+                formatPropCode:   formatPropCode,
+                volumePropCode:   volumePropCode,
+                propCodeById:     productCfg.propCodeById || {},
+                customConfig:     productCfg.customConfig || {},
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
                 catalogGroups:    catalogGroups,
@@ -288,6 +296,7 @@
                 customHeight:     null,
                 customVolume:     null,
                 customMode:       false,
+                customFieldValuesByCode: {},
                 mainPriceGroupId: null,
                 // AJAX state (AbortController + requestId для защиты от race conditions)
                 _ajaxAbortCtrl:   null,
@@ -298,6 +307,8 @@
 
             // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo
             state.containerEl = container;
+            var initialH1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            state.baseTitleTemplate = initialH1 && initialH1.textContent ? initialH1.textContent.trim() : '';
 
             // Найти блоки свойств
             if (formatPropId) {
@@ -341,6 +352,9 @@
         // ── События Аспро ────────────────────────────────────────────────────
 
         notifyMainDomApplied: function (payload) {
+            // Единая точка входа в post-render sync пайплайн.
+            PModificator.scheduleMainDomSync(payload || {});
+
             if (window.BX && typeof BX.onCustomEvent === 'function') {
                 BX.onCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, [payload || {}]);
             }
@@ -352,45 +366,160 @@
             }
         },
 
-        runFixedHeaderRefresh: function () {
-            var fixedRoot = document.querySelector('#headerfixed');
-            if (!fixedRoot) return;
-
-            // Если фикс-шапка ещё не построена Аспро, сначала даём ей построиться штатно.
-            var hasAjaxHeader = !!fixedRoot.querySelector('.ajax-header');
-            if (!hasAjaxHeader &&
+        getAsproHeaderDetail: function () {
+            if (
                 window.BX &&
                 BX.Aspro &&
                 BX.Aspro.Header &&
-                BX.Aspro.Header.Detail &&
-                typeof BX.Aspro.Header.Detail.set === 'function') {
-                BX.Aspro.Header.Detail.set();
+                BX.Aspro.Header.Detail
+            ) {
+                return BX.Aspro.Header.Detail;
             }
+            return null;
+        },
 
-            // 1) Синхронизируем title из главного блока
-            var sourceTitleEl = document.querySelector('.main .catalog-detail__top-info .js-popup-title') || document.querySelector('h1');
-            var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
-            if (sourceTitleEl && fixedTitleEl) {
-                var titleText = sourceTitleEl.textContent ? sourceTitleEl.textContent.trim() : '';
-                if (titleText) {
-                    fixedTitleEl.textContent = titleText;
+        ensureMainPopupTitleFromH1: function () {
+            var titleText = PModificator.getMainResolvedTitleText();
+            if (!titleText) return;
+
+            var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
+            if (!mainTopInfo) return;
+
+            var popupTitle = mainTopInfo.querySelector('.js-popup-title');
+            if (!popupTitle) return;
+
+            if (popupTitle.textContent.trim() !== titleText) {
+                popupTitle.textContent = titleText;
+            }
+        },
+
+        ensureFixedHeaderBuilt: function () {
+            return document.querySelector('#headerfixed');
+        },
+
+        getMainResolvedTitleText: function () {
+            var h1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            if (!h1) return '';
+            return h1.textContent ? h1.textContent.trim() : '';
+        },
+
+        getMainResolvedPriceNode: function () {
+            var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
+            if (!mainTopInfo) return null;
+
+            var visiblePopupPrice = null;
+            mainTopInfo.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if (!visiblePopupPrice && (el.offsetParent !== null || el.offsetHeight > 0)) {
+                    visiblePopupPrice = el;
                 }
-            }
+            });
 
-            // 2) Синхронизируем цену из актуального pmod-блока (если есть)
-            var sourcePrice = document.querySelector('.main .catalog-detail__top-info .js-popup-price') ||
-                              document.querySelector('.main .catalog-detail__top-info .prices');
+            if (visiblePopupPrice) return visiblePopupPrice;
+            return mainTopInfo.querySelector('.js-popup-price') || mainTopInfo.querySelector('.prices');
+        },
+
+        applyFixedHeaderTitleFromMain: function () {
+            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return false;
+
+            var fixedTitleEl  = fixedRoot.querySelector('.detail-header__info-title .visible-by-block-presence__condition');
+            if (!fixedTitleEl) return false;
+
+            var titleText = PModificator.getMainResolvedTitleText();
+            if (titleText) {
+                fixedTitleEl.textContent = titleText;
+            }
+            return !!titleText;
+        },
+
+        applyFixedHeaderPriceFromMain: function () {
+            var fixedRoot = PModificator.ensureFixedHeaderBuilt();
+            if (!fixedRoot) return false;
+
+            var sourcePrice = PModificator.getMainResolvedPriceNode();
             var sourceVat   = document.querySelector('.main .catalog-detail__top-info .vat');
             var fixedPriceInner = fixedRoot.querySelector('.detail-header__price > .line-block');
 
-            if (sourcePrice && fixedPriceInner) {
-                var sourcePriceClone = sourcePrice.cloneNode(true);
-                var html = sourcePriceClone.outerHTML;
-                if (sourceVat) {
-                    html += sourceVat.outerHTML;
-                }
-                fixedPriceInner.innerHTML = html;
+            if (!sourcePrice || !fixedPriceInner) return false;
+
+            var sourcePriceClone = sourcePrice.cloneNode(true);
+            fixedPriceInner.innerHTML = '';
+            fixedPriceInner.appendChild(sourcePriceClone);
+
+            if (sourceVat) {
+                fixedPriceInner.appendChild(sourceVat.cloneNode(true));
             }
+            return true;
+        },
+
+        syncFixedHeaderFromMainPostRender: function () {
+            PModificator.ensureMainPopupTitleFromH1();
+            PModificator.applyFixedHeaderTitleFromMain();
+            PModificator.applyFixedHeaderPriceFromMain();
+        },
+
+        patchAsproHeaderDetail: function () {
+            if (window._pmodAsproHeaderDetailPatched) return true;
+
+            var detail = PModificator.getAsproHeaderDetail();
+            if (!detail) return false;
+
+            var originalSet = typeof detail.set === 'function' ? detail.set : null;
+            if (!originalSet) return false;
+
+            detail.set = function () {
+                var result = originalSet.apply(this, arguments);
+
+                if (window._pmodAsproSetSyncInProgress) {
+                    return result;
+                }
+
+                window._pmodAsproSetSyncInProgress = true;
+                try {
+                    PModificator.syncFixedHeaderFromMainPostRender();
+                } finally {
+                    window._pmodAsproSetSyncInProgress = false;
+                }
+
+                return result;
+            };
+
+            window._pmodAsproHeaderDetailPatched = true;
+            return true;
+        },
+
+        refreshAsproFixedHeader: function () {
+            PModificator.patchAsproHeaderDetail();
+
+            var detail = PModificator.getAsproHeaderDetail();
+            if (detail && typeof detail.set === 'function') {
+                detail.set();
+                return;
+            }
+
+            // Fallback, если BX.Aspro.Header.Detail ещё не готов.
+            PModificator.syncFixedHeaderFromMainPostRender();
+        },
+
+        waitMainDomStable: function (payload) {
+            window._pmodMainDomStablePayload = payload || {};
+            if (window._pmodMainDomStableTimer) {
+                clearTimeout(window._pmodMainDomStableTimer);
+            }
+            window._pmodMainDomStableTimer = setTimeout(function () {
+                PModificator.finalizeMainDomUpdate(window._pmodMainDomStablePayload || {});
+            }, FIXED_HEADER_REFRESH_DELAY_MS);
+        },
+
+        scheduleMainDomSync: function (payload) {
+            PModificator.waitMainDomStable(payload || {});
+        },
+
+        finalizeMainDomUpdate: function (_payload) {
+            // Доп. defer, чтобы попасть после batch-рендера Aspro/BX.
+            setTimeout(function () {
+                PModificator.refreshAsproFixedHeader();
+            }, 0);
         },
 
         hookFixedHeaderSync: function () {
@@ -398,31 +527,31 @@
                 return;
             }
             window._pmodFixedHeaderSyncHooked = true;
-
-            var refreshDebounced = debounce(function () {
-                PModificator.runFixedHeaderRefresh();
-            }, FIXED_HEADER_REFRESH_DELAY_MS);
+            PModificator.patchAsproHeaderDetail();
 
             // 1) Явный сигнал от pmod о завершённом применении в main DOM
             if (window.BX && typeof BX.addCustomEvent === 'function') {
-                BX.addCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, function () {
-                    refreshDebounced();
+                BX.addCustomEvent(PMOD_MAIN_DOM_APPLIED_EVENT, function (payload) {
+                    PModificator.scheduleMainDomSync(payload || {});
                 });
             }
 
             // 2) Браузерное событие (fallback/внешние подписчики)
-            window.addEventListener('pmod:main-dom-applied', function () {
-                refreshDebounced();
+            window.addEventListener('pmod:main-dom-applied', function (event) {
+                PModificator.scheduleMainDomSync(event && event.detail ? event.detail : {});
             });
 
             // 3) Страховочная подписка на изменения ключевого блока карточки
             var mainTopInfo = document.querySelector('.main .catalog-detail__top-info');
             if (mainTopInfo) {
                 var observer = new MutationObserver(function () {
-                    refreshDebounced();
+                    PModificator.scheduleMainDomSync({ source: 'main-top-info-mutation' });
                 });
                 observer.observe(mainTopInfo, { childList: true, subtree: true, characterData: true });
             }
+
+            // Первичный sync после инициализации.
+            PModificator.scheduleMainDomSync({ source: 'hookFixedHeaderSync:init' });
         },
 
         hookAsproSkuFinalAction: function () {
@@ -488,23 +617,136 @@
             obs.observe(h1, { childList: true, characterData: true, subtree: true });
         },
 
+        normalizePropCode: function (propCode) {
+            return String(propCode || '').trim().toUpperCase();
+        },
+
+        setCustomFieldValueByPropCode: function (state, propCode, value) {
+            if (!state) return;
+            var code = PModificator.normalizePropCode(propCode);
+            if (!code) return;
+
+            if (!state.customFieldValuesByCode) {
+                state.customFieldValuesByCode = {};
+            }
+
+            if (value === null || value === undefined || value === '') {
+                delete state.customFieldValuesByCode[code];
+                return;
+            }
+
+            state.customFieldValuesByCode[code] = String(value);
+        },
+
+        getPropIdByCode: function (state, propCode) {
+            if (!state || !state.propCodeById) return null;
+            var targetCode = PModificator.normalizePropCode(propCode);
+            if (!targetCode) return null;
+
+            var foundId = null;
+            Object.keys(state.propCodeById).some(function (pid) {
+                var code = PModificator.normalizePropCode(state.propCodeById[pid]);
+                if (code === targetCode) {
+                    foundId = String(pid);
+                    return true;
+                }
+                return false;
+            });
+            return foundId;
+        },
+
+        getDisplayedSkuValueByPropCode: function (state, propCode, fallbackValue) {
+            if (!state || !state.containerEl) return fallbackValue || '';
+
+            var propId = PModificator.getPropIdByCode(state, propCode);
+            if (!propId) return fallbackValue || '';
+
+            var innerEl = state.containerEl.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+            if (!innerEl) return fallbackValue || '';
+
+            var activeBtn = innerEl.querySelector('.sku-props__value--active') || innerEl.querySelector('.sku-props__value');
+            if (!activeBtn) return fallbackValue || '';
+
+            var text = (activeBtn.dataset.title || activeBtn.textContent || '').trim();
+            return text || fallbackValue || '';
+        },
+
+        getResolvedFieldValueByCode: function (state, propCode, fallbackValue) {
+            var code = PModificator.normalizePropCode(propCode);
+            if (!code) return fallbackValue || '';
+
+            var customValues = state && state.customFieldValuesByCode ? state.customFieldValuesByCode : {};
+            var customValue = customValues[code];
+            if (customValue !== undefined && customValue !== null && customValue !== '') {
+                return String(customValue);
+            }
+
+            return PModificator.getDisplayedSkuValueByPropCode(state, code, fallbackValue || '');
+        },
+
+        replaceTokenAll: function (str, token, value) {
+            if (!token) return str;
+            return String(str).split(token).join(value);
+        },
+
+        buildTitleByReplaceKeys: function (state, volumeStr) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return null;
+
+            var template = state.baseTitleTemplate || '';
+            if (!template) return null;
+
+            var applied = false;
+
+            state.customConfig.fields.forEach(function (field) {
+                if (!field || !field.binding || !Array.isArray(field.replaceKeys)) return;
+
+                var propCode = PModificator.normalizePropCode(field.binding.skuPropertyCode || '');
+                if (!propCode) return;
+
+                var volumeCode = PModificator.normalizePropCode(state.volumePropCode || '');
+                var fallbackValue = propCode === volumeCode ? (volumeStr || '') : '';
+                var replaceValue = PModificator.getResolvedFieldValueByCode(state, propCode, fallbackValue);
+                if (replaceValue === undefined || replaceValue === null || replaceValue === '') return;
+
+                field.replaceKeys.forEach(function (rk) {
+                    var key = rk && rk.key ? String(rk.key).trim() : '';
+                    if (!key) return;
+
+                    var before = template;
+                    template = PModificator.replaceTokenAll(template, '{{' + key + '}}', replaceValue);
+                    template = PModificator.replaceTokenAll(template, '{' + key + '}', replaceValue);
+                    template = PModificator.replaceTokenAll(template, '%' + key + '%', replaceValue);
+                    template = PModificator.replaceTokenAll(template, key, replaceValue);
+                    if (template !== before) {
+                        applied = true;
+                    }
+                });
+            });
+
+            return applied ? template : null;
+        },
+
         /**
-         * Заменяет последний сегмент в h1 (после « | ») на volumeStr
-         * и синхронно обновляет и textContent, и title.
+         * Обновляет h1 после изменения тиража:
+         *  - при наличии replaceKeys собирает заголовок по шаблону;
+         *  - иначе fallback: заменяет последний сегмент после « | ».
          *
          * @param {string} volumeStr  — например «4 950 экз»
+         * @param {Object=} state
          */
-        updateH1WithVolume: function (volumeStr) {
+        updateH1WithVolume: function (volumeStr, state) {
             var h1 = document.querySelector('h1.pmod-title-clamp');
             if (!h1) h1 = document.querySelector('h1');
             if (!h1) return;
 
-            var text  = h1.textContent.trim();
-            var parts = text.split(' | ');
-            if (parts.length < 2) return;
-
-            parts[parts.length - 1] = volumeStr;
-            var newText = parts.join(' | ');
+            var newText = PModificator.buildTitleByReplaceKeys(state, volumeStr);
+            if (!newText) {
+                var text  = h1.textContent.trim();
+                var parts = text.split(' | ');
+                if (parts.length < 2) return;
+                parts[parts.length - 1] = volumeStr;
+                newText = parts.join(' | ');
+            }
 
             h1._pmodUpdatingTitle = true;
             h1.textContent = newText;
@@ -513,6 +755,27 @@
 
             PModificator.notifyMainDomApplied({
                 source: 'updateH1WithVolume',
+                title: newText
+            });
+        },
+
+        refreshH1ByReplaceKeys: function (state) {
+            var h1 = document.querySelector('h1.pmod-title-clamp') || document.querySelector('h1');
+            if (!h1) return;
+
+            var text = (h1.textContent || '').trim();
+            var parts = text.split(' | ');
+            var fallbackVolume = parts.length > 1 ? parts[parts.length - 1] : '';
+            var newText = PModificator.buildTitleByReplaceKeys(state, fallbackVolume);
+            if (!newText || newText === text) return;
+
+            h1._pmodUpdatingTitle = true;
+            h1.textContent = newText;
+            h1.title = newText;
+            h1._pmodUpdatingTitle = false;
+
+            PModificator.notifyMainDomApplied({
+                source: 'refreshH1ByReplaceKeys',
                 title: newText
             });
         },
@@ -626,10 +889,12 @@
                     }
                     state.customWidth  = null;
                     state.customHeight = null;
+                    PModificator.setCustomFieldValueByPropCode(state, state.formatPropCode, null);
                     PModificator.recomputeCustomMode(state);
                 } else {
                     state.customWidth  = w;
                     state.customHeight = h;
+                    PModificator.setCustomFieldValueByPropCode(state, state.formatPropCode, w + 'x' + h);
                     PModificator.recomputeCustomMode(state);
 
                     // Выбираем кнопку «Произвольный формат» или ближайший пресет
@@ -648,6 +913,7 @@
                 }
 
                 PModificator.updatePriceDisplay(container, state);
+                PModificator.refreshH1ByReplaceKeys(state);
             }
 
             var debouncedChange = debounce(function () { onFormatChange(false); }, DEBOUNCE_MS);
@@ -832,6 +1098,7 @@
                         matchedBtn.click();
                     }
                     state.customVolume = null;
+                    PModificator.setCustomFieldValueByPropCode(state, state.volumePropCode, null);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
 
@@ -840,10 +1107,11 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = presetStr;
                     }
-                    PModificator.updateH1WithVolume(presetStr + ' экз');
+                    PModificator.updateH1WithVolume(presetStr + ' экз', state);
                 } else {
                     // Нет совпадения с пресетом — кастомный режим
                     state.customVolume = v;
+                    PModificator.setCustomFieldValueByPropCode(state, state.volumePropCode, v);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(v);
 
@@ -877,7 +1145,7 @@
                             if (volumeLabelSpan) {
                                 volumeLabelSpan.textContent = str;
                             }
-                            PModificator.updateH1WithVolume(str + ' экз');
+                            PModificator.updateH1WithVolume(str + ' экз', state);
                             state._volumeLabelTimer = null;
                         }, PRICE_UPDATE_TIMEOUT_MS);
                     }(customStr));
@@ -972,6 +1240,13 @@
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
                         state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
                         state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
+                        if (state.customWidth !== null && state.customHeight !== null) {
+                            PModificator.setCustomFieldValueByPropCode(
+                                state,
+                                state.formatPropCode,
+                                state.customWidth + 'x' + state.customHeight
+                            );
+                        }
                         PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
@@ -985,9 +1260,11 @@
                         }
                         state.customWidth  = null;
                         state.customHeight = null;
+                        PModificator.setCustomFieldValueByPropCode(state, state.formatPropCode, null);
                         PModificator.recomputeCustomMode(state);
                         PModificator.hideCustomPrice(container);
                     }
+                    PModificator.refreshH1ByReplaceKeys(state);
 
                 } else if (String(propId) === String(volumePropId)) {
                     // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
@@ -1004,6 +1281,9 @@
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
+                        if (state.customVolume !== null) {
+                            PModificator.setCustomFieldValueByPropCode(state, state.volumePropCode, state.customVolume);
+                        }
                         PModificator.recomputeCustomMode(state);
                         PModificator.updatePriceDisplay(container, state);
                     } else {
@@ -1013,6 +1293,7 @@
                             vInput.value = volXmlId;
                         }
                         state.customVolume = null;
+                        PModificator.setCustomFieldValueByPropCode(state, state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
                         if (state._volumeLabelTimer) {
                             clearTimeout(state._volumeLabelTimer);
@@ -1030,7 +1311,7 @@
                             if (labelSpan) {
                                 labelSpan.textContent = presetLabelStr;
                             }
-                            PModificator.updateH1WithVolume(presetLabelStr + ' экз');
+                            PModificator.updateH1WithVolume(presetLabelStr + ' экз', state);
                         }
                     }
 
@@ -1040,6 +1321,7 @@
                     if (!isNaN(otherEnumId)) {
                         state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
                     }
+                    PModificator.refreshH1ByReplaceKeys(state);
                     if (state.customMode) {
                         // 1) мгновенная переоценка
                         PModificator.updatePriceDisplay(container, state);
