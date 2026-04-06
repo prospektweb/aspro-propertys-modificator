@@ -47,7 +47,12 @@ class TemplateBootstrap
         Asset::getInstance()->addJs($jsDir . 'state/store.js');
         Asset::getInstance()->addJs($jsDir . 'api/client.js');
         Asset::getInstance()->addJs($jsDir . 'pricing/field-mode-handlers.js');
+        Asset::getInstance()->addJs($jsDir . 'shared/utils.js');
         Asset::getInstance()->addJs($jsDir . 'pricing/interpolation.js');
+        Asset::getInstance()->addJs($jsDir . 'pricing/main-price.js');
+        Asset::getInstance()->addJs($jsDir . 'integration/aspro.js');
+        Asset::getInstance()->addJs($jsDir . 'ui/controls/index.js');
+        Asset::getInstance()->addJs($jsDir . 'basket/hook.js');
         Asset::getInstance()->addJs($jsDir . 'ui/app.js');
         Asset::getInstance()->addJs($jsDir . 'script.js');
         Asset::getInstance()->addCss($jsDir . 'style.css');
