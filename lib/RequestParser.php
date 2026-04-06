@@ -20,10 +20,6 @@ class RequestParser
         'sessid',
     ];
 
-    private const ALLOWED_GET_FIELDS = [
-        'productId',
-    ];
-
     private const LIMITS = [
         'productId' => ['min' => 1, 'max' => 2000000000],
         'volume' => ['min' => 1, 'max' => 1000000],
@@ -49,10 +45,6 @@ class RequestParser
     {
         if ($unknownPost = $this->findUnknownKeys($input->postAll(), self::ALLOWED_POST_FIELDS)) {
             return ['ok' => false, 'errorCode' => 'INVALID_PAYLOAD_FIELD', 'error' => 'Unknown POST fields: ' . implode(', ', $unknownPost)];
-        }
-
-        if ($unknownGet = $this->findUnknownKeys($input->getAll(), self::ALLOWED_GET_FIELDS)) {
-            return ['ok' => false, 'errorCode' => 'INVALID_PAYLOAD_FIELD', 'error' => 'Unknown GET fields: ' . implode(', ', $unknownGet)];
         }
 
         $productId = $this->parseBoundedInt($input->input('productId', 0), 'productId');
