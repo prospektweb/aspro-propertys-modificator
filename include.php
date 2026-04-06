@@ -20,6 +20,7 @@ Loader::registerAutoloadClasses('prospektweb.propmodificator', [
     'Prospektweb\\PropModificator\\Infrastructure\\Http\\RequestInput' => 'lib/Infrastructure/Http/RequestInput.php',
     'Prospektweb\\PropModificator\\Infrastructure\\Http\\SessionStorage' => 'lib/Infrastructure/Http/SessionStorage.php',
     'Prospektweb\\PropModificator\\Infrastructure\\Http\\ServerContext' => 'lib/Infrastructure/Http/ServerContext.php',
+    'Prospektweb\\PropModificator\\Infrastructure\\Http\\RequestThrottler' => 'lib/Infrastructure/Http/RequestThrottler.php',
     'Prospektweb\\PropModificator\\Infrastructure\\Bitrix\\OfferRepository' => 'lib/Infrastructure/Bitrix/OfferRepository.php',
     'Prospektweb\\PropModificator\\Infrastructure\\Bitrix\\CatalogRepository' => 'lib/Infrastructure/Bitrix/CatalogRepository.php',
     'Prospektweb\\PropModificator\\Infrastructure\\Bitrix\\ProductConfigRepository' => 'lib/Infrastructure/Bitrix/ProductConfigRepository.php',
