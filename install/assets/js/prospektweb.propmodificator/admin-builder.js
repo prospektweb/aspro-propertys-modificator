@@ -174,6 +174,8 @@
     }
 
     function validateField(field) {
+        if (!field.binding || !field.binding.skuPropertyCode) return 'Выберите list-свойство ТП для привязки';
+        if (!field.binding.marker || !field.binding.marker.xmlId || !field.binding.marker.value) return 'Заполните XML_ID и VALUE маркера';
         if (!field.inputs || !field.inputs.length) return 'Добавьте хотя бы один инпут';
         if (field.mode === 'single' && field.inputs.length !== 1) return 'Режим single должен иметь 1 инпут';
         if (field.mode === 'group' && (field.inputs.length < 1 || field.inputs.length > 4)) return 'Режим group: от 1 до 4 инпутов';
@@ -240,19 +242,27 @@
             });
     }
 
-    function makeNewField() {
+    function makeNewField(propCode, props) {
+        var prop = null;
+        for (var i = 0; i < props.length; i++) {
+            if (props[i].code === propCode) {
+                prop = props[i];
+                break;
+            }
+        }
+
         var inputs = [normalizeInput({ label: 'Значение' })];
 
         return normalizeField({
             id: 'f_' + Date.now() + '_' + Math.round(Math.random() * 1000),
-            name: '',
+            name: prop ? prop.name : '',
             mode: 'single',
             binding: {
-                skuPropertyId: 0,
-                skuPropertyCode: '',
+                skuPropertyId: prop ? Number(prop.id) : 0,
+                skuPropertyCode: prop ? prop.code : '',
                 marker: {
-                    xmlId: '',
-                    value: ''
+                    xmlId: prop ? ('CUSTOM_' + prop.code) : '',
+                    value: 'Произвольное значение'
                 }
             },
             replaceKeys: inputs.map(function (_, idx) { return { key: '', inputIndex: idx }; }),
@@ -268,11 +278,17 @@
             + '<div class="pmod-admin-status pmod-admin-status--info" data-role="status"></div>'
             + '</div>'
             + '<div class="pmod-admin-head__controls">'
+            + '<select class="pmod-inp" data-role="new-bind">' + renderPropertyOptions(props, cfg.volumePropCode || '') + '</select>'
             + '<button type="button" class="adm-btn adm-btn-save" data-role="add-field">Добавить поле</button>'
             + '</div>';
 
         head.querySelector('[data-role="add-field"]').onclick = function () {
-            state.fields.push(makeNewField());
+            if (!props.length) {
+                setStatus(root, 'Нет list-свойств в инфоблоке ТП. Проверьте настройки инфоблока предложений.', 'error');
+                return;
+            }
+            var bindCode = head.querySelector('[data-role="new-bind"]').value;
+            state.fields.push(makeNewField(bindCode, props));
             saveJson(textarea, state);
             rerender();
         };
@@ -324,14 +340,35 @@
             ));
 
             var binding = el('div', 'pmod-admin-binding');
+            var propOptions = renderPropertyOptions(props, field.binding.skuPropertyCode || '');
             binding.innerHTML =
                 '<div class="pmod-admin-binding__grid">'
                 + '<label>Название поля<input class="pmod-inp" data-k="name" value="' + escapeHtml(field.name || '') + '"></label>'
-                + '<label>Код поля (state key)<input class="pmod-inp" data-k="code" value="' + escapeHtml(field.binding.skuPropertyCode || '') + '"></label>'
+                + '<label>Привязка к свойству ТП<select class="pmod-inp" data-k="prop">' + propOptions + '</select></label>'
+                + '<label>XML_ID маркера<input class="pmod-inp" data-k="xml" value="' + escapeHtml(field.binding.marker.xmlId || '') + '"></label>'
+                + '<label>VALUE маркера<input class="pmod-inp" data-k="val" value="' + escapeHtml(field.binding.marker.value || '') + '"></label>'
+                + '</div>'
+                + '<div class="pmod-admin-actions">'
+                + '<button type="button" class="adm-btn" data-k="create-marker">Создать / обновить маркер</button>'
                 + '</div>';
 
             binding.querySelector('[data-k="name"]').oninput = function () { field.name = this.value; saveJson(textarea, state); };
-            binding.querySelector('[data-k="code"]').oninput = function () { field.binding.skuPropertyCode = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="xml"]').oninput = function () { field.binding.marker.xmlId = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="val"]').oninput = function () { field.binding.marker.value = this.value; saveJson(textarea, state); };
+            binding.querySelector('[data-k="prop"]').onchange = function () {
+                var selected = props.filter(function (p) { return p.code === this.value; }.bind(this))[0] || null;
+                field.binding.skuPropertyCode = selected ? selected.code : '';
+                field.binding.skuPropertyId = selected ? Number(selected.id) : 0;
+                if (!field.name && selected) field.name = selected.name;
+                saveJson(textarea, state);
+                rerender();
+            };
+            binding.querySelector('[data-k="create-marker"]').onclick = function () {
+                createMarker(field, function (ok, msg) {
+                    setStatus(root, msg, ok ? 'success' : 'error');
+                    saveJson(textarea, state);
+                });
+            };
             body.appendChild(binding);
 
             field.inputs.forEach(function (input, inputIdx) {

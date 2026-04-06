@@ -27,6 +27,9 @@ class prospektweb_propmodificator extends CModule
     public $PARTNER_NAME;
     public $PARTNER_URI;
 
+    /** @var string */
+    private $modulePath;
+
     public function __construct()
     {
         $arModuleVersion = [];
@@ -38,7 +41,10 @@ class prospektweb_propmodificator extends CModule
         $this->MODULE_DESCRIPTION  = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_MODULE_DESCRIPTION');
         $this->PARTNER_NAME        = 'PROSPEKT-WEB';
         $this->PARTNER_URI         = 'https://prospektweb.ru';
+        $this->modulePath          = dirname(__DIR__);
     }
+
+    // ─── Установка ────────────────────────────────────────────────────────────
 
     public function DoInstall()
     {
@@ -86,20 +92,28 @@ class prospektweb_propmodificator extends CModule
 
     public function installDB(): bool
     {
-        $productsIblockId = (int)($_REQUEST['PRODUCTS_IBLOCK_ID'] ?? $this->detectProductsIblockId());
+        $offersIblockId   = (int)($_REQUEST['OFFERS_IBLOCK_ID'] ?? $this->detectOffersIblockId());
+        $productsIblockId = (int)($_REQUEST['PRODUCTS_IBLOCK_ID'] ?? $this->detectProductsIblockId($offersIblockId));
 
+        if ($offersIblockId) {
+            Option::set($this->MODULE_ID, 'OFFERS_IBLOCK_ID', $offersIblockId);
+        }
         if ($productsIblockId) {
             Option::set($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', $productsIblockId);
-            $this->createProductProperties($productsIblockId);
         }
 
         Option::set($this->MODULE_ID, 'CUSTOM_CONFIG_PROP_CODE', 'PMOD_CUSTOM_CONFIG');
+
+        if ($productsIblockId) {
+            $this->createProductProperties($productsIblockId);
+        }
 
         return true;
     }
 
     public function installFiles(): bool
     {
+        // JS/CSS ассеты → /bitrix/js/prospektweb.propmodificator/
         $srcDir  = __DIR__ . '/assets/js/prospektweb.propmodificator';
         $destDir = '/bitrix/js/prospektweb.propmodificator';
 
@@ -107,6 +121,21 @@ class prospektweb_propmodificator extends CModule
             CopyDirFiles($srcDir, Application::getDocumentRoot() . $destDir, true, true);
         }
 
+        // AJAX-роутер → /ajax/prospektweb.propmodificator/
+        $ajaxSrc  = __DIR__ . '/assets/ajax/prospektweb.propmodificator';
+        $ajaxDest = Application::getDocumentRoot() . '/ajax/prospektweb.propmodificator';
+
+        if (is_dir($ajaxSrc)) {
+            if (!is_dir($ajaxDest)) {
+                @mkdir($ajaxDest, 0755, true);
+            }
+            if (is_dir($ajaxDest)) {
+                CopyDirFiles($ajaxSrc, $ajaxDest, true, true);
+            }
+        }
+
+
+        // Admin tools endpoint → /bitrix/tools/prospektweb.propmodificator/
         $toolsSrc = __DIR__ . '/assets/tools/prospektweb.propmodificator';
         $toolsDest = Application::getDocumentRoot() . '/bitrix/tools/prospektweb.propmodificator';
         if (is_dir($toolsSrc)) {
@@ -117,6 +146,9 @@ class prospektweb_propmodificator extends CModule
                 CopyDirFiles($toolsSrc, $toolsDest, true, true);
             }
         }
+
+        // Aspro local overrides (копия шаблонных файлов в /local/templates/aspro-premier)
+        $this->installAsproLocalOverrides();
 
         return true;
     }
@@ -140,7 +172,25 @@ class prospektweb_propmodificator extends CModule
 
     public function installEvents(): void
     {
-        EventManager::getInstance()->registerEventHandler(
+        $eventManager = EventManager::getInstance();
+
+        $eventManager->registerEventHandler(
+            'sale',
+            'OnBeforeBasketAdd',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\BasketHandler',
+            'onBeforeBasketAdd'
+        );
+
+        $eventManager->registerEventHandler(
+            'sale',
+            'OnBeforeSaleBasketItemSetFields',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\BasketHandler',
+            'onBeforeSaleBasketItemSetFields'
+        );
+
+        $eventManager->registerEventHandler(
             'main',
             'OnProlog',
             $this->MODULE_ID,
@@ -148,6 +198,8 @@ class prospektweb_propmodificator extends CModule
             'onProlog'
         );
     }
+
+    // ─── Деинсталляция ────────────────────────────────────────────────────────
 
     public function DoUninstall()
     {
@@ -183,12 +235,19 @@ class prospektweb_propmodificator extends CModule
 
     public function uninstallDB(bool $saveData = true): bool
     {
-        if (!$saveData && Loader::includeModule('iblock')) {
-            $productsIblockId = (int)Option::get($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', 0);
-            if ($productsIblockId > 0) {
-                $rsProp = CIBlockProperty::GetList([], ['IBLOCK_ID' => $productsIblockId, 'CODE' => 'PMOD_CUSTOM_CONFIG']);
-                if ($arProp = $rsProp->Fetch()) {
-                    CIBlockProperty::Delete($arProp['ID']);
+        if (!$saveData) {
+            if (Loader::includeModule('iblock')) {
+                $productsIblockId = (int)Option::get($this->MODULE_ID, 'PRODUCTS_IBLOCK_ID', 0);
+                if ($productsIblockId > 0) {
+                    foreach (['PMOD_CUSTOM_CONFIG'] as $code) {
+                        $rsProp = CIBlockProperty::GetList(
+                            [],
+                            ['IBLOCK_ID' => $productsIblockId, 'CODE' => $code]
+                        );
+                        if ($arProp = $rsProp->Fetch()) {
+                            CIBlockProperty::Delete($arProp['ID']);
+                        }
+                    }
                 }
             }
         }
@@ -198,8 +257,123 @@ class prospektweb_propmodificator extends CModule
 
     public function uninstallFiles(): void
     {
+        $this->uninstallAsproLocalOverrides();
         DeleteDirFilesEx('/bitrix/js/prospektweb.propmodificator');
+        DeleteDirFilesEx('/ajax/prospektweb.propmodificator');
         DeleteDirFilesEx('/bitrix/tools/prospektweb.propmodificator');
+    }
+
+    /**
+     * Копирует ключевые файлы шаблона Аспро из /bitrix/templates в /local/templates
+     * для безопасного override без правки vendor-файлов.
+     */
+    private function installAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $localTemplateRoot = $docRoot . '/local/templates/aspro-premier';
+
+        // Важно: не создаём "пустой" local-template.
+        // Если папка шаблона в /local отсутствует (или неполная), пропускаем auto-copy,
+        // иначе Bitrix может попытаться использовать неполный шаблон и уронить сайт.
+        $hasLocalTemplate = is_dir($localTemplateRoot) && (
+            file_exists($localTemplateRoot . '/description.php')
+            || file_exists($localTemplateRoot . '/header.php')
+            || file_exists($localTemplateRoot . '/init.php')
+        );
+
+        if (!$hasLocalTemplate) {
+            // Миграционный self-heal: если ранее были созданы только pmod-файлы,
+            // удалим их, чтобы не оставлять "битый" каркас local-template.
+            foreach ([
+                $localTemplateRoot . '/js/select_offer_func.js',
+                $localTemplateRoot . '/js/select_offer_func.min.js',
+                $localTemplateRoot . '/ajax/js_item_detail.php',
+            ] as $file) {
+                $marker = $file . '.pmod_installed';
+                if (file_exists($marker)) {
+                    @unlink($file);
+                    @unlink($marker);
+                }
+            }
+            return;
+        }
+
+        $targets = [
+            'js/select_offer_func.js'   => '/local/templates/aspro-premier/js/select_offer_func.js',
+            'js/select_offer_func.min.js' => '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            'ajax/js_item_detail.php'   => '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $relativeFile => $dstRel) {
+            $src = $this->resolveAsproTemplateSourceFile($relativeFile);
+            if (!$src) {
+                continue;
+            }
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+
+            if (!is_dir(dirname($dst))) {
+                @mkdir(dirname($dst), 0755, true);
+            }
+            if (!is_dir(dirname($dst))) {
+                continue;
+            }
+
+            // Не затираем пользовательские override-файлы.
+            if (!file_exists($dst)) {
+                @copy($src, $dst);
+                if (file_exists($dst)) {
+                    @file_put_contents(
+                        $marker,
+                        'Installed by prospektweb.propmodificator at ' . date('c')
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Ищет исходный файл шаблона Aspro Premier в типовых локациях.
+     */
+    private function resolveAsproTemplateSourceFile(string $relativeFile): ?string
+    {
+        $docRoot = Application::getDocumentRoot();
+        $candidates = [
+            $docRoot . '/bitrix/templates/aspro-premier/' . $relativeFile,
+        ];
+
+        foreach ($candidates as $file) {
+            if (file_exists($file)) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Удаляет только те override-файлы Аспро в /local/templates,
+     * которые были скопированы установщиком модуля (по marker-файлу).
+     */
+    private function uninstallAsproLocalOverrides(): void
+    {
+        $docRoot = Application::getDocumentRoot();
+        $targets = [
+            '/local/templates/aspro-premier/js/select_offer_func.js',
+            '/local/templates/aspro-premier/js/select_offer_func.min.js',
+            '/local/templates/aspro-premier/ajax/js_item_detail.php',
+        ];
+
+        foreach ($targets as $dstRel) {
+            $dst = $docRoot . $dstRel;
+            $marker = $dst . '.pmod_installed';
+            if (file_exists($marker)) {
+                if (file_exists($dst)) {
+                    @unlink($dst);
+                }
+                @unlink($marker);
+            }
+        }
     }
 
     public function uninstallFooter(): void
@@ -214,6 +388,7 @@ class prospektweb_propmodificator extends CModule
             'onEpilog'
         );
 
+        // Also clean up the old OnEpilogHtml handler if it was registered by a previous install
         $eventManager->unRegisterEventHandler(
             'main',
             'OnEpilogHtml',
@@ -233,12 +408,15 @@ class prospektweb_propmodificator extends CModule
         if (!is_dir($includeDir)) {
             @mkdir($includeDir, 0755, true);
         }
+
         if (!is_dir($includeDir)) {
             return false;
         }
 
         $content = <<<'PHP'
 <?php
+// Auto-created by prospektweb.propmodificator installer. Do not edit manually.
+// Registers the page-handler event so the module works without init.php.
 if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     return;
 }
@@ -259,12 +437,16 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 );
 PHP;
 
-        return file_put_contents($includeFile, $content) !== false;
+        $result = file_put_contents($includeFile, $content);
+
+        return $result !== false;
     }
 
     public function uninstallIncludeFile(): void
     {
-        $includeFile = Application::getDocumentRoot() . '/bitrix/php_interface/include/prospektweb_propmodificator.php';
+        $includeFile = Application::getDocumentRoot()
+            . '/bitrix/php_interface/include/prospektweb_propmodificator.php';
+
         if (file_exists($includeFile)) {
             @unlink($includeFile);
         }
@@ -272,7 +454,25 @@ PHP;
 
     public function uninstallEvents(): void
     {
-        EventManager::getInstance()->unRegisterEventHandler(
+        $eventManager = EventManager::getInstance();
+
+        $eventManager->unRegisterEventHandler(
+            'sale',
+            'OnBeforeBasketAdd',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\BasketHandler',
+            'onBeforeBasketAdd'
+        );
+
+        $eventManager->unRegisterEventHandler(
+            'sale',
+            'OnBeforeSaleBasketItemSetFields',
+            $this->MODULE_ID,
+            'Prospektweb\\PropModificator\\BasketHandler',
+            'onBeforeSaleBasketItemSetFields'
+        );
+
+        $eventManager->unRegisterEventHandler(
             'main',
             'OnProlog',
             $this->MODULE_ID,
@@ -281,56 +481,108 @@ PHP;
         );
     }
 
+    // ─── Проверка зависимостей ────────────────────────────────────────────────
+
     public function checkDependencies(): bool
     {
-        if (Loader::includeModule('iblock')) {
-            return true;
+        $errors = [];
+
+        if (!Loader::includeModule('iblock')) {
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_IBLOCK');
+        }
+        if (!Loader::includeModule('catalog')) {
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_CATALOG');
+        }
+        if (!Loader::includeModule('sale')) {
+            $errors[] = Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_SALE');
         }
 
-        global $APPLICATION;
-        $APPLICATION->ThrowException(Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_DEP_ERROR_IBLOCK'));
-        return false;
+        if (!empty($errors)) {
+            global $APPLICATION;
+            $APPLICATION->ThrowException(implode('<br>', $errors));
+            return false;
+        }
+
+        return true;
     }
 
-    public function detectProductsIblockId(): int
+    // ─── Вспомогательные методы ───────────────────────────────────────────────
+
+    /**
+     * Автоопределение инфоблока торговых предложений.
+     */
+    public function detectOffersIblockId(): int
     {
-        if (!Loader::includeModule('iblock')) {
-            return 14;
+        if (Loader::includeModule('catalog')) {
+            $arSku = CCatalogSKU::GetInfoByProductIBlock(14);
+            if (!empty($arSku['IBLOCK_ID'])) {
+                return (int)$arSku['IBLOCK_ID'];
+            }
         }
 
-        $rsIblock = CIBlock::GetList(['SORT' => 'ASC'], ['ACTIVE' => 'Y']);
+        $rsIblock = CIBlock::GetList(
+            ['SORT' => 'ASC'],
+            ['IBLOCK_TYPE_ID' => 'aspro_premier_catalog', 'ACTIVE' => 'Y']
+        );
         if ($ar = $rsIblock->Fetch()) {
             return (int)$ar['ID'];
+        }
+
+        return 15;
+    }
+
+    /**
+     * Определяем инфоблок товаров по инфоблоку ТП.
+     */
+    public function detectProductsIblockId(int $offersIblockId): int
+    {
+        if (Loader::includeModule('catalog')) {
+            $arSku = CCatalogSKU::GetInfoByOfferIBlock($offersIblockId);
+            if (!empty($arSku['PRODUCT_IBLOCK_ID'])) {
+                return (int)$arSku['PRODUCT_IBLOCK_ID'];
+            }
         }
 
         return 14;
     }
 
+    /**
+     * Создаём свойство JSON-конфига PMOD_CUSTOM_CONFIG в инфоблоке товаров.
+     */
     public function createProductProperties(int $productsIblockId): void
     {
         if (!Loader::includeModule('iblock') || $productsIblockId <= 0) {
             return;
         }
 
-        $arProp = [
-            'CODE'             => 'PMOD_CUSTOM_CONFIG',
-            'NAME'             => 'Конструктор произвольных полей (JSON)',
-            'IBLOCK_ID'        => $productsIblockId,
-            'PROPERTY_TYPE'    => 'S',
-            'USER_TYPE'        => 'HTML',
-            'MULTIPLE'         => 'N',
-            'WITH_DESCRIPTION' => 'N',
-            'ACTIVE'           => 'Y',
-            'SORT'             => 500,
-            'FILTRABLE'        => 'N',
-            'IS_REQUIRED'      => 'N',
-            'HINT'             => 'JSON-конфиг конструктора полей. Редактируется UI-редактором модуля.',
+        $propsToCreate = [
+            [
+                'CODE'             => 'PMOD_CUSTOM_CONFIG',
+                'NAME'             => 'Конструктор произвольных полей (JSON)',
+                'IBLOCK_ID'        => $productsIblockId,
+                'PROPERTY_TYPE'    => 'S',
+                'USER_TYPE'        => 'HTML',
+                'MULTIPLE'         => 'N',
+                'WITH_DESCRIPTION' => 'N',
+                'ACTIVE'           => 'Y',
+                'SORT'             => 500,
+                'FILTRABLE'        => 'N',
+                'IS_REQUIRED'      => 'N',
+                'HINT'             => 'JSON-конфиг конструктора полей. Редактируется UI-редактором модуля.',
+            ],
         ];
 
-        $rsProp = CIBlockProperty::GetList([], ['IBLOCK_ID' => $productsIblockId, 'CODE' => $arProp['CODE']]);
-        if (!$rsProp->Fetch()) {
-            $oProp = new CIBlockProperty();
-            $oProp->Add($arProp);
+        $oProp = new CIBlockProperty();
+
+        foreach ($propsToCreate as $arProp) {
+            $rsProp = CIBlockProperty::GetList(
+                [],
+                ['IBLOCK_ID' => $productsIblockId, 'CODE' => $arProp['CODE']]
+            );
+
+            if (!$rsProp->Fetch()) {
+                $oProp->Add($arProp);
+            }
         }
     }
 }
