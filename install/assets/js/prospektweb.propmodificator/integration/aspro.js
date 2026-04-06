@@ -145,10 +145,14 @@
                 replaceKeys.forEach(function (rk, idx) {
                     var key = String(rk && rk.key || '').trim();
                     if (!key) return;
-                    var customVal = self.getCustomValueByIndex(state, skuCode, idx);
+                    var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
+                    var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
+                        ? parsedInputIndex
+                        : idx;
+                    var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
                     var replacement = customVal !== null && customVal !== undefined && customVal !== ''
                         ? String(customVal)
-                        : (fallbackParts[idx] !== undefined ? String(fallbackParts[idx]) : '');
+                        : (fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '');
                     newText = newText.split(key).join(replacement);
                 });
             });
