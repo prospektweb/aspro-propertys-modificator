@@ -4,6 +4,8 @@ namespace Prospektweb\PropModificator;
 
 use Bitrix\Catalog\GroupTable;
 use Bitrix\Catalog\RoundingTable;
+use Bitrix\Main\Loader;
+use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
 
 /**
  * Calculates interpolated prices and applies Bitrix rounding rules.
@@ -16,6 +18,25 @@ class PricingService
     /** @param array<string,mixed> $request */
     public function calculate(array $request): array
     {
+        if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
+            return ['ok' => false, 'error' => 'Required modules not loaded'];
+        }
+
+        if (!ValidationRules::hasCustomInput($request['width'], $request['height'], $request['volume'])) {
+            return ['ok' => false, 'error' => 'At least one of volume, width+height required'];
+        }
+
+        $settings = (new ProductConfigReader())->readByProductId((int)$request['productId']);
+        if (!ValidationRules::validateInput(
+            $request['width'],
+            $request['height'],
+            $request['volume'],
+            $settings['formatSettings'] ?? [],
+            $settings['volumeSettings'] ?? []
+        )) {
+            return ['ok' => false, 'error' => 'Input is out of configured limits'];
+        }
+
         $repo = new OfferRepository();
         $meta = $repo->loadOfferMetadata((int)$request['productId'], $request['otherProps'] ?? null);
         if (empty($meta)) {

@@ -5,6 +5,8 @@ namespace Prospektweb\PropModificator;
 use Bitrix\Catalog\GroupTable;
 use Bitrix\Catalog\PriceTable;
 use Bitrix\Catalog\RoundingTable;
+use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
+use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
 
 /**
  * Loads offer-level Bitrix data required for frontend calculator bootstrap.
@@ -14,35 +16,25 @@ use Bitrix\Catalog\RoundingTable;
  */
 class OfferDataProvider
 {
+    public function __construct(
+        private ?EnumValueResolver $enumValueResolver = null,
+        private ?ProductConfigReader $productConfigReader = null
+    ) {
+        $this->enumValueResolver = $this->enumValueResolver ?? new EnumValueResolver();
+        $this->productConfigReader = $this->productConfigReader ?? new ProductConfigReader();
+    }
+
     /** @return array<string,mixed>|null */
     public function loadForProduct(int $productId): ?array
     {
-        $offersIblockId   = Config::getOffersIblockId();
-        $formatPropCode   = Config::getFormatPropCode();
-        $volumePropCode   = Config::getVolumePropCode();
-        $customConfigCode = Config::getCustomConfigPropCode();
+        $offersIblockId = Config::getOffersIblockId();
+        $formatPropCode = Config::getFormatPropCode();
+        $volumePropCode = Config::getVolumePropCode();
 
-        $rsProduct = \CIBlockElement::GetByID($productId);
-        $arProduct = $rsProduct->GetNextElement();
-
-        $formatSettings = [];
-        $volumeSettings = [];
-        $customConfig   = [];
-
-        if ($arProduct && $customConfigCode !== '') {
-            $props = $arProduct->GetProperties([], []);
-            $propPayload = $props[$customConfigCode] ?? null;
-            $rawConfigValue = is_array($propPayload)
-                ? ($propPayload['~VALUE'] ?? $propPayload['VALUE'] ?? null)
-                : null;
-
-            $customConfig = CustomConfig::parseFromPropertyValue($rawConfigValue);
-            if (!empty($customConfig)) {
-                $extracted = CustomConfig::extractCalculatorSettings($customConfig, $formatPropCode, $volumePropCode);
-                $formatSettings = $extracted['formatSettings'];
-                $volumeSettings = $extracted['volumeSettings'];
-            }
-        }
+        $settings = $this->productConfigReader->readByProductId($productId);
+        $formatSettings = $settings['formatSettings'];
+        $volumeSettings = $settings['volumeSettings'];
+        $customConfig = $settings['customConfig'];
 
         if (empty($formatSettings) && empty($volumeSettings)) {
             return null;
@@ -52,8 +44,8 @@ class OfferDataProvider
         $volumePropId = $this->resolvePropId($offersIblockId, $volumePropCode);
 
         $volumeEnumMap = $this->loadVolumeEnumMap($volumePropId);
-        $formatEnumMap = $this->loadFormatEnumMap($formatPropId);
-        $otherProps    = $this->loadOtherListProps($offersIblockId, $formatPropCode, $volumePropCode);
+        $formatEnumMap = $this->enumValueResolver->loadEnumXmlMap($formatPropId);
+        $otherProps = $this->loadOtherListProps($offersIblockId, $formatPropCode, $volumePropCode);
 
         $offersData = $this->loadOffers($productId, $offersIblockId, $formatPropCode, $volumePropCode, $formatEnumMap, $volumeEnumMap, $otherProps);
         $offers = $offersData['offers'];
@@ -116,32 +108,9 @@ class OfferDataProvider
     private function loadVolumeEnumMap(?int $propId): array
     {
         $result = [];
-        if (!$propId) {
-            return $result;
-        }
-        $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $propId]);
-        while ($arEnum = $rsEnum->Fetch()) {
-            $enumId = (int)$arEnum['ID'];
-            $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
-            if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
-                $result[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
-            }
-        }
-        return $result;
-    }
-
-    private function loadFormatEnumMap(?int $propId): array
-    {
-        $result = [];
-        if (!$propId) {
-            return $result;
-        }
-        $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $propId]);
-        while ($arEnum = $rsEnum->Fetch()) {
-            $enumId = (int)$arEnum['ID'];
-            $xmlId  = trim((string)($arEnum['XML_ID'] ?? ''));
-            if ($enumId > 0 && $xmlId !== '') {
-                $result[$enumId] = $xmlId;
+        foreach ($this->enumValueResolver->loadEnumXmlMap($propId) as $enumId => $xmlId) {
+            if (is_numeric($xmlId) || $xmlId === 'X') {
+                $result[(int)$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
             }
         }
         return $result;
@@ -175,24 +144,17 @@ class OfferDataProvider
         while ($arOffer = $rsOffers->Fetch()) {
             $offerId = (int)$arOffer['ID'];
 
-            $formatXmlId = $arOffer["PROPERTY_{$formatPropCode}_VALUE_XML_ID"] ?? null;
-            if (empty($formatXmlId)) {
-                $enumId = (int)($arOffer["PROPERTY_{$formatPropCode}_ENUM_ID"] ?? 0);
-                if ($enumId > 0) {
-                    $formatXmlId = $formatEnumMap[$enumId] ?? null;
-                }
-            }
+            $formatXmlId = $this->enumValueResolver->resolveXmlId(
+                $arOffer["PROPERTY_{$formatPropCode}_VALUE_XML_ID"] ?? null,
+                isset($arOffer["PROPERTY_{$formatPropCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$formatPropCode}_ENUM_ID"] : null,
+                $formatEnumMap
+            );
 
-            $volumeXmlId = $arOffer["PROPERTY_{$volumePropCode}_VALUE_XML_ID"] ?? null;
-            if (empty($volumeXmlId)) {
-                $enumId = (int)($arOffer["PROPERTY_{$volumePropCode}_ENUM_ID"] ?? 0);
-                if ($enumId > 0) {
-                    $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
-                    if ($volumeXmlId !== null) {
-                        $volumeXmlId = (string)$volumeXmlId;
-                    }
-                }
-            }
+            $volumeXmlId = $this->enumValueResolver->resolveXmlId(
+                $arOffer["PROPERTY_{$volumePropCode}_VALUE_XML_ID"] ?? null,
+                isset($arOffer["PROPERTY_{$volumePropCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$volumePropCode}_ENUM_ID"] : null,
+                array_map('strval', $volumeEnumMap)
+            );
 
             $formatParsed = $formatXmlId ? PropertyValidator::parseFormatXmlId($formatXmlId) : null;
             $volumeParsed = $volumeXmlId ? PropertyValidator::parseVolumeXmlId($volumeXmlId) : null;

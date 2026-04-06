@@ -11,6 +11,9 @@ use Bitrix\Main\Loader;
 Loader::registerAutoloadClasses('prospektweb.propmodificator', [
     'Prospektweb\\PropModificator\\Config'             => 'lib/Config.php',
     'Prospektweb\\PropModificator\\PropertyValidator'  => 'lib/PropertyValidator.php',
+    'Prospektweb\\PropModificator\\ValidationRules'  => 'lib/ValidationRules.php',
+    'Prospektweb\\PropModificator\\Domain\\Offer\\EnumValueResolver' => 'lib/Domain/Offer/EnumValueResolver.php',
+    'Prospektweb\\PropModificator\\Domain\\Config\\ProductConfigReader' => 'lib/Domain/Config/ProductConfigReader.php',
     'Prospektweb\\PropModificator\\PriceInterpolator'  => 'lib/PriceInterpolator.php',
     'Prospektweb\\PropModificator\\BasketHandler'      => 'lib/BasketHandler.php',
     'Prospektweb\\PropModificator\\PageHandler'        => 'lib/PageHandler.php',
