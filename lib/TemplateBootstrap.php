@@ -14,6 +14,11 @@ use Bitrix\Main\Page\AssetLocation;
  */
 class TemplateBootstrap
 {
+    public function __construct(private ?OfferDataProvider $offerDataProvider = null)
+    {
+        $this->offerDataProvider = $this->offerDataProvider ?? new OfferDataProvider();
+    }
+
     public function run(): void
     {
         if (!Loader::includeModule('prospektweb.propmodificator')) {
@@ -30,8 +35,7 @@ class TemplateBootstrap
             return;
         }
 
-        $provider = new OfferDataProvider();
-        $productData = $provider->loadForProduct($productId);
+        $productData = $this->offerDataProvider->loadForProduct($productId);
         if ($productData === null) {
             PageHandler::debugLog('No custom JSON settings for productId=' . $productId . ', skipping');
             return;

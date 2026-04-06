@@ -15,7 +15,7 @@ class PriceInterpolator
         $customFormat = ($width !== null && $height !== null);
         $customVolume = ($volume !== null);
 
-        if (!$customFormat && !$customVolume) {
+        if (!ValidationRules::hasCustomInput($width, $height, $volume)) {
             return null;
         }
         if ($customFormat && $customVolume) {

@@ -4,6 +4,7 @@ namespace Prospektweb\PropModificator;
 
 use Bitrix\Catalog\PriceTable;
 use Bitrix\Main\Loader;
+use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
 
 /**
  * Reads offer metadata and price rows from Bitrix catalog/iblock tables.
@@ -13,6 +14,11 @@ use Bitrix\Main\Loader;
  */
 class OfferRepository
 {
+    public function __construct(private ?EnumValueResolver $enumValueResolver = null)
+    {
+        $this->enumValueResolver = $this->enumValueResolver ?? new EnumValueResolver();
+    }
+
     public function loadOfferMetadata(int $productId, ?array $filterProps): array
     {
         if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
@@ -27,7 +33,7 @@ class OfferRepository
         $volumePropId = $this->resolvePropId($offersIblockId, $volumeCode);
 
         $volumeEnumMap = $this->loadVolumeEnumMap($volumePropId);
-        $formatEnumMap = $this->loadFormatEnumMap($formatPropId);
+        $formatEnumMap = $this->enumValueResolver->loadEnumXmlMap($formatPropId);
 
         $otherProps = [];
         if ($filterProps !== null && !empty($filterProps)) {
@@ -50,24 +56,18 @@ class OfferRepository
         $meta = [];
         while ($arOffer = $rsOffers->Fetch()) {
             $offerId = (int)$arOffer['ID'];
-            $formatXmlId = $arOffer["PROPERTY_{$formatCode}_VALUE_XML_ID"] ?? null;
-            if (empty($formatXmlId)) {
-                $enumId = (int)($arOffer["PROPERTY_{$formatCode}_ENUM_ID"] ?? 0);
-                if ($enumId > 0) {
-                    $formatXmlId = $formatEnumMap[$enumId] ?? null;
-                }
-            }
 
-            $volumeXmlId = $arOffer["PROPERTY_{$volumeCode}_VALUE_XML_ID"] ?? null;
-            if (empty($volumeXmlId)) {
-                $enumId = (int)($arOffer["PROPERTY_{$volumeCode}_ENUM_ID"] ?? 0);
-                if ($enumId > 0) {
-                    $volumeXmlId = $volumeEnumMap[$enumId] ?? null;
-                    if ($volumeXmlId !== null) {
-                        $volumeXmlId = (string)$volumeXmlId;
-                    }
-                }
-            }
+            $formatXmlId = $this->enumValueResolver->resolveXmlId(
+                $arOffer["PROPERTY_{$formatCode}_VALUE_XML_ID"] ?? null,
+                isset($arOffer["PROPERTY_{$formatCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$formatCode}_ENUM_ID"] : null,
+                $formatEnumMap
+            );
+
+            $volumeXmlId = $this->enumValueResolver->resolveXmlId(
+                $arOffer["PROPERTY_{$volumeCode}_VALUE_XML_ID"] ?? null,
+                isset($arOffer["PROPERTY_{$volumeCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$volumeCode}_ENUM_ID"] : null,
+                array_map('strval', $volumeEnumMap)
+            );
 
             $formatParsed = $formatXmlId ? PropertyValidator::parseFormatXmlId($formatXmlId) : null;
             $volumeParsed = $volumeXmlId ? PropertyValidator::parseVolumeXmlId($volumeXmlId) : null;
@@ -160,32 +160,9 @@ class OfferRepository
     private function loadVolumeEnumMap(?int $propId): array
     {
         $result = [];
-        if (!$propId) {
-            return $result;
-        }
-        $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $propId]);
-        while ($arEnum = $rsEnum->Fetch()) {
-            $enumId = (int)$arEnum['ID'];
-            $xmlId = trim((string)($arEnum['XML_ID'] ?? ''));
-            if ($enumId > 0 && (is_numeric($xmlId) || $xmlId === 'X')) {
-                $result[$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
-            }
-        }
-        return $result;
-    }
-
-    private function loadFormatEnumMap(?int $propId): array
-    {
-        $result = [];
-        if (!$propId) {
-            return $result;
-        }
-        $rsEnum = \CIBlockPropertyEnum::GetList([], ['PROPERTY_ID' => $propId]);
-        while ($arEnum = $rsEnum->Fetch()) {
-            $enumId = (int)$arEnum['ID'];
-            $xmlId = trim((string)($arEnum['XML_ID'] ?? ''));
-            if ($enumId > 0 && $xmlId !== '') {
-                $result[$enumId] = $xmlId;
+        foreach ($this->enumValueResolver->loadEnumXmlMap($propId) as $enumId => $xmlId) {
+            if (is_numeric($xmlId) || $xmlId === 'X') {
+                $result[(int)$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
             }
         }
         return $result;

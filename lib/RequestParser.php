@@ -36,8 +36,8 @@ class RequestParser
         if (!$productId) {
             return ['ok' => false, 'error' => 'productId required'];
         }
-        if ($volume === null && $width === null && $height === null) {
-            return ['ok' => false, 'error' => 'At least one of volume, width, height required'];
+        if (!ValidationRules::hasCustomInput($width, $height, $volume)) {
+            return ['ok' => false, 'error' => 'At least one of volume or width+height required'];
         }
 
         return [
