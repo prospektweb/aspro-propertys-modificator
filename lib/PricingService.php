@@ -2,52 +2,64 @@
 
 namespace Prospektweb\PropModificator;
 
-use Bitrix\Catalog\GroupTable;
-use Bitrix\Catalog\RoundingTable;
 use Bitrix\Main\Loader;
 use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceRequest;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceResult;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\CatalogRepository;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\OfferRepository;
 
-/**
- * Calculates interpolated prices and applies Bitrix rounding rules.
- *
- * Input: normalized request payload.
- * Output: computed pricing context with prices/ranges/groups/access metadata.
- */
 class PricingService
 {
-    /** @param array<string,mixed> $request */
-    public function calculate(array $request): array
+    public function __construct(
+        private ?ProductConfigReader $productConfigReader = null,
+        private ?OfferRepository $offerRepository = null,
+        private ?CatalogRepository $catalogRepository = null,
+        private ?PriceInterpolator $interpolator = null,
+    ) {
+        $this->productConfigReader = $this->productConfigReader ?? new ProductConfigReader();
+        $this->offerRepository = $this->offerRepository ?? new OfferRepository();
+        $this->catalogRepository = $this->catalogRepository ?? new CatalogRepository();
+        $this->interpolator = $this->interpolator ?? new PriceInterpolator();
+    }
+
+    /** @param array<string,mixed>|CalcPriceRequest $request */
+    public function calculate(array|CalcPriceRequest $request): array
+    {
+        $dto = $request instanceof CalcPriceRequest ? $request : CalcPriceRequest::fromArray($request);
+        return $this->calculateDto($dto)->toArray();
+    }
+
+    public function calculateDto(CalcPriceRequest $request): CalcPriceResult
     {
         if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
-            return ['ok' => false, 'error' => 'Required modules not loaded'];
+            return new CalcPriceResult(false, 'Required modules not loaded', [], [], [], [], []);
         }
 
-        if (!ValidationRules::hasCustomInput($request['width'], $request['height'], $request['volume'])) {
-            return ['ok' => false, 'error' => 'At least one of volume, width+height required'];
+        if (!ValidationRules::hasCustomInput($request->width, $request->height, $request->volume)) {
+            return new CalcPriceResult(false, 'At least one of volume, width+height required', [], [], [], [], []);
         }
 
-        $settings = (new ProductConfigReader())->readByProductId((int)$request['productId']);
+        $settings = $this->productConfigReader->readByProductId($request->productId);
         if (!ValidationRules::validateInput(
-            $request['width'],
-            $request['height'],
-            $request['volume'],
+            $request->width,
+            $request->height,
+            $request->volume,
             $settings['formatSettings'] ?? [],
             $settings['volumeSettings'] ?? []
         )) {
-            return ['ok' => false, 'error' => 'Input is out of configured limits'];
+            return new CalcPriceResult(false, 'Input is out of configured limits', [], [], [], [], []);
         }
 
-        $repo = new OfferRepository();
-        $meta = $repo->loadOfferMetadata((int)$request['productId'], $request['otherProps'] ?? null);
+        $meta = $this->offerRepository->loadOfferMetadata($request->productId, $request->otherProps);
         if (empty($meta)) {
-            return ['ok' => false, 'error' => 'No prices could be calculated'];
+            return new CalcPriceResult(false, 'No prices could be calculated', [], [], [], [], []);
         }
 
         $offerIds = array_keys($meta);
-        $interpolator = new PriceInterpolator();
 
-        $pricesByGroup = $repo->loadGroupPrices($offerIds);
-        $rangeRowsByGroup = $repo->loadGroupRangePrices($offerIds);
+        $pricesByGroup = $this->offerRepository->loadGroupPrices($offerIds);
+        $rangeRowsByGroup = $this->offerRepository->loadGroupRangePrices($offerIds);
 
         $rawPrices = [];
         foreach ($pricesByGroup as $gid => $groupPrices) {
@@ -59,7 +71,7 @@ class PricingService
                 }
                 $points[] = array_merge($m, ['price' => $price]);
             }
-            $p = $interpolator->interpolatePoints($points, $request['width'], $request['height'], $request['volume']);
+            $p = $this->interpolator->interpolatePoints($points, $request->width, $request->height, $request->volume);
             if ($p !== null) {
                 $rawPrices[(int)$gid] = $p;
             }
@@ -85,15 +97,15 @@ class PricingService
                     }
                     $points[] = array_merge($m, ['price' => (float)$row['price']]);
                 }
-                $p = $interpolator->interpolatePoints($points, $request['width'], $request['height'], $request['volume']);
+                $p = $this->interpolator->interpolatePoints($points, $request->width, $request->height, $request->volume);
                 if ($p !== null) {
                     $rangePrices[(int)$gid][] = ['from' => $from, 'to' => $to, 'price' => $p];
                 }
             }
         }
 
-        $catalogGroups = $this->loadCatalogGroups();
-        $roundingRules = $this->loadRoundingRules();
+        $catalogGroups = $this->catalogRepository->loadCatalogGroups();
+        $roundingRules = $this->catalogRepository->loadRoundingRules();
 
         foreach ($rawPrices as $gid => &$price) {
             if (!empty($roundingRules[$gid])) {
@@ -113,21 +125,38 @@ class PricingService
         }
         unset($rows);
 
-        $accessibleGroupIds = $this->getAccessiblePriceGroups();
+        $accessibleGroupIds = $this->catalogRepository->getAccessiblePriceGroups();
 
-        return [
-            'ok' => !empty($rawPrices) || !empty($rangePrices),
-            'error' => empty($rawPrices) && empty($rangePrices) ? 'No prices could be calculated' : null,
-            'rawPrices' => $rawPrices,
-            'rangePrices' => $rangePrices,
-            'catalogGroups' => $catalogGroups,
-            'roundingRules' => $roundingRules,
-            'accessibleGroupIds' => $accessibleGroupIds,
-        ];
+        $ok = !empty($rawPrices) || !empty($rangePrices);
+        return new CalcPriceResult(
+            $ok,
+            $ok ? null : 'No prices could be calculated',
+            $rawPrices,
+            $rangePrices,
+            $catalogGroups,
+            $roundingRules,
+            $accessibleGroupIds,
+        );
     }
 
-    private function loadCatalogGroups(): array { $groups=[]; try { $rs=GroupTable::getList(['select'=>['ID','NAME','BASE'],'order'=>['ID'=>'ASC']]); while($r=$rs->fetch()){ $id=(int)$r['ID']; $groups[$id]=['id'=>$id,'name'=>(string)$r['NAME'],'base'=>($r['BASE']??'N')==='Y'];}} catch(\Throwable $e) {} return $groups; }
-    private function loadRoundingRules(): array { $rules=[]; try { $rs=RoundingTable::getList(['select'=>['CATALOG_GROUP_ID','PRICE','ROUND_TYPE','ROUND_PRECISION'],'order'=>['CATALOG_GROUP_ID'=>'ASC','PRICE'=>'ASC']]); while($r=$rs->fetch()){ $gid=(int)$r['CATALOG_GROUP_ID']; $rules[$gid][]=['price'=>(float)$r['PRICE'],'type'=>(int)$r['ROUND_TYPE'],'precision'=>(float)$r['ROUND_PRECISION']]; }} catch(\Throwable $e) {} return $rules; }
-    private function applyRounding(float $price, array $rules): float { $applied=null; foreach($rules as $rule){ if($price>=(float)$rule['price']){$applied=$rule;}} if(!$applied){return $price;} $precision=max((float)$applied['precision'],0.000001); return match((int)$applied['type']){1=>floor($price/$precision)*$precision,2=>round($price/$precision)*$precision,3=>ceil($price/$precision)*$precision,default=>$price}; }
-    private function getAccessiblePriceGroups(): array { global $USER; $userGroups=[]; if(is_object($USER)&&method_exists($USER,'GetUserGroupArray')){$userGroups=(array)$USER->GetUserGroupArray();} if(empty($userGroups)){$userGroups=[2];} $ids=[]; if(class_exists('CCatalogGroup')){ try{$perms=\CCatalogGroup::GetGroupsPerms($userGroups); if(is_array($perms)){ foreach($perms as $gid=>$perm){ if(($perm['buy']??'N')==='Y'){$ids[]=(int)$gid;}}}} catch(\Throwable $e){} } return array_values(array_unique($ids)); }
+    private function applyRounding(float $price, array $rules): float
+    {
+        $applied = null;
+        foreach ($rules as $rule) {
+            if ($price >= (float)$rule['price']) {
+                $applied = $rule;
+            }
+        }
+        if (!$applied) {
+            return $price;
+        }
+        $precision = max((float)$applied['precision'], 0.000001);
+
+        return match ((int)$applied['type']) {
+            1 => floor($price / $precision) * $precision,
+            2 => round($price / $precision) * $precision,
+            3 => ceil($price / $precision) * $precision,
+            default => $price,
+        };
+    }
 }

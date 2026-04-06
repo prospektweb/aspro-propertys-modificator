@@ -2,41 +2,38 @@
 
 namespace Prospektweb\PropModificator;
 
-/**
- * Builds AJAX JSON payload for frontend.
- *
- * Input: calculated pricing context and resolved main price.
- * Output: API response array.
- */
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceRequest;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceResult;
+
 class ResponseFactory
 {
-    public function success(array $pricing, ?array $mainPrice, bool $debug, array $request): array
+    public function success(CalcPriceResult $pricing, ?array $mainPrice, CalcPriceRequest $request): array
     {
         $pricesResult = [];
-        foreach ($pricing['rawPrices'] as $gid => $price) {
-            $group = $pricing['catalogGroups'][$gid] ?? null;
+        foreach ($pricing->rawPrices as $gid => $price) {
+            $group = $pricing->catalogGroups[$gid] ?? null;
             $pricesResult[$gid] = [
                 'raw' => round((float)$price, 2),
                 'formatted' => $this->formatPrice((float)$price),
                 'groupName' => $group ? (string)$group['name'] : '',
-                'canBuy' => in_array((int)$gid, $pricing['accessibleGroupIds'], true),
+                'canBuy' => in_array((int)$gid, $pricing->accessibleGroupIds, true),
             ];
         }
 
         $result = [
             'success' => true,
             'prices' => $pricesResult,
-            'ranges' => $pricing['rangePrices'],
+            'ranges' => $pricing->rangePrices,
             'mainPrice' => $mainPrice ? ['raw' => round((float)$mainPrice['price'], 2), 'formatted' => $this->formatPrice((float)$mainPrice['price']), 'groupId' => (int)$mainPrice['groupId']] : null,
-            'meta' => ['currency' => 'RUB', 'vatIncluded' => true, 'roundingApplied' => !empty($pricing['roundingRules'])],
+            'meta' => ['currency' => 'RUB', 'vatIncluded' => true, 'roundingApplied' => !empty($pricing->roundingRules)],
             'requestId' => uniqid('pmod_', true),
         ];
 
-        if ($debug) {
+        if ($request->debug) {
             $result['debug'] = [
-                'activeGroupId' => $request['activeGroupId'],
-                'visibleGroups' => $request['visibleGroups'],
-                'accessibleIds' => $pricing['accessibleGroupIds'],
+                'activeGroupId' => $request->activeGroupId,
+                'visibleGroups' => $request->visibleGroups,
+                'accessibleIds' => $pricing->accessibleGroupIds,
                 'resolvedMain' => $mainPrice,
             ];
         }
