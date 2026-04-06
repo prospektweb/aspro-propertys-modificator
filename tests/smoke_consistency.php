@@ -3,12 +3,30 @@
 require_once __DIR__ . '/../lib/CustomConfig.php';
 require_once __DIR__ . '/../lib/ValidationRules.php';
 require_once __DIR__ . '/../lib/PriceInterpolator.php';
+require_once __DIR__ . '/../lib/RequestParser.php';
+require_once __DIR__ . '/../lib/Infrastructure/Http/RequestInput.php';
+require_once __DIR__ . '/../lib/Infrastructure/Bitrix/ProductConfigRepository.php';
 require_once __DIR__ . '/../lib/Domain/Config/ProductConfigReader.php';
 require_once __DIR__ . '/../lib/Domain/Offer/EnumValueResolver.php';
 
+spl_autoload_register(static function (string $class): void {
+    $prefix = 'Prospektweb\\PropModificator\\';
+    if (strpos($class, $prefix) !== 0) {
+        return;
+    }
+
+    $relativePath = str_replace('\\', '/', substr($class, strlen($prefix)));
+    $file = __DIR__ . '/../lib/' . $relativePath . '.php';
+    if (is_file($file)) {
+        require_once $file;
+    }
+});
+
 use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
 use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
+use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
 use Prospektweb\PropModificator\PriceInterpolator;
+use Prospektweb\PropModificator\RequestParser;
 use Prospektweb\PropModificator\ValidationRules;
 
 function assertTrue(bool $cond, string $message): void
@@ -67,5 +85,13 @@ $interpolator = new PriceInterpolator();
 $priceFromAjaxFlow = $interpolator->interpolatePoints($points, 150, 150, 150);
 $priceFromBasketFlow = $interpolator->interpolatePoints($points, 150, 150, 150);
 assertTrue(abs((float)$priceFromAjaxFlow - (float)$priceFromBasketFlow) < 0.00001, 'Interpolation must be consistent across entrypoints');
+
+$requestParser = new RequestParser();
+$resultWithExtraGet = $requestParser->parseFromInput(new RequestInput(
+    ['width' => '100', 'height' => '100'],
+    ['productId' => '123', 'unexpected' => 'trash']
+));
+assertTrue($resultWithExtraGet['ok'] === true, 'Request parser must ignore unknown GET params');
+assertTrue(($resultWithExtraGet['data']['productId'] ?? 0) === 123, 'Request parser must still parse productId from GET');
 
 echo "OK\n";
