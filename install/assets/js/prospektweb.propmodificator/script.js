@@ -429,13 +429,37 @@
             return h1 ? h1.textContent.trim() : '';
         },
 
-        beginUiStabilization: function (state) {
+        beginUiStabilization: function (state, waitForAsproEvent) {
             if (!state) return 0;
             state._uiRevision = (state._uiRevision || 0) + 1;
             state._pendingUiUpdate = true;
             PModificator.setTitleLoading(true);
             PModificator.setPriceLoading(true);
+
+            // Если фактической смены SKU не было (и onFinalActionSKUInfo не придёт),
+            // завершаем цикл сразу по текущему состоянию DOM.
+            if (waitForAsproEvent === false) {
+                state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                    state.containerEl,
+                    state,
+                    state.rawBaseTitleFromAspro
+                );
+                state._activeUiRevision = state._uiRevision;
+                PModificator.applyFinalUiState(state);
+            }
+
             return state._uiRevision;
+        },
+
+        /**
+         * Единая точка старта UI-стабилизации для любого кастомного свойства.
+         *
+         * @param {Object} state
+         * @param {boolean} didTriggerSkuSwitch
+         */
+        registerCustomPropertyChange: function (state, didTriggerSkuSwitch) {
+            return PModificator.beginUiStabilization(state, !!didTriggerSkuSwitch);
         },
 
         isRevisionActual: function (state, revision) {
@@ -653,6 +677,7 @@
                 var rawW = parseInt(widthInput.value, 10);
                 var rawH = parseInt(heightInput.value, 10);
                 var w, h;
+                var didTriggerSkuSwitch = false;
 
                 if (isImmediate) {
                     // Кнопки +/- или blur: применяем clamp сразу
@@ -673,6 +698,7 @@
                     if (!matched.classList.contains('sku-props__value--active')) {
                         inner._pmodProgrammaticChange = true;
                         matched.click();
+                        didTriggerSkuSwitch = true;
                     }
                     state.customWidth  = null;
                     state.customHeight = null;
@@ -689,17 +715,19 @@
                         if (!customBtn.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             customBtn.click();
+                            didTriggerSkuSwitch = true;
                         }
                     } else {
                         var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
                         if (nearest && !nearest.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             nearest.click();
+                            didTriggerSkuSwitch = true;
                         }
                     }
                 }
 
-                PModificator.beginUiStabilization(state);
+                PModificator.registerCustomPropertyChange(state, didTriggerSkuSwitch);
             }
 
             var debouncedChange = debounce(function () { onFormatChange(false); }, DEBOUNCE_MS);
@@ -872,6 +900,7 @@
             function onVolumeChange(isImmediate) {
                 var raw = parseInt(volumeInput.value, 10);
                 var v;
+                var didTriggerSkuSwitch = false;
 
                 if (isImmediate) {
                     // Кнопки +/- или blur: применяем clamp сразу
@@ -891,6 +920,7 @@
                     if (!matchedBtn.classList.contains('sku-props__value--active')) {
                         inner._pmodProgrammaticChange = true;
                         matchedBtn.click();
+                        didTriggerSkuSwitch = true;
                     }
                     state.customVolume = null;
                     PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
@@ -913,12 +943,14 @@
                         if (!customBtn.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             customBtn.click();
+                            didTriggerSkuSwitch = true;
                         }
                     } else {
                         var nearest = PModificator.findNearestVolumePreset(valuesEl, v);
                         if (nearest && !nearest.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             nearest.click();
+                            didTriggerSkuSwitch = true;
                         }
                     }
 
@@ -946,7 +978,7 @@
                     }(customStr));
                 }
 
-                PModificator.beginUiStabilization(state);
+                PModificator.registerCustomPropertyChange(state, didTriggerSkuSwitch);
             }
 
             var debouncedChange = debounce(function () { onVolumeChange(false); }, DEBOUNCE_MS);
@@ -1022,6 +1054,7 @@
             container.addEventListener('click', function (e) {
                 var btn = e.target.closest('.sku-props__value');
                 if (!btn) return;
+                var shouldWaitForAspro = !btn.classList.contains('sku-props__value--active');
 
                 // Определяем, к какому свойству относится кнопка
                 var innerEl = btn.closest('.sku-props__inner');
@@ -1051,7 +1084,7 @@
                         }
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
-                        PModificator.beginUiStabilization(state);
+                        PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     } else {
                         // Клик по пресету FORMAT — обновляем поля ширины/высоты
                         if (wInput && hInput) {
@@ -1066,7 +1099,7 @@
                         PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, null);
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
-                        PModificator.beginUiStabilization(state);
+                        PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     }
 
                 } else if (String(propId) === String(volumePropId)) {
@@ -1089,7 +1122,7 @@
                         }
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
-                        PModificator.beginUiStabilization(state);
+                        PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     } else {
                         // Клик по пресету VOLUME — обновляем поле тиража
                         var volXmlId = parseInt(rawVolXmlId, 10);
@@ -1116,7 +1149,7 @@
                             }
                         }
                         state._pendingUiUpdate = true;
-                        PModificator.beginUiStabilization(state);
+                        PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     }
 
                 } else if (state.allPropIds && state.allPropIds.indexOf(parseInt(propId, 10)) !== -1) {
@@ -1126,7 +1159,7 @@
                         state.activeOtherProps[parseInt(propId, 10)] = otherEnumId;
                     }
                     state._pendingUiUpdate = true;
-                    PModificator.beginUiStabilization(state);
+                    PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                 }
 
             }, true); // capture — срабатывает до skuAction.js
