@@ -1,58 +1,285 @@
 /**
- * Стили фронтенд-рендера пользовательских полей.
+ * Стили модуля prospektweb.propmodificator
+ *
+ * Монохромный дизайн на CSS-переменных Аспро: Премьер.
  */
 
-.pmod-fields-root {
-    margin-top: 12px;
-    display: grid;
-    gap: 12px;
+/* ── Скрытие стандартных кнопок пресетов (остаются в DOM) ─────────────────── */
+
+.pmod-preset-buttons--hidden {
+    display: none !important;
 }
 
-.pmod-field {
-    border: 1px solid var(--stroke_input, #d7d8da);
-    border-radius: 6px;
-    padding: 12px;
-    background: var(--black_bg_black, #fff);
+/* ── Общая обёртка FORMAT UI / VOLUME UI ─────────────────────────────────── */
+
+.pmod-format-ui {
+    margin-bottom: 12px;
 }
 
-.pmod-field__title {
-    margin: 0 0 8px;
-    font-size: 14px;
-    line-height: 1.35;
+.pmod-volume-ui {
+    margin-bottom: 0;
 }
 
-.pmod-field__body {
-    display: grid;
-    gap: 8px;
+.pmod-volume-ui--with-options {
+    margin-bottom: 12px;
 }
 
-.pmod-field__input-group {
-    display: grid;
+/* ── Ряд для volume (select + input рядом) ────────────────────────────────── */
+
+.pmod-volume-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 12px;
+    margin-top: 8px;
+}
+
+/* ── Группа ввода ─────────────────────────────────────────────────────────── */
+
+.pmod-format-inputs,
+.pmod-volume-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 12px;
+    margin-top: 8px;
+}
+
+.pmod-input-group {
+    display: flex;
+    flex-direction: column;
     gap: 4px;
 }
 
-.pmod-field__label {
-    color: var(--secondary, #8D8D8D);
+/* ── Метка ────────────────────────────────────────────────────────────────── */
+
+.pmod-label {
+    display: block;
     font-size: 12px;
+    line-height: 1.4;
+    color: var(--secondary, #8D8D8D);
+    font-weight: 400;
+    white-space: nowrap;
 }
 
-.pmod-field__input-row {
-    display: inline-flex;
+/* ── Символ × между вводом ширины и высоты ───────────────────────────────── */
+
+.pmod-format-x {
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 8px;
+    font-size: 18px;
+    color: var(--secondary, #8D8D8D);
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+/* ── Кнопки пресетов тиража (показываются при фокусе на инпут тиража) ────── */
+
+.pmod-preset-buttons--floating {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+.pmod-volume-measure {
+    font-size: 13px;
+    color: var(--secondary, #8D8D8D);
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+/* ── Счётчик (кнопки − и + и поле ввода) ────────────────────────────────── */
+
+.pmod-counter {
+    display: flex;
     align-items: center;
-    gap: 8px;
-}
-
-.pmod-field__input,
-.pmod-field__select {
-    min-width: 160px;
-    height: 40px;
-    border: 1px solid var(--input_border_color, #d7d8da);
+    height: var(--sku-height, 46px);
+    border: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
     border-radius: 4px;
-    padding: 0 10px;
-    background: var(--input_bg_color, #fff);
+    overflow: hidden;
+    background: var(--input_bg_color, var(--black_bg_black, #fff));
 }
 
-.pmod-field__measure {
+.pmod-counter__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
     color: var(--secondary, #8D8D8D);
-    font-size: 12px;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.pmod-counter__btn:hover {
+    background: var(--grey_bg, #F3F4F7);
+    color: var(--input_color, var(--white_text_black, #222228));
+}
+
+.pmod-counter__btn:active {
+    background: var(--secondary-black-dark-light-bg, #EFF0F2);
+}
+
+.pmod-counter__input {
+    width: 80px;
+    height: 100%;
+    border: none;
+    border-left: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
+    border-right: 1px solid var(--input_border_color, var(--stroke_input, #d7d8da));
+    text-align: center;
+    font-size: calc(1rem - 1px);
+    color: var(--input_color, var(--white_text_black, #222228));
+    background: var(--input_bg_color, var(--black_bg_black, #fff));
+    -moz-appearance: textfield;
+    appearance: textfield;
+    padding: 0 4px;
+    outline: none;
+    transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.pmod-counter__input::-webkit-inner-spin-button,
+.pmod-counter__input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ── Неактивное состояние инпута тиража (после выбора в селекте) ───────────── */
+
+.pmod-input--inactive {
+    color: var(--secondary, #8D8D8D);
+    opacity: 0.8;
+}
+
+/* ── Активное состояние инпута тиража (после клика/фокуса) ──────────────────── */
+
+.pmod-counter__input:focus,
+.pmod-counter__input.pmod-input--active {
+    color: var(--input_color, var(--white_text_black, #222228));
+    opacity: 1;
+    border-left-color: var(--input_border_color-focus, var(--secondary, #8D8D8D));
+    border-right-color: var(--input_border_color-focus, var(--secondary, #8D8D8D));
+    background: var(--input_bg_color-focus, var(--black_bg_black, #fff));
+}
+
+/* ── Отображение расчётной цены ──────────────────────────────────────────── */
+
+.pmod-custom-price {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: var(--grey_bg, #F3F4F7);
+    border: 1px solid var(--stroke_input, #d7d8da);
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.pmod-custom-price__label {
+    color: var(--secondary, #8D8D8D);
+}
+
+.pmod-custom-price__value {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--input_color, var(--white_text_black, #222228));
+}
+
+.pmod-custom-price__note {
+    font-size: 11px;
+    color: var(--secondary, #8D8D8D);
+    font-style: italic;
+}
+
+/* ── Обрезка заголовка h1 на детальной странице товара ────────────────────── */
+
+.pmod-title-clamp {
+    height: 64px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pmod-title-loading {
+    opacity: 0.65;
+    transition: opacity 0.2s ease;
+}
+
+/* ── Адаптивность ────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    .pmod-format-inputs,
+    .pmod-volume-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .pmod-format-x {
+        padding-bottom: 0;
+        align-self: center;
+        transform: rotate(90deg);
+    }
+
+    .pmod-counter__input {
+        width: 60px;
+    }
+}
+
+/* ── Anti-flicker: скелетон при загрузке интерполированной цены ────────────── */
+
+/**
+ * Когда JS переключается на X-ТП и вычисляет цену,
+ * блок .js-popup-price получает этот класс → скрывает placeholder 0.01
+ * и показывает пульсирующую анимацию (skeleton).
+ */
+.pmod-price-loading {
+    position: relative;
+    pointer-events: none;
+    min-height: 32px;
+}
+
+.pmod-price-loading > * {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.pmod-price-loading::after {
+    content: '';
+    position: absolute;
+    inset: 4px 0;
+    border-radius: 4px;
+    background: linear-gradient(
+        90deg,
+        var(--grey_bg, #F3F4F7) 25%,
+        var(--secondary-black-dark-light-bg, #e8e8eb) 50%,
+        var(--grey_bg, #F3F4F7) 75%
+    );
+    background-size: 200% 100%;
+    animation: pmod-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pmod-skeleton-pulse {
+    0%   { background-position: 200% center; }
+    100% { background-position: -200% center; }
+}
+
+/* Плавное появление цены после снятия класса */
+.js-popup-price {
+    transition: opacity 0.2s ease;
 }
