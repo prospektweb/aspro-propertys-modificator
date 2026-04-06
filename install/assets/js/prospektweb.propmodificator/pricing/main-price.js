@@ -82,7 +82,21 @@
                 var ranges = [];
                 Object.keys(rangeMap).forEach(function (rangeKey) {
                     var range = rangeMap[rangeKey];
-                    var pts   = range.points.slice().sort(function (a, b) { return a.key - b.key; });
+                    // Для одного и того же key могут приехать несколько цен из разных ТП.
+                    // Сначала детерминированно схлопываем дубликаты, затем сортируем для интерполяции.
+                    var pointsByKey = {};
+                    range.points.forEach(function (pt) {
+                        if (!pointsByKey.hasOwnProperty(pt.key)) {
+                            pointsByKey[pt.key] = pt.price;
+                            return;
+                        }
+                        // Детерминированный выбор: берём минимальную цену для одинакового key.
+                        pointsByKey[pt.key] = Math.min(pointsByKey[pt.key], pt.price);
+                    });
+
+                    var pts = Object.keys(pointsByKey).map(function (key) {
+                        return { key: Number(key), price: pointsByKey[key] };
+                    }).sort(function (a, b) { return a.key - b.key; });
                     if (!pts.length) return;
 
                     var price = (window.PModInterpolation && window.PModInterpolation.linearInterp)
