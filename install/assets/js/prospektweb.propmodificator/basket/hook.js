@@ -81,11 +81,37 @@
         },
 
         hookBasketViaFetch: function (state) {
+            function cleanupStaleStates(states) {
+                return (states || []).filter(function (s) {
+                    if (!s || !s.containerEl) return !!s;
+                    try {
+                        if (typeof s.containerEl.isConnected === 'boolean') {
+                            return s.containerEl.isConnected;
+                        }
+                        return !!(document && document.body && document.body.contains(s.containerEl));
+                    } catch (e) {
+                        return false;
+                    }
+                });
+            }
+
+            function hasDuplicateState(states, candidate) {
+                if (!candidate) return false;
+                return (states || []).some(function (s) {
+                    return s &&
+                        s.productId === candidate.productId &&
+                        s.containerEl === candidate.containerEl;
+                });
+            }
+
             // Регистрируем state в глобальном реестре
             if (!window._pmodActiveStates) {
                 window._pmodActiveStates = [];
             }
-            window._pmodActiveStates.push(state);
+            window._pmodActiveStates = cleanupStaleStates(window._pmodActiveStates);
+            if (!hasDuplicateState(window._pmodActiveStates, state)) {
+                window._pmodActiveStates.push(state);
+            }
 
             // Устанавливаем перехватчик один раз
             if (window._pmodFetchHooked) {
@@ -145,7 +171,8 @@
                     if (options && options.body instanceof FormData) {
                         var fd = options.body;
                         var requestProductId = getProductIdFromFormData(fd);
-                        var states = window._pmodActiveStates || [];
+                        window._pmodActiveStates = cleanupStaleStates(window._pmodActiveStates || []);
+                        var states = window._pmodActiveStates;
                         var activeState = findMatchingState(states, requestProductId);
 
                         // Пропускаем если patchCollectRequestData уже добавил поля
