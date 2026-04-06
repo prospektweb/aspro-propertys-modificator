@@ -168,7 +168,7 @@
                 // показываем лоадер и применяем только финальную серверную цену.
                 var serverFirst = state.customVolume !== null;
                 if (serverFirst) {
-                    var visiblePopup = PModificator.getVisiblePopupPriceElement();
+                    var visiblePopup = PModificator.getVisiblePopupPriceElement(state);
                     if (visiblePopup) {
                         visiblePopup.classList.add('pmod-price-loading');
                     }
@@ -220,7 +220,7 @@
                     // "главной" цене, которую в этот момент показывает Aspro.
                     if (!state.mainPriceGroupId) {
                         var basketQty = PModificator.getBasketQuantity(state.productId);
-                        var displayedMain = PModificator.getDisplayedMainPriceValue();
+                        var displayedMain = PModificator.getDisplayedMainPriceValue(state);
                         var inferredGroupId = PModificator.inferGroupIdByDisplayedPrice(
                             serverInterpolated,
                             basketQty,
@@ -264,18 +264,64 @@
             PModificator.showCustomPrice(container, interpolated, state, activeRevision);
         },
 
-        getVisiblePopupPriceElement: function () {
-            var popupPrice = null;
-            document.querySelectorAll('.js-popup-price').forEach(function (el) {
-                if (el.offsetParent !== null || el.offsetHeight > 0) {
-                    popupPrice = el;
+        getVisiblePopupPriceElement: function (state) {
+            function isVisible(el) {
+                return !!el && (el.offsetParent !== null || el.offsetHeight > 0);
+            }
+
+            function collectVisible(root) {
+                if (!root || !root.querySelectorAll) return [];
+                return Array.prototype.slice.call(root.querySelectorAll('.js-popup-price')).filter(isVisible);
+            }
+
+            function chooseNearest(candidates, anchorEl) {
+                if (!candidates || !candidates.length) return null;
+                if (!anchorEl || !anchorEl.getBoundingClientRect) {
+                    return candidates[candidates.length - 1];
                 }
-            });
-            return popupPrice;
+
+                var anchorRect = anchorEl.getBoundingClientRect();
+                var anchorCx = anchorRect.left + (anchorRect.width / 2);
+                var anchorCy = anchorRect.top + (anchorRect.height / 2);
+                var best = null;
+                var bestDist = Number.MAX_VALUE;
+
+                candidates.forEach(function (candidate) {
+                    var rect = candidate.getBoundingClientRect();
+                    var cx = rect.left + (rect.width / 2);
+                    var cy = rect.top + (rect.height / 2);
+                    var dist = Math.pow(cx - anchorCx, 2) + Math.pow(cy - anchorCy, 2);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        best = candidate;
+                    }
+                });
+
+                return best || candidates[candidates.length - 1];
+            }
+
+            var containerEl = state && state.containerEl ? state.containerEl : null;
+            if (containerEl) {
+                // Локальный scope карточки товара: сначала внутри контейнера SKU.
+                var localCandidates = collectVisible(containerEl);
+                if (!localCandidates.length) {
+                    // Если popup вынесен рядом с SKU — ищем в ближайшем блоке карточки.
+                    var cardRoot = containerEl.closest('.catalog-detail__main') || containerEl.parentElement;
+                    localCandidates = collectVisible(cardRoot);
+                }
+                if (localCandidates.length) {
+                    // Критерий выбора одного элемента: ближайший к контейнеру SKU.
+                    return chooseNearest(localCandidates, containerEl);
+                }
+            }
+
+            // Глобальный обход оставляем как fallback.
+            var globalCandidates = collectVisible(document);
+            return chooseNearest(globalCandidates, containerEl);
         },
 
-        getDisplayedMainPriceValue: function () {
-            var popupPrice = PModificator.getVisiblePopupPriceElement();
+        getDisplayedMainPriceValue: function (state) {
+            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
             if (!popupPrice) return null;
 
             var valEl = null;
@@ -470,14 +516,7 @@
 
         showCustomPrice: function (container, interpolated, state, uiRevision) {
             if (!PModificator.isRevisionActual(state, uiRevision)) return;
-            // Ищем видимый .js-popup-price (на странице их может быть несколько —
-            // один скрытый от предыдущего ТП, один видимый от X-ТП)
-            var popupPrice = null;
-            document.querySelectorAll('.js-popup-price').forEach(function (el) {
-                if (el.offsetParent !== null || el.offsetHeight > 0) {
-                    popupPrice = el;
-                }
-            });
+            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
             var cartEl     = document.querySelector('.catalog-detail__cart');
 
             // Делаем кнопку корзины видимой (X-ТП с 0.01 может иметь её)
