@@ -8,6 +8,7 @@
     var clamp = utils.clamp || function (val, min, max) { return Math.max(min, Math.min(max, val)); };
     var debounce = utils.debounce || function (fn) { return fn; };
     var syncUrlPmodVolume = utils.syncUrlPmodVolume || function () {};
+    var hasNumberValue = utils.hasNumberValue || function (value) { return value !== null && value !== undefined; };
     var DEBOUNCE_MS = 300;
     var PRICE_UPDATE_TIMEOUT_MS = 400;
 
@@ -482,7 +483,7 @@
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
                         state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
                         state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
-                        if (state.customWidth !== null && state.customHeight !== null) {
+                        if (hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight)) {
                             PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [state.customWidth, state.customHeight]);
                         }
                         PModificator.recomputeCustomMode(state);
@@ -520,7 +521,7 @@
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
-                        if (state.customVolume !== null) {
+                        if (hasNumberValue(state.customVolume)) {
                             PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, [state.customVolume]);
                         }
                         PModificator.recomputeCustomMode(state);
