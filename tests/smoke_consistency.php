@@ -22,6 +22,7 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Prospektweb\PropModificator\CustomConfig;
 use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
 use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
 use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
@@ -89,9 +90,46 @@ assertTrue(abs((float)$priceFromAjaxFlow - (float)$priceFromBasketFlow) < 0.0000
 $requestParser = new RequestParser();
 $resultWithExtraGet = $requestParser->parseFromInput(new RequestInput(
     ['width' => '100', 'height' => '100'],
-    ['productId' => '123', 'unexpected' => 'trash']
+    ['productId' => '123', 'unexpected' => 'trash', 'pmod_volume' => '1000']
 ));
 assertTrue($resultWithExtraGet['ok'] === true, 'Request parser must ignore unknown GET params');
 assertTrue(($resultWithExtraGet['data']['productId'] ?? 0) === 123, 'Request parser must still parse productId from GET');
+
+$resultWithStructuredExtraGet = $requestParser->parseFromInput(new RequestInput(
+    ['width' => '100', 'height' => '100'],
+    ['productId' => '124', 'tracking' => ['utm_source' => 'newsletter'], 'debug' => '1']
+));
+assertTrue($resultWithStructuredExtraGet['ok'] === true, 'Request parser must ignore nested/structured unknown GET params');
+assertTrue(($resultWithStructuredExtraGet['data']['productId'] ?? 0) === 124, 'Request parser must keep parsing productId when GET contains nested data');
+
+$invalidModeConfig = CustomConfig::parseFromPropertyValue([
+    'VALUE' => json_encode([
+        'version' => 1,
+        'fields' => [
+            ['id' => 'bad-unknown', 'mode' => 'matrix', 'inputs' => [['min' => 1]], 'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT']],
+            ['id' => 'bad-single', 'mode' => 'single', 'inputs' => [['min' => 1], ['min' => 2]], 'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT']],
+            ['id' => 'bad-group', 'mode' => 'group', 'inputs' => [[], [], [], [], []], 'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT']],
+            ['id' => 'ok-group', 'mode' => 'group', 'inputs' => [['min' => 100], ['min' => 200]], 'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT']],
+            ['id' => 'ok-single', 'mode' => 'single', 'inputs' => [['min' => 1000]], 'binding' => ['skuPropertyCode' => 'CALC_PROP_VOLUME']],
+        ],
+    ], JSON_UNESCAPED_UNICODE),
+]);
+$keptIds = array_column($invalidModeConfig['fields'] ?? [], 'id');
+sort($keptIds);
+assertTrue($keptIds === ['ok-group', 'ok-single'], 'CustomConfig must reject inconsistent mode handlers and keep only valid single/group definitions');
+
+$ajaxEndpointPath = __DIR__ . '/../install/assets/ajax/prospektweb.propmodificator/calc_price.php';
+$ajaxEndpointCode = file_get_contents($ajaxEndpointPath);
+assertTrue(is_string($ajaxEndpointCode) && $ajaxEndpointCode !== '', 'AJAX endpoint file must be readable for smoke checks');
+assertTrue(strpos($ajaxEndpointCode, 'check_bitrix_sessid') !== false, 'AJAX endpoint must enforce CSRF check (check_bitrix_sessid)');
+assertTrue(strpos($ajaxEndpointCode, 'INVALID_SESSID') !== false, 'AJAX endpoint must return INVALID_SESSID on failed CSRF check');
+
+$fieldModeHandlersPath = __DIR__ . '/../install/assets/js/prospektweb.propmodificator/pricing/field-mode-handlers.js';
+$fieldModeHandlersCode = file_get_contents($fieldModeHandlersPath);
+assertTrue(is_string($fieldModeHandlersCode) && $fieldModeHandlersCode !== '', 'Field mode handlers file must be readable');
+assertTrue(strpos($fieldModeHandlersCode, "format: createFormatHandler()") !== false, 'Frontend mode handlers must expose format handler');
+assertTrue(strpos($fieldModeHandlersCode, "volume: createVolumeHandler()") !== false, 'Frontend mode handlers must expose volume handler');
+assertTrue(strpos($fieldModeHandlersCode, "skuPropertyCode: 'CALC_PROP_FORMAT'") !== false, 'Format handler must be bound to CALC_PROP_FORMAT');
+assertTrue(strpos($fieldModeHandlersCode, "skuPropertyCode: 'CALC_PROP_VOLUME'") !== false, 'Volume handler must be bound to CALC_PROP_VOLUME');
 
 echo "OK\n";
