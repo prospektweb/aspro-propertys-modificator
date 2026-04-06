@@ -28,19 +28,22 @@ class AjaxController
     public function calcPriceFromInput(RequestInput $input): array
     {
         if (!Loader::includeModule('iblock') || !Loader::includeModule('catalog')) {
-            return ['success' => false, 'error' => 'Required modules not loaded'];
+            return $this->responseFactory->error('Required modules not loaded', 'MODULES_NOT_LOADED');
         }
 
         $parsed = $this->requestParser->parseDtoFromInput($input);
         if (!$parsed['ok']) {
-            return $this->responseFactory->error((string)$parsed['error']);
+            return $this->responseFactory->error(
+                (string)($parsed['error'] ?? 'Request parse failed'),
+                (string)($parsed['errorCode'] ?? 'REQUEST_PARSE_ERROR')
+            );
         }
 
         /** @var CalcPriceRequest $request */
         $request = $parsed['dto'];
         $pricing = $this->pricingService->calculateDto($request);
         if (!$pricing->ok) {
-            return $this->responseFactory->error((string)$pricing->error);
+            return $this->responseFactory->error((string)$pricing->error, 'PRICE_CALC_FAILED');
         }
 
         $mainPrice = $this->mainPriceResolver->resolve(

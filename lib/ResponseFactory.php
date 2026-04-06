@@ -41,9 +41,20 @@ class ResponseFactory
         return $result;
     }
 
-    public function error(string $message): array
+    /** @param array<string,mixed> $details */
+    public function error(string $message, string $errorCode = 'UNKNOWN_ERROR', array $details = []): array
     {
-        return ['success' => false, 'error' => $message];
+        $response = [
+            'success' => false,
+            'errorCode' => $errorCode,
+            'error' => $message,
+        ];
+
+        if ($details !== []) {
+            $response['errorDetails'] = $details;
+        }
+
+        return $response;
     }
 
     private function formatPrice(float $price): string
