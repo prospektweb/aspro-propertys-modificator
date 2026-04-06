@@ -90,3 +90,33 @@
 
 - Серверная часть валидирует границы и состав payload; не полагайтесь только на клиентскую валидацию.
 - Рекомендуется дебаунсить запросы на клиенте (в модуле используется 300ms).
+
+## Пример клиентского вызова (фактический фронтенд)
+
+```js
+var sessid = (typeof BX !== 'undefined' && BX.bitrix_sessid)
+    ? BX.bitrix_sessid()
+    : ((typeof window.bitrix_sessid !== 'undefined') ? window.bitrix_sessid : '');
+
+window.PModApi.postForm('/ajax/prospektweb.propmodificator/calc_price.php', {
+    productId: 123,
+    basket_qty: 1,
+    width: 100,
+    height: 50,
+    active_group_id: 2,
+    visible_groups: [2, 3],
+    other_props: { 10: 101, 11: 203 },
+    sessid: sessid || ''
+}).then(function (data) {
+    if (!data || !data.success) {
+        console.warn('[pmod] calc_price error', data);
+        return;
+    }
+    console.log('[pmod] main price', data.mainPrice);
+});
+```
+
+- `window.PModApi.postForm(...)` отправляет payload в `FormData` (`multipart/form-data`) формате.
+- `visible_groups` сериализуется как `visible_groups[]`.
+- `other_props` сериализуется как `other_props[<ID>]=<VALUE>`.
+- `credentials: 'same-origin'` включён внутри `PModApi`.

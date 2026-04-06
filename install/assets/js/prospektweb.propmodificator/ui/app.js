@@ -135,6 +135,14 @@
             state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
             state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(container, state, state.rawBaseTitleFromAspro);
             PModificator.applyFinalUiState(state);
+        },
+
+        requestCalcPrice: function (url, payload, signal) {
+            if (!window.PModApi || typeof window.PModApi.postForm !== 'function') {
+                return Promise.reject(new Error('PModApi is not available'));
+            }
+
+            return window.PModApi.postForm(url, payload, signal);
         }
     };
 

@@ -258,45 +258,31 @@
             var abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             state._ajaxAbortCtrl = abortCtrl;
 
-            var body = new FormData();
-            body.append('productId', state.productId);
-            if (state.mainPriceGroupId) {
-                body.append('active_group_id', state.mainPriceGroupId);
-            }
-            body.append('basket_qty', PModificator.getBasketQuantity(state.productId));
+            var payload = {
+                productId: state.productId,
+                basket_qty: PModificator.getBasketQuantity(state.productId),
+                active_group_id: state.mainPriceGroupId || null,
+                visible_groups: [],
+                other_props: state.activeOtherProps || null
+            };
+
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
             // Если удалось определить только одну группу, не сужаем серверный выбор —
             // это часто "шумный" кейс, когда Aspro отдаёт неполный PRICE_CODE.
             if (visibleGroups.length > 1) {
-                visibleGroups.forEach(function (gid) {
-                    body.append('visible_groups[]', gid);
-                });
+                payload.visible_groups = visibleGroups;
             }
-            if (state.customVolume)  body.append('volume',  state.customVolume);
-            if (state.customWidth)   body.append('width',   state.customWidth);
-            if (state.customHeight)  body.append('height',  state.customHeight);
-
-            if (state.activeOtherProps) {
-                Object.keys(state.activeOtherProps).forEach(function (propId) {
-                    body.append('other_props[' + propId + ']', state.activeOtherProps[propId]);
-                });
-            }
+            if (state.customVolume)  payload.volume = state.customVolume;
+            if (state.customWidth)   payload.width = state.customWidth;
+            if (state.customHeight)  payload.height = state.customHeight;
 
             // CSRF-токен Bitrix
             var sessid = (typeof BX !== 'undefined' && BX.bitrix_sessid)
                 ? BX.bitrix_sessid()
                 : ((typeof window.bitrix_sessid !== 'undefined') ? window.bitrix_sessid : '');
-            if (sessid) {
-                body.append('sessid', sessid);
-            }
+            payload.sessid = sessid || '';
 
-            var fetchOpts = { method: 'POST', body: body };
-            if (abortCtrl) {
-                fetchOpts.signal = abortCtrl.signal;
-            }
-
-            fetch(ajaxUrl, fetchOpts)
-                .then(function (r) { return r.json(); })
+            PModificator.requestCalcPrice(ajaxUrl, payload, abortCtrl ? abortCtrl.signal : null)
                 .then(function (data) {
                     // Игнорируем устаревший ответ (защита от race conditions)
                     if (state._ajaxRequestId !== requestId) return;
