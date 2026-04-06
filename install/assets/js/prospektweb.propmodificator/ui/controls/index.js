@@ -271,6 +271,39 @@
             // Находим span лейбла тиража для обновления при произвольном вводе
             var volumeLabelSpan = inner.querySelector('.sku-props__title .sku-props__js-size');
 
+            function clearVolumeLabelTimer() {
+                if (state._volumeLabelTimer) {
+                    clearTimeout(state._volumeLabelTimer);
+                    state._volumeLabelTimer = null;
+                }
+            }
+
+            function isVolumeLabelUpdateActual(localRevision, expectedCustomVolume) {
+                if (!PModificator.isRevisionActual(state, localRevision)) return false;
+                if (state.customVolume !== expectedCustomVolume) return false;
+
+                var root = document.documentElement;
+                if (!root || !root.contains(inner) || !root.contains(container)) return false;
+                if (volumeLabelSpan && !root.contains(volumeLabelSpan)) return false;
+                return true;
+            }
+
+            function scheduleVolumeLabelUpdate(labelStr, expectedCustomVolume) {
+                var localRevision = state._uiRevision;
+                clearVolumeLabelTimer();
+
+                state._volumeLabelTimer = setTimeout(function () {
+                    if (!isVolumeLabelUpdateActual(localRevision, expectedCustomVolume)) {
+                        state._volumeLabelTimer = null;
+                        return;
+                    }
+                    if (volumeLabelSpan) {
+                        volumeLabelSpan.textContent = labelStr;
+                    }
+                    state._volumeLabelTimer = null;
+                }, PRICE_UPDATE_TIMEOUT_MS);
+            }
+
             // ── Вспомогательная функция: найти кнопку пресета по VALUE_XML_ID ──
             function findBtnByXmlId(xmlId) {
                 return xmlIdToBtnMap[xmlId] || null;
@@ -318,10 +351,7 @@
 
                 var matchedBtn = findBtnByXmlId(v);
                 if (matchedBtn) {
-                    if (state._volumeLabelTimer) {
-                        clearTimeout(state._volumeLabelTimer);
-                        state._volumeLabelTimer = null;
-                    }
+                    clearVolumeLabelTimer();
                     if (!matchedBtn.classList.contains('sku-props__value--active')) {
                         inner._pmodProgrammaticChange = true;
                         matchedBtn.click();
@@ -366,21 +396,7 @@
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = customStr;
                     }
-                    if (state._volumeLabelTimer) {
-                        clearTimeout(state._volumeLabelTimer);
-                        state._volumeLabelTimer = null;
-                    }
-                    (function (str) {
-                        var localRevision = state._uiRevision;
-                        state._volumeLabelTimer = setTimeout(function () {
-                            if (!PModificator.isRevisionActual(state, localRevision)) return;
-                            if (state.customVolume !== v) return;
-                            if (volumeLabelSpan) {
-                                volumeLabelSpan.textContent = str;
-                            }
-                            state._volumeLabelTimer = null;
-                        }, PRICE_UPDATE_TIMEOUT_MS);
-                    }(customStr));
+                    scheduleVolumeLabelUpdate(customStr, v);
                 }
 
                 PModificator.registerCustomPropertyChange(state, didTriggerSkuSwitch);
@@ -535,10 +551,7 @@
                         state.customVolume = null;
                         PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
-                        if (state._volumeLabelTimer) {
-                            clearTimeout(state._volumeLabelTimer);
-                            state._volumeLabelTimer = null;
-                        }
+                        clearVolumeLabelTimer();
                         syncUrlPmodVolume(null);
 
                         // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
