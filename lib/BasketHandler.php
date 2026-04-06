@@ -1,35 +1,51 @@
 <?php
-/**
- * Обработчик корзины для модуля prospektweb.propmodificator.
- *
- * Перехватывает добавление в корзину, если переданы произвольные значения
- * формата и/или тиража, пересчитывает цену на сервере и записывает
- * пользовательские свойства в позицию корзины.
- */
 
 namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
 use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
+use Prospektweb\PropModificator\Domain\DTO\BasketCalcData;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceRequest;
+use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
+use Prospektweb\PropModificator\Infrastructure\Http\SessionStorage;
 
 class BasketHandler
 {
     private const SESSION_KEY = 'PMOD_CALC';
 
+    public function __construct(
+        private ?ProductConfigReader $productConfigReader = null,
+        private ?PricingService $pricingService = null,
+        private ?MainPriceResolver $mainPriceResolver = null,
+    ) {
+        $this->productConfigReader = $this->productConfigReader ?? new ProductConfigReader();
+        $this->pricingService = $this->pricingService ?? new PricingService();
+        $this->mainPriceResolver = $this->mainPriceResolver ?? new MainPriceResolver();
+    }
+
     public static function onBeforeBasketAdd(array &$arFields): ?bool
     {
-        $calcData = self::getCalcDataFromRequest();
+        return (new self())->handleBeforeBasketAdd($arFields, RequestInput::fromGlobals(), SessionStorage::fromGlobals());
+    }
 
-        if (!$calcData || $calcData['is_custom'] !== 'Y') {
+    public static function onBeforeSaleBasketItemSetFields($basketItem): void
+    {
+        (new self())->handleBeforeSaleBasketItemSetFields($basketItem, SessionStorage::fromGlobals());
+    }
+
+    public function handleBeforeBasketAdd(array &$arFields, RequestInput $input, SessionStorage $session): ?bool
+    {
+        $calcData = $this->getCalcDataFromRequest($input);
+
+        if ($calcData === null || $calcData->isCustom !== 'Y') {
             return true;
         }
 
-        if (!self::validateCalcData($calcData, $arFields)) {
+        if (!$this->validateCalcData($calcData, $arFields)) {
             return false;
         }
 
-        $serverPrice = self::recalculatePrice($calcData, $arFields);
-
+        $serverPrice = $this->recalculatePrice($calcData, $arFields);
         if ($serverPrice === null) {
             return false;
         }
@@ -37,25 +53,24 @@ class BasketHandler
         $arFields['PRICE'] = $serverPrice;
         $arFields['CUSTOM_PRICE'] = 'Y';
 
-        $_SESSION[self::SESSION_KEY] = $calcData + ['server_price' => $serverPrice];
+        $session->set(self::SESSION_KEY, $calcData->withServerPrice($serverPrice)->toArray());
 
         return true;
     }
 
-    public static function onBeforeSaleBasketItemSetFields($basketItem): void
+    public function handleBeforeSaleBasketItemSetFields($basketItem, SessionStorage $session): void
     {
-        if (empty($_SESSION[self::SESSION_KEY])) {
+        $stored = $session->pull(self::SESSION_KEY);
+        if (!is_array($stored)) {
             return;
         }
 
-        $calcData = $_SESSION[self::SESSION_KEY];
-        unset($_SESSION[self::SESSION_KEY]);
-
-        if (!($calcData['is_custom'] === 'Y')) {
+        $calcData = BasketCalcData::fromArray($stored);
+        if ($calcData->isCustom !== 'Y') {
             return;
         }
 
-        $props = self::buildBasketProperties($calcData);
+        $props = $this->buildBasketProperties($calcData);
 
         if (!method_exists($basketItem, 'getPropertyCollection')) {
             return;
@@ -71,82 +86,71 @@ class BasketHandler
         }
     }
 
-    private static function getCalcDataFromRequest(): ?array
+    private function getCalcDataFromRequest(RequestInput $input): ?BasketCalcData
     {
-        $raw = $_POST['prospekt_calc'] ?? null;
-
+        $raw = $input->post('prospekt_calc');
         if (!is_array($raw)) {
             return null;
         }
 
-        return [
-            'width' => isset($raw['width']) ? (int)$raw['width'] : null,
-            'height' => isset($raw['height']) ? (int)$raw['height'] : null,
-            'volume' => isset($raw['volume']) ? (int)$raw['volume'] : null,
-            'custom_price' => isset($raw['custom_price']) ? (float)$raw['custom_price'] : null,
-            'is_custom' => ($raw['is_custom'] ?? '') === 'Y' ? 'Y' : 'N',
-            'product_id' => isset($raw['product_id']) ? (int)$raw['product_id'] : null,
-            'other_props' => isset($raw['other_props']) && is_array($raw['other_props'])
-                ? array_map('intval', $raw['other_props'])
-                : null,
-        ];
+        return BasketCalcData::fromArray($raw);
     }
 
-    private static function validateCalcData(array $calcData, array $arFields): bool
+    private function validateCalcData(BasketCalcData $calcData, array $arFields): bool
     {
         if (!Loader::includeModule('iblock')) {
             return false;
         }
 
-        $productId = (int)($arFields['PRODUCT_ID'] ?? $calcData['product_id'] ?? 0);
+        $productId = (int)($arFields['PRODUCT_ID'] ?? $calcData->productId ?? 0);
         if (!$productId) {
             return false;
         }
 
-        if (!ValidationRules::hasCustomInput($calcData['width'], $calcData['height'], $calcData['volume'])) {
+        if (!ValidationRules::hasCustomInput($calcData->width, $calcData->height, $calcData->volume)) {
             return false;
         }
 
-        $reader = new ProductConfigReader();
-        $settings = $reader->readByProductId($productId);
+        $settings = $this->productConfigReader->readByProductId($productId);
 
         return ValidationRules::validateInput(
-            $calcData['width'],
-            $calcData['height'],
-            $calcData['volume'],
+            $calcData->width,
+            $calcData->height,
+            $calcData->volume,
             $settings['formatSettings'] ?? [],
             $settings['volumeSettings'] ?? []
         );
     }
 
-    private static function recalculatePrice(array $calcData, array $arFields): ?float
+    private function recalculatePrice(BasketCalcData $calcData, array $arFields): ?float
     {
-        $productId = (int)($arFields['PRODUCT_ID'] ?? $calcData['product_id'] ?? 0);
+        $productId = (int)($arFields['PRODUCT_ID'] ?? $calcData->productId ?? 0);
         if (!$productId) {
             return null;
         }
 
-        $pricing = (new PricingService())->calculate([
-            'productId' => $productId,
-            'volume' => $calcData['volume'],
-            'width' => $calcData['width'],
-            'height' => $calcData['height'],
-            'basketQty' => 1,
-            'visibleGroups' => [],
-            'activeGroupId' => null,
-            'otherProps' => $calcData['other_props'] ?? null,
-            'debug' => false,
-        ]);
+        $request = new CalcPriceRequest(
+            $productId,
+            $calcData->volume,
+            $calcData->width,
+            $calcData->height,
+            1,
+            [],
+            null,
+            $calcData->otherProps,
+            false,
+        );
 
-        if (!$pricing['ok']) {
+        $pricing = $this->pricingService->calculateDto($request);
+        if (!$pricing->ok) {
             return null;
         }
 
-        $mainPrice = (new MainPriceResolver())->resolve(
-            $pricing['rawPrices'],
-            $pricing['rangePrices'],
-            $pricing['catalogGroups'],
-            $pricing['accessibleGroupIds'],
+        $mainPrice = $this->mainPriceResolver->resolve(
+            $pricing->rawPrices,
+            $pricing->rangePrices,
+            $pricing->catalogGroups,
+            $pricing->accessibleGroupIds,
             1,
             [],
             null
@@ -155,30 +159,30 @@ class BasketHandler
         return $mainPrice ? (float)$mainPrice['price'] : null;
     }
 
-    private static function buildBasketProperties(array $calcData): array
+    private function buildBasketProperties(BasketCalcData $calcData): array
     {
         $props = [];
 
-        if ($calcData['width'] !== null && $calcData['height'] !== null) {
+        if ($calcData->width !== null && $calcData->height !== null) {
             $props[] = [
                 'NAME' => 'Формат (Ш×В)',
-                'VALUE' => $calcData['width'] . '×' . $calcData['height'] . ' мм',
+                'VALUE' => $calcData->width . '×' . $calcData->height . ' мм',
                 'CODE' => 'PMOD_FORMAT',
             ];
         }
 
-        if ($calcData['volume'] !== null) {
+        if ($calcData->volume !== null) {
             $props[] = [
                 'NAME' => 'Тираж',
-                'VALUE' => number_format($calcData['volume'], 0, '.', ' ') . ' шт.',
+                'VALUE' => number_format($calcData->volume, 0, '.', ' ') . ' шт.',
                 'CODE' => 'PMOD_VOLUME',
             ];
         }
 
-        if (!empty($calcData['server_price'])) {
+        if ($calcData->serverPrice !== null) {
             $props[] = [
                 'NAME' => 'Расчётная цена',
-                'VALUE' => number_format((float)$calcData['server_price'], 2, '.', ' ') . ' руб.',
+                'VALUE' => number_format((float)$calcData->serverPrice, 2, '.', ' ') . ' руб.',
                 'CODE' => 'PMOD_PRICE',
             ];
         }

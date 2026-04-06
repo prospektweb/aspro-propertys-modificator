@@ -4,9 +4,15 @@ namespace Prospektweb\PropModificator\Domain\Config;
 
 use Prospektweb\PropModificator\Config;
 use Prospektweb\PropModificator\CustomConfig;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\ProductConfigRepository;
 
 class ProductConfigReader
 {
+    public function __construct(private ?ProductConfigRepository $repository = null)
+    {
+        $this->repository = $this->repository ?? new ProductConfigRepository();
+    }
+
     /** @return array{formatSettings: array<string,mixed>, volumeSettings: array<string,mixed>, customConfig: array<string,mixed>} */
     public function readByProductId(int $productId): array
     {
@@ -14,18 +20,7 @@ class ProductConfigReader
         $volumePropCode = Config::getVolumePropCode();
         $customConfigCode = Config::getCustomConfigPropCode();
 
-        if ($customConfigCode === '') {
-            return ['formatSettings' => [], 'volumeSettings' => [], 'customConfig' => []];
-        }
-
-        $rsProduct = \CIBlockElement::GetByID($productId);
-        $arProduct = $rsProduct->GetNextElement();
-        if (!$arProduct) {
-            return ['formatSettings' => [], 'volumeSettings' => [], 'customConfig' => []];
-        }
-
-        $props = $arProduct->GetProperties([], []);
-        $payload = $props[$customConfigCode] ?? null;
+        $payload = $this->repository->getProductPropertyPayload($productId, $customConfigCode);
 
         return $this->readFromPropertyPayload($payload, $formatPropCode, $volumePropCode);
     }

@@ -2,26 +2,30 @@
 
 namespace Prospektweb\PropModificator;
 
-/**
- * Parses and normalizes AJAX input payload.
- *
- * Input: POST/GET arrays.
- * Output: normalized request DTO array or error array.
- */
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceRequest;
+use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
+
 class RequestParser
 {
     /** @return array{ok:bool,data?:array,error?:string} */
     public function parse(array $post, array $get): array
     {
-        $productId = (int)($post['productId'] ?? $get['productId'] ?? 0);
-        $volume = isset($post['volume']) && $post['volume'] !== '' ? (int)$post['volume'] : null;
-        $width = isset($post['width']) && $post['width'] !== '' ? (int)$post['width'] : null;
-        $height = isset($post['height']) && $post['height'] !== '' ? (int)$post['height'] : null;
-        $basketQty = isset($post['basket_qty']) && (int)$post['basket_qty'] > 0 ? (int)$post['basket_qty'] : 1;
+        return $this->parseFromInput(new RequestInput($post, $get));
+    }
+
+    /** @return array{ok:bool,data?:array,error?:string} */
+    public function parseFromInput(RequestInput $input): array
+    {
+        $productId = (int)$input->input('productId', 0);
+        $volume = $input->post('volume');
+        $width = $input->post('width');
+        $height = $input->post('height');
+        $basketQty = max(1, (int)$input->post('basket_qty', 1));
 
         $visibleGroups = [];
-        if (isset($post['visible_groups']) && is_array($post['visible_groups'])) {
-            foreach ($post['visible_groups'] as $gidRaw) {
+        $visibleRaw = $input->post('visible_groups', []);
+        if (is_array($visibleRaw)) {
+            foreach ($visibleRaw as $gidRaw) {
                 $gid = (int)$gidRaw;
                 if ($gid > 0) {
                     $visibleGroups[$gid] = $gid;
@@ -30,29 +34,41 @@ class RequestParser
             $visibleGroups = array_values($visibleGroups);
         }
 
-        $activeGroupId = isset($post['active_group_id']) && (int)$post['active_group_id'] > 0 ? (int)$post['active_group_id'] : null;
-        $otherProps = isset($post['other_props']) && is_array($post['other_props']) ? array_map('intval', $post['other_props']) : null;
+        $activeGroupIdRaw = $input->post('active_group_id');
+        $activeGroupId = (int)$activeGroupIdRaw > 0 ? (int)$activeGroupIdRaw : null;
+        $otherPropsRaw = $input->post('other_props');
+        $otherProps = is_array($otherPropsRaw) ? array_map('intval', $otherPropsRaw) : null;
+
+        $data = [
+            'productId' => $productId,
+            'volume' => $volume !== null && $volume !== '' ? (int)$volume : null,
+            'width' => $width !== null && $width !== '' ? (int)$width : null,
+            'height' => $height !== null && $height !== '' ? (int)$height : null,
+            'basketQty' => $basketQty,
+            'visibleGroups' => $visibleGroups,
+            'activeGroupId' => $activeGroupId,
+            'otherProps' => $otherProps,
+            'debug' => $input->post('debug') === 'Y',
+        ];
 
         if (!$productId) {
             return ['ok' => false, 'error' => 'productId required'];
         }
-        if (!ValidationRules::hasCustomInput($width, $height, $volume)) {
+        if (!ValidationRules::hasCustomInput($data['width'], $data['height'], $data['volume'])) {
             return ['ok' => false, 'error' => 'At least one of volume or width+height required'];
         }
 
-        return [
-            'ok' => true,
-            'data' => [
-                'productId' => $productId,
-                'volume' => $volume,
-                'width' => $width,
-                'height' => $height,
-                'basketQty' => $basketQty,
-                'visibleGroups' => $visibleGroups,
-                'activeGroupId' => $activeGroupId,
-                'otherProps' => $otherProps,
-                'debug' => isset($post['debug']) && $post['debug'] === 'Y',
-            ],
-        ];
+        return ['ok' => true, 'data' => $data];
+    }
+
+    /** @return array{ok:bool,dto?:CalcPriceRequest,error?:string} */
+    public function parseDtoFromInput(RequestInput $input): array
+    {
+        $parsed = $this->parseFromInput($input);
+        if (!$parsed['ok']) {
+            return $parsed;
+        }
+
+        return ['ok' => true, 'dto' => CalcPriceRequest::fromArray($parsed['data'])];
     }
 }
