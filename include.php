@@ -17,4 +17,13 @@ Loader::registerAutoloadClasses('prospektweb.propmodificator', [
     'Prospektweb\\PropModificator\\AjaxController'     => 'lib/AjaxController.php',
     'Prospektweb\\PropModificator\\CustomConfig'       => 'lib/CustomConfig.php',
     'Prospektweb\\PropModificator\\AdminHandler'       => 'lib/AdminHandler.php',
+    'Prospektweb\\PropModificator\\ProductResolver'    => 'lib/ProductResolver.php',
+    'Prospektweb\\PropModificator\\OfferDataProvider'  => 'lib/OfferDataProvider.php',
+    'Prospektweb\\PropModificator\\FrontendConfigBuilder' => 'lib/FrontendConfigBuilder.php',
+    'Prospektweb\\PropModificator\\TemplateBootstrap'  => 'lib/TemplateBootstrap.php',
+    'Prospektweb\\PropModificator\\OfferRepository'    => 'lib/OfferRepository.php',
+    'Prospektweb\\PropModificator\\RequestParser'      => 'lib/RequestParser.php',
+    'Prospektweb\\PropModificator\\PricingService'     => 'lib/PricingService.php',
+    'Prospektweb\\PropModificator\\MainPriceResolver'  => 'lib/MainPriceResolver.php',
+    'Prospektweb\\PropModificator\\ResponseFactory'    => 'lib/ResponseFactory.php',
 ]);
