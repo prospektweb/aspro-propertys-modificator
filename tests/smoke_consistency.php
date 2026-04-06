@@ -26,6 +26,7 @@ use Prospektweb\PropModificator\CustomConfig;
 use Prospektweb\PropModificator\Domain\Config\ProductConfigReader;
 use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
 use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
+use Prospektweb\PropModificator\OfferDataProvider;
 use Prospektweb\PropModificator\PriceInterpolator;
 use Prospektweb\PropModificator\RequestParser;
 use Prospektweb\PropModificator\ValidationRules;
@@ -74,6 +75,17 @@ assertTrue(!ValidationRules::validateInput(10, 300, 1000, $configA['formatSettin
 $enumResolver = new EnumValueResolver();
 assertTrue($enumResolver->resolveXmlId(null, 2, [2 => '210x297']) === '210x297', 'Enum resolver must resolve ENUM_ID to XML_ID');
 assertTrue($enumResolver->resolveXmlId('1000', 0, []) === '1000', 'Enum resolver must keep XML_ID from row as priority');
+
+$defaultOfferDataProvider = new OfferDataProvider();
+assertTrue($defaultOfferDataProvider instanceof OfferDataProvider, 'OfferDataProvider DI contract must allow default construction');
+
+$templateIncludePath = __DIR__ . '/../template_include.php';
+$templateIncludeCode = file_get_contents($templateIncludePath);
+assertTrue(is_string($templateIncludeCode) && $templateIncludeCode !== '', 'template_include.php must be readable for wiring smoke checks');
+assertTrue(
+    preg_match('/new\s+OfferDataProvider\s*\([^)]*EnumValueResolver/s', $templateIncludeCode) !== 1,
+    'template_include wiring must pass PropertyBindingResolverInterface or use defaults'
+);
 
 $points = [
     ['width' => 100, 'height' => 100, 'volume' => 100, 'price' => 10.0],

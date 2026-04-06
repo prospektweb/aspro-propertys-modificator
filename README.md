@@ -21,6 +21,7 @@
 
 - Запустить smoke-проверку: `make qa-smoke` (или напрямую `php tests/smoke_consistency.php`).
 - Ожидаемый результат: в stdout выводится `OK`, процесс завершается с кодом `0`.
+- Smoke должен покрывать wiring entrypoint-ов (в т.ч. DI-контракты и корректную сборку `template_include.php`).
 
 ## Документация
 
