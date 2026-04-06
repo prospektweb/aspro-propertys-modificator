@@ -15,6 +15,13 @@
 - **Разработчик модуля (PHP/архитектура)** → `docs/architecture.md`, `docs/api/calc-price.md`, `docs/changelog.md`.
 - **Интегратор фронтенда/шаблона** → `docs/frontend-integration.md`, `docs/api/calc-price.md`, `docs/troubleshooting.md`.
 
+## Для разработчика
+
+### Чеклист перед merge
+
+- Запустить smoke-проверку: `make qa-smoke` (или напрямую `php tests/smoke_consistency.php`).
+- Ожидаемый результат: в stdout выводится `OK`, процесс завершается с кодом `0`.
+
 ## Документация
 
 - Архитектура: `docs/architecture.md`
