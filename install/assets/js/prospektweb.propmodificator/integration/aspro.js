@@ -41,6 +41,9 @@
 
                     if (!state._pendingUiUpdate) return;
 
+                    // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
+                    PModificator.rebuildActiveOtherProps(state);
+
                     state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
@@ -240,6 +243,29 @@
             );
         },
 
+        rebuildActiveOtherProps: function (state) {
+            if (!state || !state.containerEl || !Array.isArray(state.allPropIds)) {
+                return {};
+            }
+
+            var rebuilt = {};
+            state.allPropIds.forEach(function (pid) {
+                var propId = parseInt(pid, 10);
+                if (isNaN(propId)) return;
+                var innerEl = state.containerEl.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+                if (!innerEl) return;
+                var activeBtn = innerEl.querySelector('.sku-props__value--active');
+                if (!activeBtn || !activeBtn.dataset.onevalue) return;
+                var enumId = parseInt(activeBtn.dataset.onevalue, 10);
+                if (!isNaN(enumId)) {
+                    rebuilt[propId] = enumId;
+                }
+            });
+
+            state.activeOtherProps = rebuilt;
+            return rebuilt;
+        },
+
         fetchServerPrice: function (state, uiRevision, callback) {
             var cfg     = window.pmodConfig;
             var ajaxUrl = cfg && cfg.ajaxUrl;
@@ -257,13 +283,14 @@
             var requestId = ++state._ajaxRequestId;
             var abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             state._ajaxAbortCtrl = abortCtrl;
+            var activeOtherProps = PModificator.rebuildActiveOtherProps(state);
 
             var payload = {
                 productId: state.productId,
                 basket_qty: PModificator.getBasketQuantity(state.productId),
                 active_group_id: state.mainPriceGroupId || null,
                 visible_groups: [],
-                other_props: state.activeOtherProps || null
+                other_props: activeOtherProps || null
             };
 
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);

@@ -51,6 +51,8 @@
 
                 if (containerId && containerId !== state.productId) return formData;
 
+                PModificator.rebuildActiveOtherProps(state);
+
                 if (state.customWidth)  formData.append('prospekt_calc[width]',  state.customWidth);
                 if (state.customHeight) formData.append('prospekt_calc[height]', state.customHeight);
                 if (state.customVolume) formData.append('prospekt_calc[volume]', state.customVolume);
@@ -146,6 +148,7 @@
 
                         // Пропускаем если patchCollectRequestData уже добавил поля
                         if (activeState && typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
+                            PModificator.rebuildActiveOtherProps(activeState);
                             if (activeState.customWidth)  fd.append('prospekt_calc[width]',  activeState.customWidth);
                             if (activeState.customHeight) fd.append('prospekt_calc[height]', activeState.customHeight);
                             if (activeState.customVolume) fd.append('prospekt_calc[volume]', activeState.customVolume);
