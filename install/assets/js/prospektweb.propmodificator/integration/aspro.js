@@ -94,7 +94,7 @@
             state._uiRevision = (state._uiRevision || 0) + 1;
             state._pendingUiUpdate = true;
             PModificator.setTitleLoading(true);
-            PModificator.setPriceLoading(true);
+            PModificator.setPriceLoading(true, state);
 
             // Если фактической смены SKU не было (и onFinalActionSKUInfo не придёт),
             // завершаем цикл сразу по текущему состоянию DOM.
@@ -126,8 +126,8 @@
             h1.classList.toggle('pmod-title-loading', !!isLoading);
         },
 
-        setPriceLoading: function (isLoading) {
-            var popup = PModificator.getVisiblePopupPriceElement();
+        setPriceLoading: function (isLoading, state) {
+            var popup = PModificator.getVisiblePopupPriceElement(state);
             if (!popup) return;
             popup.classList.toggle('pmod-price-loading', !!isLoading);
         },
@@ -391,12 +391,7 @@
         },
 
         getVisiblePriceGroupIds: function (state) {
-            var popupPrice = null;
-            document.querySelectorAll('.js-popup-price').forEach(function (el) {
-                if (el.offsetParent !== null || el.offsetHeight > 0) {
-                    popupPrice = el;
-                }
-            });
+            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
             if (!popupPrice) return [];
 
             var priceCodeOrder = null;
@@ -425,7 +420,7 @@
         },
 
         detectActivePriceGroupIdFromDom: function (state) {
-            var popupPrice = PModificator.getVisiblePopupPriceElement();
+            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
             if (!popupPrice || !state || !state.catalogGroups) return null;
 
             var nameToGid = {};
@@ -458,12 +453,7 @@
 
         applyServerPricesToDom: function (container, interpolated, state, uiRevision) {
             if (!PModificator.isRevisionActual(state, uiRevision)) return;
-            var popupPrice = null;
-            document.querySelectorAll('.js-popup-price').forEach(function (el) {
-                if (el.offsetParent !== null || el.offsetHeight > 0) {
-                    popupPrice = el;
-                }
-            });
+            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
 
             if (!popupPrice) {
                 // Fallback: обновляем собственный элемент модуля
