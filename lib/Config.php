@@ -49,14 +49,6 @@ class Config
     }
 
     /**
-     * ID инфоблока торговых предложений.
-     */
-    public static function getOffersIblockId(): int
-    {
-        return (int)self::get('OFFERS_IBLOCK_ID', '15');
-    }
-
-    /**
      * ID инфоблока товаров (родительский).
      */
     public static function getProductsIblockId(): int
@@ -65,35 +57,11 @@ class Config
     }
 
     /**
-     * Символьный код свойства ФОРМАТ в инфоблоке ТП.
-     */
-    public static function getFormatPropCode(): string
-    {
-        return self::get('FORMAT_PROP_CODE', 'CALC_PROP_FORMAT');
-    }
-
-    /**
-     * Символьный код свойства ТИРАЖ в инфоблоке ТП.
-     */
-    public static function getVolumePropCode(): string
-    {
-        return self::get('VOLUME_PROP_CODE', 'CALC_PROP_VOLUME');
-    }
-
-    /**
      * Символьный код свойства JSON-конфига кастомных полей в инфоблоке товаров.
      */
     public static function getCustomConfigPropCode(): string
     {
         return self::get('CUSTOM_CONFIG_PROP_CODE', 'PMOD_CUSTOM_CONFIG');
-    }
-
-    /**
-     * ID типа цены для интерполяции.
-     */
-    public static function getPriceTypeId(): int
-    {
-        return (int)self::get('PRICE_TYPE_ID', '1');
     }
 
     /**

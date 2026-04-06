@@ -1,7 +1,6 @@
 <?php
 /**
  * Страница настроек модуля prospektweb.propmodificator
- * Путь в панели администратора: /bitrix/admin/settings.php?mid=prospektweb.propmodificator
  */
 
 use Bitrix\Main\Loader;
@@ -16,8 +15,6 @@ $moduleId = 'prospektweb.propmodificator';
 Loader::includeModule($moduleId);
 Loc::loadMessages(__FILE__);
 
-/** @global CUser $USER */
-/** @global CMain $APPLICATION */
 global $APPLICATION, $USER;
 
 if (!$USER->IsAdmin()) {
@@ -28,41 +25,27 @@ $APPLICATION->SetTitle(Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TITL
 
 require $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_admin_after.php';
 
-$tabControl = new CAdminTabControl('tabControl', [
-    [
-        'DIV'   => 'edit1',
-        'TAB'   => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN'),
-        'TITLE' => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN_TITLE'),
-    ],
-]);
+$tabControl = new CAdminTabControl('tabControl', [[
+    'DIV'   => 'edit1',
+    'TAB'   => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN'),
+    'TITLE' => Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_TAB_MAIN_TITLE'),
+]]);
 
-// ─── Сохранение формы ────────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST'
-    && check_bitrix_sessid()
-    && isset($_POST['save'])
-) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && check_bitrix_sessid() && isset($_POST['save'])) {
     $fields = [
-        'OFFERS_IBLOCK_ID',
         'PRODUCTS_IBLOCK_ID',
-        'FORMAT_PROP_CODE',
-        'VOLUME_PROP_CODE',
         'CUSTOM_CONFIG_PROP_CODE',
-        'PRICE_TYPE_ID',
         'CATALOG_PATH_FILTER',
     ];
 
     foreach ($fields as $key) {
-        $val = trim($_POST[$key] ?? '');
-        COption::SetOptionString($moduleId, $key, $val);
+        COption::SetOptionString($moduleId, $key, trim($_POST[$key] ?? ''));
     }
 
-    // Checkbox: absent in POST means unchecked
     COption::SetOptionString($moduleId, 'DEBUG', isset($_POST['DEBUG']) ? 'Y' : 'N');
-
     LocalRedirect($APPLICATION->GetCurPage() . '?mid=' . urlencode($moduleId) . '&saved=Y');
 }
 
-// ─── Чтение текущих значений ─────────────────────────────────────────────────
 require __DIR__ . '/default_option.php';
 
 $options = [];
@@ -71,7 +54,7 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
 }
 ?>
 
-<?php if ($_GET['saved'] === 'Y'): ?>
+<?php if (($_GET['saved'] ?? '') === 'Y'): ?>
     <div class="adm-info-message-wrap success">
         <div class="adm-info-message"><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_SAVED') ?></div>
     </div>
@@ -84,19 +67,7 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
     <?php $tabControl->BeginNextTab(); ?>
 
     <tr>
-        <td width="40%" class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_OFFERS_IBLOCK_ID_HINT') ?></small>
-        </td>
-        <td class="adm-detail-content-cell-r">
-            <input type="text" name="OFFERS_IBLOCK_ID"
-                   value="<?= htmlspecialchars($options['OFFERS_IBLOCK_ID']) ?>"
-                   size="10" maxlength="10">
-        </td>
-    </tr>
-
-    <tr>
-        <td class="adm-detail-content-cell-l">
+        <td class="adm-detail-content-cell-l" width="40%">
             <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID') ?></b><br>
             <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRODUCTS_IBLOCK_ID_HINT') ?></small>
         </td>
@@ -109,30 +80,6 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
 
     <tr>
         <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_FORMAT_PROP_CODE_HINT') ?></small>
-        </td>
-        <td class="adm-detail-content-cell-r">
-            <input type="text" name="FORMAT_PROP_CODE"
-                   value="<?= htmlspecialchars($options['FORMAT_PROP_CODE']) ?>"
-                   size="30" maxlength="100">
-        </td>
-    </tr>
-
-    <tr>
-        <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_VOLUME_PROP_CODE_HINT') ?></small>
-        </td>
-        <td class="adm-detail-content-cell-r">
-            <input type="text" name="VOLUME_PROP_CODE"
-                   value="<?= htmlspecialchars($options['VOLUME_PROP_CODE']) ?>"
-                   size="30" maxlength="100">
-        </td>
-    </tr>
-
-    <tr>
-        <td class="adm-detail-content-cell-l">
             <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CUSTOM_CONFIG_PROP_CODE') ?></b><br>
             <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_CUSTOM_CONFIG_PROP_CODE_HINT') ?></small>
         </td>
@@ -140,18 +87,6 @@ foreach ($prospektweb_propmodificator_default_option as $key => $default) {
             <input type="text" name="CUSTOM_CONFIG_PROP_CODE"
                    value="<?= htmlspecialchars($options['CUSTOM_CONFIG_PROP_CODE']) ?>"
                    size="30" maxlength="100">
-        </td>
-    </tr>
-
-    <tr>
-        <td class="adm-detail-content-cell-l">
-            <b><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID') ?></b><br>
-            <small><?= Loc::getMessage('PROSPEKTWEB_PROPMODIFICATOR_OPTIONS_PRICE_TYPE_ID_HINT') ?></small>
-        </td>
-        <td class="adm-detail-content-cell-r">
-            <input type="text" name="PRICE_TYPE_ID"
-                   value="<?= htmlspecialchars($options['PRICE_TYPE_ID']) ?>"
-                   size="10" maxlength="10">
         </td>
     </tr>
 

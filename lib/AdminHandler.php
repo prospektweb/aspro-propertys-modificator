@@ -46,11 +46,8 @@ class AdminHandler
         $payload = [
             'customConfigPropertyId' => (int)$prop['ID'],
             'customConfigPropertyCode' => $customConfigCode,
-            'offersIblockId' => Config::getOffersIblockId(),
             'apiUrl' => '/bitrix/tools/prospektweb.propmodificator/admin_config.php',
             'sessid' => bitrix_sessid(),
-            'volumePropCode' => Config::getVolumePropCode(),
-            'formatPropCode' => Config::getFormatPropCode(),
         ];
 
         Asset::getInstance()->addCss('/bitrix/js/prospektweb.propmodificator/admin-builder.css');
