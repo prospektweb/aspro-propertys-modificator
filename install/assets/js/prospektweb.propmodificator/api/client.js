@@ -102,8 +102,13 @@
             }).then(function (res) { return res.json(); });
         },
 
-        postJson: function (url, payload, signal) {
+        postUrlEncoded: function (url, payload, signal) {
             return this.postForm(url, payload, signal, true);
+        },
+
+        // Deprecated alias for backward compatibility.
+        postJson: function (url, payload, signal) {
+            return this.postUrlEncoded(url, payload, signal);
         }
     };
 })();

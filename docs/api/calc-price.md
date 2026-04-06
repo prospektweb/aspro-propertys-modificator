@@ -117,6 +117,8 @@ window.PModApi.postForm('/ajax/prospektweb.propmodificator/calc_price.php', {
 ```
 
 - `window.PModApi.postForm(...)` отправляет payload в `FormData` (`multipart/form-data`) формате.
+- `window.PModApi.postUrlEncoded(...)` отправляет payload как `application/x-www-form-urlencoded`.
+- `window.PModApi.postJson(...)` оставлен как deprecated alias для backward compatibility (внутренне вызывает `postUrlEncoded`).
 - `visible_groups` сериализуется как `visible_groups[]`.
 - `other_props` сериализуется как `other_props[<ID>]=<VALUE>`.
 - `credentials: 'same-origin'` включён внутри `PModApi`.
