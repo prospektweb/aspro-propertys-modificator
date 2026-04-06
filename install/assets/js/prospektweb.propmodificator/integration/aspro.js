@@ -299,29 +299,59 @@
         },
 
         getBasketQuantity: function (productId) {
-            var selectors = [
+            function isInactiveInput(input) {
+                if (!input || input.tagName !== 'INPUT') return true;
+                if (input.type === 'hidden' || input.disabled) return true;
+
+                var hiddenAncestor = input.closest(
+                    '[hidden], [aria-hidden="true"], .hidden, .d-none, .is-hidden, .inactive, .disabled'
+                );
+                if (hiddenAncestor) return true;
+
+                if (input.offsetParent === null && input.getClientRects().length === 0) {
+                    return true;
+                }
+
+                return false;
+            }
+
+            function pickQuantityFromRoot(root, selectors) {
+                if (!root) return null;
+                for (var i = 0; i < selectors.length; i++) {
+                    var el = root.querySelector(selectors[i]);
+                    if (!el || isInactiveInput(el)) continue;
+                    var value = parseInt(el.value, 10);
+                    if (!isNaN(value) && value > 0) return value;
+                }
+                return null;
+            }
+
+            var localSelectors = [
+                '[name="quantity"]',
+                'input[data-entity="quantity-input"]',
+                '.counter__value input',
+                '.counter input[type="number"]'
+            ];
+
+            var globalSelectors = [
                 '.catalog-detail [name="quantity"]',
                 '.catalog-detail input[data-entity="quantity-input"]',
                 '.catalog-detail .counter__value input',
-                '.catalog-detail .counter input[type="number"]',
+                '.catalog-detail .counter input[type="number"]'
             ];
-
-            for (var i = 0; i < selectors.length; i++) {
-                var el = document.querySelector(selectors[i]);
-                if (!el) continue;
-                var v = parseInt(el.value, 10);
-                if (!isNaN(v) && v > 0) return v;
-            }
 
             var sku = document.querySelector('.sku-props[data-item-id="' + productId + '"]');
             if (sku) {
-                var nearQty = sku.closest('.catalog-detail__main') &&
-                    sku.closest('.catalog-detail__main').querySelector('[name="quantity"], input[data-entity="quantity-input"]');
-                if (nearQty) {
-                    var nearVal = parseInt(nearQty.value, 10);
-                    if (!isNaN(nearVal) && nearVal > 0) return nearVal;
-                }
+                var cardRoot = sku.closest(
+                    '.catalog-detail__main, .catalog-detail, .catalog-block, .catalog-item, [data-entity="item"]'
+                ) || sku.parentElement;
+
+                var nearValue = pickQuantityFromRoot(cardRoot, localSelectors);
+                if (nearValue !== null) return nearValue;
             }
+
+            var fallbackValue = pickQuantityFromRoot(document, globalSelectors);
+            if (fallbackValue !== null) return fallbackValue;
 
             return 1;
         },
