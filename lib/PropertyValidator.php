@@ -9,71 +9,29 @@
 namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Loader;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\FormatFieldModeHandler;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\VolumeFieldModeHandler;
 
 class PropertyValidator
 {
-    /**
-     * Проверить XML_ID значения свойства FORMAT.
-     * Допустимый формат: «210x297», «100x148» и т.п. (ШxВ, только цифры).
-     *
-     * @param string $xmlId
-     * @return bool
-     */
     public static function isValidFormatXmlId(string $xmlId): bool
     {
-        return $xmlId === 'X' || (bool)preg_match('/^\d+x\d+$/i', $xmlId);
+        return (new FormatFieldModeHandler())->isValidXmlId($xmlId);
     }
 
-    /**
-     * Разобрать XML_ID формата в массив ['width' => int, 'height' => int].
-     *
-     * @param string $xmlId  например «210x297»
-     * @return array|null
-     */
     public static function parseFormatXmlId(string $xmlId): ?array
     {
-        if ($xmlId === 'X') {
-            return null; // Произвольный формат не парсится как размер
-        }
-
-        if (!self::isValidFormatXmlId($xmlId)) {
-            return null;
-        }
-
-        [$w, $h] = explode('x', strtolower($xmlId));
-
-        return ['width' => (int)$w, 'height' => (int)$h];
+        return (new FormatFieldModeHandler())->parseXmlId($xmlId);
     }
 
-    /**
-     * Проверить XML_ID значения свойства VOLUME.
-     * Допустимый формат: числовая строка («100», «1000», «99999»).
-     *
-     * @param string $xmlId
-     * @return bool
-     */
     public static function isValidVolumeXmlId(string $xmlId): bool
     {
-        return $xmlId === 'X' || (is_numeric($xmlId) && (int)$xmlId > 0);
+        return (new VolumeFieldModeHandler())->isValidXmlId($xmlId);
     }
 
-    /**
-     * Разобрать XML_ID тиража в целое число.
-     *
-     * @param string $xmlId  например «1000»
-     * @return int|null
-     */
     public static function parseVolumeXmlId(string $xmlId): ?int
     {
-        if ($xmlId === 'X') {
-            return null; // Произвольный тираж не парсится как число
-        }
-
-        if (!self::isValidVolumeXmlId($xmlId)) {
-            return null;
-        }
-
-        return (int)$xmlId;
+        return (new VolumeFieldModeHandler())->parseXmlId($xmlId);
     }
 
     /**
@@ -105,7 +63,6 @@ class PropertyValidator
             $xmlId = $arEnum['XML_ID'];
 
             if ($xmlId === 'X') {
-                // «X» — маркер произвольного значения, валиден, но не парсится как размер
                 continue;
             }
 
@@ -115,7 +72,7 @@ class PropertyValidator
             }
 
             $parsed = self::parseFormatXmlId($xmlId);
-            $values[$arEnum['ID']] = array_merge($arEnum, $parsed);
+            $values[$arEnum['ID']] = array_merge($arEnum, $parsed ?? []);
         }
 
         return [
@@ -154,7 +111,6 @@ class PropertyValidator
             $xmlId = $arEnum['XML_ID'];
 
             if ($xmlId === 'X') {
-                // «X» — маркер произвольного значения, валиден, но не парсится как число
                 continue;
             }
 
