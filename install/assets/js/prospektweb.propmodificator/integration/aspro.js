@@ -44,6 +44,9 @@
 
                     if (!state._pendingUiUpdate) return;
 
+                    // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
+                    PModificator.rebuildActiveOtherProps(state);
+
                     state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
@@ -145,10 +148,14 @@
                 replaceKeys.forEach(function (rk, idx) {
                     var key = String(rk && rk.key || '').trim();
                     if (!key) return;
-                    var customVal = self.getCustomValueByIndex(state, skuCode, idx);
+                    var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
+                    var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
+                        ? parsedInputIndex
+                        : idx;
+                    var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
                     var replacement = customVal !== null && customVal !== undefined && customVal !== ''
                         ? String(customVal)
-                        : (fallbackParts[idx] !== undefined ? String(fallbackParts[idx]) : '');
+                        : (fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '');
                     newText = newText.split(key).join(replacement);
                 });
             });
@@ -243,6 +250,29 @@
             );
         },
 
+        rebuildActiveOtherProps: function (state) {
+            if (!state || !state.containerEl || !Array.isArray(state.allPropIds)) {
+                return {};
+            }
+
+            var rebuilt = {};
+            state.allPropIds.forEach(function (pid) {
+                var propId = parseInt(pid, 10);
+                if (isNaN(propId)) return;
+                var innerEl = state.containerEl.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+                if (!innerEl) return;
+                var activeBtn = innerEl.querySelector('.sku-props__value--active');
+                if (!activeBtn || !activeBtn.dataset.onevalue) return;
+                var enumId = parseInt(activeBtn.dataset.onevalue, 10);
+                if (!isNaN(enumId)) {
+                    rebuilt[propId] = enumId;
+                }
+            });
+
+            state.activeOtherProps = rebuilt;
+            return rebuilt;
+        },
+
         fetchServerPrice: function (state, uiRevision, callback) {
             var cfg     = window.pmodConfig;
             var ajaxUrl = cfg && cfg.ajaxUrl;
@@ -260,13 +290,14 @@
             var requestId = ++state._ajaxRequestId;
             var abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             state._ajaxAbortCtrl = abortCtrl;
+            var activeOtherProps = PModificator.rebuildActiveOtherProps(state);
 
             var payload = {
                 productId: state.productId,
                 basket_qty: PModificator.getBasketQuantity(state.productId),
                 active_group_id: state.mainPriceGroupId || null,
                 visible_groups: [],
-                other_props: state.activeOtherProps || null
+                other_props: activeOtherProps || null
             };
 
             var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
@@ -302,29 +333,59 @@
         },
 
         getBasketQuantity: function (productId) {
-            var selectors = [
+            function isInactiveInput(input) {
+                if (!input || input.tagName !== 'INPUT') return true;
+                if (input.type === 'hidden' || input.disabled) return true;
+
+                var hiddenAncestor = input.closest(
+                    '[hidden], [aria-hidden="true"], .hidden, .d-none, .is-hidden, .inactive, .disabled'
+                );
+                if (hiddenAncestor) return true;
+
+                if (input.offsetParent === null && input.getClientRects().length === 0) {
+                    return true;
+                }
+
+                return false;
+            }
+
+            function pickQuantityFromRoot(root, selectors) {
+                if (!root) return null;
+                for (var i = 0; i < selectors.length; i++) {
+                    var el = root.querySelector(selectors[i]);
+                    if (!el || isInactiveInput(el)) continue;
+                    var value = parseInt(el.value, 10);
+                    if (!isNaN(value) && value > 0) return value;
+                }
+                return null;
+            }
+
+            var localSelectors = [
+                '[name="quantity"]',
+                'input[data-entity="quantity-input"]',
+                '.counter__value input',
+                '.counter input[type="number"]'
+            ];
+
+            var globalSelectors = [
                 '.catalog-detail [name="quantity"]',
                 '.catalog-detail input[data-entity="quantity-input"]',
                 '.catalog-detail .counter__value input',
-                '.catalog-detail .counter input[type="number"]',
+                '.catalog-detail .counter input[type="number"]'
             ];
-
-            for (var i = 0; i < selectors.length; i++) {
-                var el = document.querySelector(selectors[i]);
-                if (!el) continue;
-                var v = parseInt(el.value, 10);
-                if (!isNaN(v) && v > 0) return v;
-            }
 
             var sku = document.querySelector('.sku-props[data-item-id="' + productId + '"]');
             if (sku) {
-                var nearQty = sku.closest('.catalog-detail__main') &&
-                    sku.closest('.catalog-detail__main').querySelector('[name="quantity"], input[data-entity="quantity-input"]');
-                if (nearQty) {
-                    var nearVal = parseInt(nearQty.value, 10);
-                    if (!isNaN(nearVal) && nearVal > 0) return nearVal;
-                }
+                var cardRoot = sku.closest(
+                    '.catalog-detail__main, .catalog-detail, .catalog-block, .catalog-item, [data-entity="item"]'
+                ) || sku.parentElement;
+
+                var nearValue = pickQuantityFromRoot(cardRoot, localSelectors);
+                if (nearValue !== null) return nearValue;
             }
+
+            var fallbackValue = pickQuantityFromRoot(document, globalSelectors);
+            if (fallbackValue !== null) return fallbackValue;
 
             return 1;
         },

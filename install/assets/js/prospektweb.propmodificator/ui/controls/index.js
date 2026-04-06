@@ -352,7 +352,7 @@
                             didTriggerSkuSwitch = true;
                         }
                     } else {
-                        var nearest = PModificator.findNearestVolumePreset(valuesEl, v);
+                        var nearest = PModificator.findNearestVolumePreset(valuesEl, v, state.volumeEnumMap);
                         if (nearest && !nearest.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             nearest.click();
@@ -627,10 +627,13 @@
             return null;
         },
 
-        findNearestVolumePreset: function (valuesEl, v) {
+        findNearestVolumePreset: function (valuesEl, v, volumeEnumMap) {
             var best = null, bestDist = Infinity;
             valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {
-                var t = parseInt(btn.dataset.title, 10);
+                var eid = btn.dataset.onevalue || '';
+                var t = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
+                    ? parseInt(volumeEnumMap[eid], 10)
+                    : parseInt((btn.dataset.title || '').replace(/[^0-9]/g, ''), 10);
                 if (isNaN(t)) return;
                 var d = Math.abs(t - v);
                 if (d < bestDist) { bestDist = d; best = btn; }

@@ -34,6 +34,9 @@
         },
 
         initContainer: function (container, cfg) {
+            if (!container) return;
+            if (container.dataset.pmodInitialized === 'Y') return;
+
             var productId = parseInt(container.dataset.itemId, 10);
             if (!productId) return;
 
@@ -135,6 +138,30 @@
             state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
             state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(container, state, state.rawBaseTitleFromAspro);
             PModificator.applyFinalUiState(state);
+
+            container._pmodState = state;
+            container.dataset.pmodInitialized = 'Y';
+        },
+
+        resetContainer: function (container) {
+            if (!container) return;
+
+            var state = container._pmodState;
+            if (state && typeof state._destroy === 'function') {
+                state._destroy();
+            }
+
+            container._pmodState = null;
+            delete container.dataset.pmodInitialized;
+        },
+
+        resetAllContainers: function () {
+            var containers = document.querySelectorAll('.sku-props');
+            if (!containers.length) return;
+
+            containers.forEach(function (container) {
+                PModificator.resetContainer(container);
+            });
         },
 
         requestCalcPrice: function (url, payload, signal) {
