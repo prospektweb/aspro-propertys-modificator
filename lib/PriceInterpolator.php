@@ -2,6 +2,10 @@
 
 namespace Prospektweb\PropModificator;
 
+use Prospektweb\PropModificator\Domain\FieldMode\FieldModeHandlerInterface;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\FormatFieldModeHandler;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\VolumeFieldModeHandler;
+
 /**
  * Pure interpolation math for offer points.
  *
@@ -10,56 +14,46 @@ namespace Prospektweb\PropModificator;
  */
 class PriceInterpolator
 {
+    private FieldModeHandlerInterface $formatHandler;
+    private FieldModeHandlerInterface $volumeHandler;
+
+    public function __construct(?FieldModeHandlerInterface $formatHandler = null, ?FieldModeHandlerInterface $volumeHandler = null)
+    {
+        $this->formatHandler = $formatHandler ?? new FormatFieldModeHandler();
+        $this->volumeHandler = $volumeHandler ?? new VolumeFieldModeHandler();
+    }
+
     public function interpolatePoints(array $offerPoints, ?int $width, ?int $height, ?int $volume): ?float
     {
-        $customFormat = ($width !== null && $height !== null);
-        $customVolume = ($volume !== null);
+        $customFormat = $this->formatHandler->hasCustomInput($width, $height, $volume);
+        $customVolume = $this->volumeHandler->hasCustomInput($width, $height, $volume);
 
-        if (!ValidationRules::hasCustomInput($width, $height, $volume)) {
+        if (!$customFormat && !$customVolume) {
             return null;
         }
         if ($customFormat && $customVolume) {
             return $this->bilinearInterpolatePoints($offerPoints, $width, $height, $volume);
         }
-        if ($customFormat) {
-            return $this->interpolateByFormatPoints($offerPoints, $width, $height);
-        }
 
-        return $this->interpolateByVolumePoints($offerPoints, (int)$volume);
-    }
-
-    private function interpolateByVolumePoints(array $offerPoints, int $volume): ?float
-    {
-        $points = array_values(array_filter($offerPoints, fn($o) => $o['volume'] !== null && isset($o['price'])));
-        usort($points, fn($a, $b) => $a['volume'] <=> $b['volume']);
-        if (empty($points)) {
+        $handler = $customFormat ? $this->formatHandler : $this->volumeHandler;
+        $value = $handler->resolveLinearValue($width, $height, $volume);
+        if ($value === null) {
             return null;
         }
-        return $this->linearInterp($points, 'volume', $volume);
+
+        return $this->linearInterp($handler->extractLinearPoints($offerPoints), $value);
     }
 
-    private function interpolateByFormatPoints(array $offerPoints, int $width, int $height): ?float
+    private function bilinearInterpolatePoints(array $offerPoints, ?int $width, ?int $height, ?int $volume): ?float
     {
-        $area = $width * $height;
-        $points = array_filter($offerPoints, fn($o) => $o['width'] !== null && $o['height'] !== null && isset($o['price']));
-        $points = array_map(function ($o) {
-            $o['area'] = $o['width'] * $o['height'];
-            return $o;
-        }, $points);
-        $points = array_values($points);
-        usort($points, fn($a, $b) => $a['area'] <=> $b['area']);
-        if (empty($points)) {
+        $area = $this->formatHandler->resolveLinearValue($width, $height, $volume);
+        if ($area === null || $volume === null) {
             return null;
         }
-        return $this->linearInterp($points, 'area', $area);
-    }
 
-    private function bilinearInterpolatePoints(array $offerPoints, int $width, int $height, int $volume): ?float
-    {
-        $area = $width * $height;
         $points = array_filter($offerPoints, fn($o) => $o['width'] !== null && $o['height'] !== null && $o['volume'] !== null && isset($o['price']));
         if (empty($points)) {
-            return $this->interpolateByFormatPoints($offerPoints, $width, $height);
+            return $this->linearInterp($this->formatHandler->extractLinearPoints($offerPoints), $area);
         }
 
         foreach ($points as &$o) {
@@ -101,7 +95,7 @@ class PriceInterpolator
         $q22 = $this->findClosestPoint($points, $areaHigh, $volumeHigh);
 
         if ($q11 === null || $q12 === null || $q21 === null || $q22 === null) {
-            return $this->interpolateByFormatPoints($offerPoints, $width, $height);
+            return $this->linearInterp($this->formatHandler->extractLinearPoints($offerPoints), $area);
         }
 
         $r1 = $this->lerp($q11, $q21, $areaLow, $areaHigh, $area);
@@ -140,20 +134,24 @@ class PriceInterpolator
         return $best;
     }
 
-    private function linearInterp(array $sorted, string $key, int|float $value): float
+    private function linearInterp(array $sorted, int|float $value): ?float
     {
-        if ($value <= $sorted[0][$key]) {
+        if (empty($sorted)) {
+            return null;
+        }
+
+        if ($value <= $sorted[0]['key']) {
             return (float)$sorted[0]['price'];
         }
-        if ($value >= $sorted[count($sorted) - 1][$key]) {
+        if ($value >= $sorted[count($sorted) - 1]['key']) {
             return (float)$sorted[count($sorted) - 1]['price'];
         }
 
         for ($i = 0; $i < count($sorted) - 1; $i++) {
             $lo = $sorted[$i];
             $hi = $sorted[$i + 1];
-            if ($value >= $lo[$key] && $value <= $hi[$key]) {
-                $t = ($value - $lo[$key]) / ($hi[$key] - $lo[$key]);
+            if ($value >= $lo['key'] && $value <= $hi['key']) {
+                $t = ($value - $lo['key']) / ($hi['key'] - $lo['key']);
                 return (float)$lo['price'] + $t * ((float)$hi['price'] - (float)$lo['price']);
             }
         }

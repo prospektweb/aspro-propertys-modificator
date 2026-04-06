@@ -46,6 +46,7 @@ class TemplateBootstrap
         $jsDir = '/bitrix/js/prospektweb.propmodificator/';
         Asset::getInstance()->addJs($jsDir . 'state/store.js');
         Asset::getInstance()->addJs($jsDir . 'api/client.js');
+        Asset::getInstance()->addJs($jsDir . 'pricing/field-mode-handlers.js');
         Asset::getInstance()->addJs($jsDir . 'pricing/interpolation.js');
         Asset::getInstance()->addJs($jsDir . 'ui/app.js');
         Asset::getInstance()->addJs($jsDir . 'script.js');

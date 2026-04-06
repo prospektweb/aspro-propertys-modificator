@@ -5,14 +5,20 @@ namespace Prospektweb\PropModificator\Infrastructure\Bitrix;
 use Bitrix\Catalog\PriceTable;
 use Bitrix\Main\Loader;
 use Prospektweb\PropModificator\Config;
-use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
-use Prospektweb\PropModificator\PropertyValidator;
+use Prospektweb\PropModificator\Domain\PropertyBinding\PropertyBindingResolverInterface;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\FormatFieldModeHandler;
+use Prospektweb\PropModificator\Infrastructure\Bitrix\FieldMode\VolumeFieldModeHandler;
 
 class OfferRepository
 {
-    public function __construct(private ?EnumValueResolver $enumValueResolver = null)
-    {
-        $this->enumValueResolver = $this->enumValueResolver ?? new EnumValueResolver();
+    public function __construct(
+        private ?PropertyBindingResolverInterface $propertyBindingResolver = null,
+        private ?FormatFieldModeHandler $formatHandler = null,
+        private ?VolumeFieldModeHandler $volumeHandler = null,
+    ) {
+        $this->propertyBindingResolver = $this->propertyBindingResolver ?? new BitrixPropertyBindingResolver();
+        $this->formatHandler = $this->formatHandler ?? new FormatFieldModeHandler();
+        $this->volumeHandler = $this->volumeHandler ?? new VolumeFieldModeHandler();
     }
 
     public function loadOfferMetadata(int $productId, ?array $filterProps): array
@@ -22,14 +28,14 @@ class OfferRepository
         }
 
         $offersIblockId = Config::getOffersIblockId();
-        $formatCode = Config::getFormatPropCode();
-        $volumeCode = Config::getVolumePropCode();
+        $formatCode = $this->formatHandler->getPropertyCode();
+        $volumeCode = $this->volumeHandler->getPropertyCode();
 
-        $formatPropId = $this->resolvePropId($offersIblockId, $formatCode);
-        $volumePropId = $this->resolvePropId($offersIblockId, $volumeCode);
+        $formatPropId = $this->propertyBindingResolver->resolvePropertyId($offersIblockId, $formatCode);
+        $volumePropId = $this->propertyBindingResolver->resolvePropertyId($offersIblockId, $volumeCode);
 
         $volumeEnumMap = $this->loadVolumeEnumMap($volumePropId);
-        $formatEnumMap = $this->enumValueResolver->loadEnumXmlMap($formatPropId);
+        $formatEnumMap = $this->propertyBindingResolver->loadEnumXmlMap($formatPropId);
 
         $otherProps = [];
         if ($filterProps !== null && !empty($filterProps)) {
@@ -53,20 +59,14 @@ class OfferRepository
         while ($arOffer = $rsOffers->Fetch()) {
             $offerId = (int)$arOffer['ID'];
 
-            $formatXmlId = $this->enumValueResolver->resolveXmlId(
-                $arOffer["PROPERTY_{$formatCode}_VALUE_XML_ID"] ?? null,
-                isset($arOffer["PROPERTY_{$formatCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$formatCode}_ENUM_ID"] : null,
-                $formatEnumMap
-            );
+            $formatEnumId = isset($arOffer["PROPERTY_{$formatCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$formatCode}_ENUM_ID"] : null;
+            $volumeEnumId = isset($arOffer["PROPERTY_{$volumeCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$volumeCode}_ENUM_ID"] : null;
 
-            $volumeXmlId = $this->enumValueResolver->resolveXmlId(
-                $arOffer["PROPERTY_{$volumeCode}_VALUE_XML_ID"] ?? null,
-                isset($arOffer["PROPERTY_{$volumeCode}_ENUM_ID"]) ? (int)$arOffer["PROPERTY_{$volumeCode}_ENUM_ID"] : null,
-                array_map('strval', $volumeEnumMap)
-            );
+            $formatXmlId = $formatEnumId !== null ? ($formatEnumMap[$formatEnumId] ?? null) : null;
+            $volumeXmlId = $volumeEnumId !== null ? (($volumeEnumMap[$volumeEnumId] ?? null) !== null ? (string)$volumeEnumMap[$volumeEnumId] : null) : null;
 
-            $formatParsed = $formatXmlId ? PropertyValidator::parseFormatXmlId($formatXmlId) : null;
-            $volumeParsed = $volumeXmlId ? PropertyValidator::parseVolumeXmlId($volumeXmlId) : null;
+            $formatParsed = $formatXmlId ? $this->formatHandler->parseXmlId($formatXmlId) : null;
+            $volumeParsed = $volumeXmlId ? $this->volumeHandler->parseXmlId($volumeXmlId) : null;
             if (!$formatParsed && !$volumeParsed) {
                 continue;
             }
@@ -141,22 +141,10 @@ class OfferRepository
         return $rangesByGroup;
     }
 
-    private function resolvePropId(int $iblockId, string $code): ?int
-    {
-        if ($code === '') {
-            return null;
-        }
-        $rsProp = \CIBlockProperty::GetList([], ['IBLOCK_ID' => $iblockId, 'CODE' => $code, 'ACTIVE' => 'Y']);
-        if ($arProp = $rsProp->Fetch()) {
-            return (int)$arProp['ID'];
-        }
-        return null;
-    }
-
     private function loadVolumeEnumMap(?int $propId): array
     {
         $result = [];
-        foreach ($this->enumValueResolver->loadEnumXmlMap($propId) as $enumId => $xmlId) {
+        foreach ($this->propertyBindingResolver->loadEnumXmlMap($propId) as $enumId => $xmlId) {
             if (is_numeric($xmlId) || $xmlId === 'X') {
                 $result[(int)$enumId] = $xmlId === 'X' ? 'X' : (int)$xmlId;
             }
