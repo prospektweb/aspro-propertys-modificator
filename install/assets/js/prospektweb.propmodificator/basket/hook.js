@@ -4,6 +4,10 @@
 ;(function () {
     'use strict';
 
+    var hasNumberValue = (window.PModUtils && window.PModUtils.hasNumberValue)
+        ? window.PModUtils.hasNumberValue
+        : function (value) { return value !== null && value !== undefined; };
+
     window.PModBasket = {
         hookBasket: function (container, state) {
             // Подход 1: патч JItemActionBasket.prototype.collectRequestData
@@ -51,11 +55,9 @@
 
                 if (containerId && containerId !== state.productId) return formData;
 
-                PModificator.rebuildActiveOtherProps(state);
-
-                if (state.customWidth)  formData.append('prospekt_calc[width]',  state.customWidth);
-                if (state.customHeight) formData.append('prospekt_calc[height]', state.customHeight);
-                if (state.customVolume) formData.append('prospekt_calc[volume]', state.customVolume);
+                if (hasNumberValue(state.customWidth)) formData.append('prospekt_calc[width]',  state.customWidth);
+                if (hasNumberValue(state.customHeight)) formData.append('prospekt_calc[height]', state.customHeight);
+                if (hasNumberValue(state.customVolume)) formData.append('prospekt_calc[volume]', state.customVolume);
 
                 formData.append('prospekt_calc[is_custom]',  'Y');
                 formData.append('prospekt_calc[product_id]', state.productId);
@@ -148,10 +150,9 @@
 
                         // Пропускаем если patchCollectRequestData уже добавил поля
                         if (activeState && typeof fd.has === 'function' && !fd.has('prospekt_calc[is_custom]')) {
-                            PModificator.rebuildActiveOtherProps(activeState);
-                            if (activeState.customWidth)  fd.append('prospekt_calc[width]',  activeState.customWidth);
-                            if (activeState.customHeight) fd.append('prospekt_calc[height]', activeState.customHeight);
-                            if (activeState.customVolume) fd.append('prospekt_calc[volume]', activeState.customVolume);
+                            if (hasNumberValue(activeState.customWidth)) fd.append('prospekt_calc[width]',  activeState.customWidth);
+                            if (hasNumberValue(activeState.customHeight)) fd.append('prospekt_calc[height]', activeState.customHeight);
+                            if (hasNumberValue(activeState.customVolume)) fd.append('prospekt_calc[volume]', activeState.customVolume);
                             fd.append('prospekt_calc[is_custom]',  'Y');
                             fd.append('prospekt_calc[product_id]', activeState.productId);
                             if (activeState.activeOtherProps) {

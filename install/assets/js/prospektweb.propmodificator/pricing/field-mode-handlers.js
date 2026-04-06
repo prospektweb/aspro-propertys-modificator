@@ -11,19 +11,23 @@
 ;(function () {
     'use strict';
 
+    var hasNumberValue = (window.PModUtils && window.PModUtils.hasNumberValue)
+        ? window.PModUtils.hasNumberValue
+        : function (value) { return value !== null && value !== undefined; };
+
     function createFormatHandler() {
         return {
             mode: 'format',
             skuPropertyCode: 'CALC_PROP_FORMAT',
             hasCustomInput: function (state) {
-                return !!(state && state.customWidth && state.customHeight);
+                return !!(state && hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight));
             },
             getLinearKey: function (offer) {
                 if (!offer || !offer.width || !offer.height) return null;
                 return offer.width * offer.height;
             },
             getRequestedKey: function (state) {
-                if (!state || !state.customWidth || !state.customHeight) return null;
+                if (!state || !hasNumberValue(state.customWidth) || !hasNumberValue(state.customHeight)) return null;
                 return state.customWidth * state.customHeight;
             },
         };
@@ -34,13 +38,13 @@
             mode: 'volume',
             skuPropertyCode: 'CALC_PROP_VOLUME',
             hasCustomInput: function (state) {
-                return !!(state && state.customVolume);
+                return !!(state && hasNumberValue(state.customVolume));
             },
             getLinearKey: function (offer) {
                 return offer && offer.volume ? offer.volume : null;
             },
             getRequestedKey: function (state) {
-                return state && state.customVolume ? state.customVolume : null;
+                return state && hasNumberValue(state.customVolume) ? state.customVolume : null;
             },
         };
     }

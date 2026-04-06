@@ -38,6 +38,11 @@
         window.history.replaceState(null, '', url.toString());
     }
 
+
+    function hasNumberValue(value) {
+        return value !== null && value !== undefined;
+    }
+
     function formatPrice(price) {
         var isInt = price % 1 === 0;
         return price.toLocaleString('ru-RU', {
@@ -52,5 +57,6 @@
         clamp: clamp,
         formatPrice: formatPrice,
         syncUrlPmodVolume: syncUrlPmodVolume,
+        hasNumberValue: hasNumberValue,
     };
 })();

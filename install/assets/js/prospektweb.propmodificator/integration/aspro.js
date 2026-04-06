@@ -7,6 +7,9 @@
     var formatPrice = (window.PModUtils && window.PModUtils.formatPrice)
         ? window.PModUtils.formatPrice
         : function (price) { return String(price); };
+    var hasNumberValue = (window.PModUtils && window.PModUtils.hasNumberValue)
+        ? window.PModUtils.hasNumberValue
+        : function (value) { return value !== null && value !== undefined; };
 
     window.PModIntegration = {
         hookAsproSkuFinalAction: function () {
@@ -242,8 +245,8 @@
 
         recomputeCustomMode: function (state) {
             state.customMode = !!(
-                state.customVolume !== null ||
-                (state.customWidth !== null && state.customHeight !== null)
+                hasNumberValue(state.customVolume) ||
+                (hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight))
             );
         },
 
@@ -303,9 +306,9 @@
             if (visibleGroups.length > 1) {
                 payload.visible_groups = visibleGroups;
             }
-            if (state.customVolume)  payload.volume = state.customVolume;
-            if (state.customWidth)   payload.width = state.customWidth;
-            if (state.customHeight)  payload.height = state.customHeight;
+            if (hasNumberValue(state.customVolume)) payload.volume = state.customVolume;
+            if (hasNumberValue(state.customWidth)) payload.width = state.customWidth;
+            if (hasNumberValue(state.customHeight)) payload.height = state.customHeight;
 
             // CSRF-токен Bitrix
             var sessid = (typeof BX !== 'undefined' && BX.bitrix_sessid)
