@@ -136,7 +136,11 @@
             PModificator.hookBasket(container, state);
 
             // Первичная фиксация базового заголовка и рендер кастомного заголовка.
-            state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+            state.rawBaseTitleFromAspro = PModificator.buildRawBaseTitleTemplate(
+                container,
+                state,
+                PModificator.getCurrentRawH1Text() || ''
+            );
             state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(container, state, state.rawBaseTitleFromAspro);
             PModificator.applyFinalUiState(state);
 
