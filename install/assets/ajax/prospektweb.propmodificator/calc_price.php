@@ -53,5 +53,16 @@ if (!Loader::includeModule('prospektweb.propmodificator')) {
     die();
 }
 
-echo json_encode(AjaxController::calcPrice(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS);
+try {
+    echo json_encode(
+        AjaxController::calcPrice(),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS
+    );
+} catch (\Throwable $e) {
+    http_response_code(500);
+    echo json_encode(
+        $buildError('Internal server error', 'INTERNAL_ERROR', ['message' => $e->getMessage()]),
+        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS
+    );
+}
 die();
