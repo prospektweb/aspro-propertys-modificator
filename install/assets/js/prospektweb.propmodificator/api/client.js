@@ -99,7 +99,34 @@
                 body: body,
                 signal: signal,
                 credentials: 'same-origin'
-            }).then(function (res) { return res.json(); });
+            }).then(function (res) {
+                return res.text().then(function (text) {
+                    var data = null;
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            data = null;
+                        }
+                    }
+
+                    if (!res.ok) {
+                        var message = data && data.error
+                            ? data.error
+                            : ('Request failed with status ' + res.status);
+                        var error = new Error(message);
+                        error.status = res.status;
+                        error.response = data;
+                        throw error;
+                    }
+
+                    if (data === null) {
+                        throw new Error('Invalid JSON response');
+                    }
+
+                    return data;
+                });
+            });
         },
 
         postUrlEncoded: function (url, payload, signal) {

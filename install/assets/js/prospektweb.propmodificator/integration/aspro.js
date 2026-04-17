@@ -457,11 +457,15 @@
 
             if (!popupPrice) {
                 // Fallback: обновляем собственный элемент модуля
+                var basketQty = PModificator.getBasketQuantity(state.productId);
+                var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
                 var mainPrice = PModificator.getMainPrice(
                     interpolated,
                     state.catalogGroups,
                     state.canBuyGroups,
-                    state.mainPriceGroupId
+                    state.mainPriceGroupId,
+                    basketQty,
+                    visibleGroupIds
                 );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');
