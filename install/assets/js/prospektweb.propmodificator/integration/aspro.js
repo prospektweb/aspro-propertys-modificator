@@ -4,6 +4,14 @@
 ;(function () {
     'use strict';
 
+    function normalizePriceCodeName(value) {
+        return String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
     var formatPrice = (window.PModUtils && window.PModUtils.formatPrice)
         ? window.PModUtils.formatPrice
         : function (price) { return String(price); };
@@ -545,12 +553,16 @@
             var nameToGid = {};
             Object.keys(state.catalogGroups || {}).forEach(function (gid) {
                 var g = state.catalogGroups[gid];
-                if (g && g.name) nameToGid[g.name] = gid;
+                if (!g || !g.name) return;
+                var normalizedName = normalizePriceCodeName(g.name);
+                if (normalizedName) {
+                    nameToGid[normalizedName] = gid;
+                }
             });
 
             var gids = [];
             priceCodeOrder.forEach(function (name) {
-                var gid = nameToGid[name];
+                var gid = nameToGid[normalizePriceCodeName(name)];
                 if (gid) gids.push(String(gid));
             });
             return gids;
