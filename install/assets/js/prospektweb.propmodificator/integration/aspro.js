@@ -569,8 +569,7 @@
         },
 
         detectActivePriceGroupIdFromDom: function (state) {
-            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
-            if (!popupPrice || !state || !state.catalogGroups) return null;
+            if (!state || !state.catalogGroups) return null;
 
             var nameToGid = {};
             Object.keys(state.catalogGroups).forEach(function (gid) {
@@ -578,9 +577,6 @@
                 var n = g && g.name ? String(g.name).trim().toLowerCase() : '';
                 if (n) nameToGid[n] = String(gid);
             });
-
-            var row = popupPrice.querySelector('.price--current');
-            if (!row) return null;
 
             function extractTitle(el) {
                 var cur = el;
@@ -595,9 +591,30 @@
                 return '';
             }
 
-            var title = extractTitle(row);
-            if (!title) return null;
-            return nameToGid[title] || null;
+            var preferredPopup = PModificator.getVisiblePopupPriceElement(state);
+            var candidates = [];
+            if (preferredPopup) {
+                candidates.push(preferredPopup);
+            }
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if ((el.offsetParent !== null || el.offsetHeight > 0) && candidates.indexOf(el) === -1) {
+                    candidates.push(el);
+                }
+            });
+
+            for (var i = 0; i < candidates.length; i++) {
+                var row = candidates[i].querySelector('.price--current');
+                if (!row) continue;
+                var title = extractTitle(row);
+                if (!title) continue;
+                if (nameToGid[title]) {
+                    return nameToGid[title];
+                }
+            }
+
+            // Fallback: берём первую видимую группу из PRICE_CODE (как порядок Aspro).
+            var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
+            return visibleGroupIds.length ? String(visibleGroupIds[0]) : null;
         },
 
         applyServerPricesToDom: function (container, interpolated, state, uiRevision) {
