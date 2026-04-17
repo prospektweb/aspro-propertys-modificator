@@ -10,8 +10,9 @@ use Prospektweb\PropModificator\Infrastructure\Http\RequestThrottler;
 use Prospektweb\PropModificator\Infrastructure\Http\ServerContext;
 use Prospektweb\PropModificator\Infrastructure\Http\SessionStorage;
 
+$documentRoot = (string)($_SERVER['DOCUMENT_ROOT'] ?? '');
+require_once rtrim($documentRoot, '/') . '/bitrix/modules/main/include/prolog_before.php';
 $server = ServerContext::fromGlobals();
-require_once $server->documentRoot() . '/bitrix/modules/main/include/prolog_before.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
