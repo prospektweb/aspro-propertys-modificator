@@ -53,11 +53,17 @@
                     PModificator.rebuildActiveOtherProps(state);
 
                     var currentAsproTitle = PModificator.getCurrentRawH1Text() || '';
-                    state.rawBaseTitleFromAspro = PModificator.buildRawBaseTitleTemplate(
+                    var normalizedAsproTitle = PModificator.buildRawBaseTitleTemplate(
                         state.containerEl,
                         state,
                         currentAsproTitle
                     );
+                    if (
+                        !state.rawBaseTitleFromAspro ||
+                        PModificator.hasReplaceKeysInTitle(state, normalizedAsproTitle)
+                    ) {
+                        state.rawBaseTitleFromAspro = normalizedAsproTitle;
+                    }
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
                         state,
@@ -122,7 +128,12 @@
                     state,
                     currentTitleNoWait
                 );
-                if (normalizedNoWait) {
+                if (
+                    normalizedNoWait && (
+                        !state.rawBaseTitleFromAspro ||
+                        PModificator.hasReplaceKeysInTitle(state, normalizedNoWait)
+                    )
+                ) {
                     state.rawBaseTitleFromAspro = normalizedNoWait;
                 }
                 state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
@@ -145,7 +156,12 @@
                         state,
                         currentTitleByTimer
                     );
-                    if (normalizedByTimer) {
+                    if (
+                        normalizedByTimer && (
+                            !state.rawBaseTitleFromAspro ||
+                            PModificator.hasReplaceKeysInTitle(state, normalizedByTimer)
+                        )
+                    ) {
                         state.rawBaseTitleFromAspro = normalizedByTimer;
                     }
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
@@ -236,18 +252,46 @@
                         : idx;
                     var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
                     var fallbackVal = fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '';
-                    var concreteVal = customVal !== null && customVal !== undefined && customVal !== ''
-                        ? String(customVal)
-                        : fallbackVal;
+                    var valueCandidates = [];
+                    if (customVal !== null && customVal !== undefined && customVal !== '') {
+                        valueCandidates.push(String(customVal));
+                    }
+                    if (fallbackVal) {
+                        valueCandidates.push(fallbackVal);
+                    }
 
-                    if (!concreteVal || concreteVal === key) return;
                     if (template.indexOf(key) !== -1) return;
-                    if (template.indexOf(concreteVal) === -1) return;
-                    template = template.split(concreteVal).join(key);
+                    for (var c = 0; c < valueCandidates.length; c++) {
+                        var concreteVal = valueCandidates[c];
+                        if (!concreteVal || concreteVal === key) continue;
+                        if (template.indexOf(concreteVal) === -1) continue;
+                        template = template.split(concreteVal).join(key);
+                        break;
+                    }
                 });
             });
 
             return template;
+        },
+
+        hasReplaceKeysInTitle: function (state, title) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return false;
+            var text = String(title || '').trim();
+            if (!text) return false;
+
+            for (var f = 0; f < state.customConfig.fields.length; f++) {
+                var replaceKeys = Array.isArray(state.customConfig.fields[f] && state.customConfig.fields[f].replaceKeys)
+                    ? state.customConfig.fields[f].replaceKeys
+                    : [];
+                for (var r = 0; r < replaceKeys.length; r++) {
+                    var key = String(replaceKeys[r] && replaceKeys[r].key || '').trim();
+                    if (key && text.indexOf(key) !== -1) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         },
 
         getCustomValueByIndex: function (state, skuCode, inputIdx) {
