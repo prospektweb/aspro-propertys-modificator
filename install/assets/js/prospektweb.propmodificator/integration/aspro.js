@@ -10,6 +10,7 @@
     var hasNumberValue = (window.PModUtils && window.PModUtils.hasNumberValue)
         ? window.PModUtils.hasNumberValue
         : function (value) { return value !== null && value !== undefined; };
+    var UI_STABILIZATION_TIMEOUT_MS = 1200;
 
     window.PModIntegration = {
         hookAsproSkuFinalAction: function () {
@@ -43,6 +44,10 @@
                     }
 
                     if (!state._pendingUiUpdate) return;
+                    if (state._uiStabilizationTimer) {
+                        clearTimeout(state._uiStabilizationTimer);
+                        state._uiStabilizationTimer = null;
+                    }
 
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
@@ -91,6 +96,10 @@
 
         beginUiStabilization: function (state, waitForAsproEvent) {
             if (!state) return 0;
+            if (state._uiStabilizationTimer) {
+                clearTimeout(state._uiStabilizationTimer);
+                state._uiStabilizationTimer = null;
+            }
             state._uiRevision = (state._uiRevision || 0) + 1;
             state._pendingUiUpdate = true;
             PModificator.setTitleLoading(true);
@@ -112,6 +121,24 @@
                 );
                 state._activeUiRevision = state._uiRevision;
                 PModificator.applyFinalUiState(state);
+            }
+            // Страховка: если Aspro не вызовет onFinalActionSKUInfo, не оставляем UI в "loading".
+            if (waitForAsproEvent === true) {
+                var localRevision = state._uiRevision;
+                state._uiStabilizationTimer = setTimeout(function () {
+                    if (!PModificator.isRevisionActual(state, localRevision)) return;
+                    if (!state._pendingUiUpdate) return;
+                    if (!state.rawBaseTitleFromAspro) {
+                        state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                    }
+                    state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                        state.containerEl,
+                        state,
+                        state.rawBaseTitleFromAspro
+                    );
+                    state._activeUiRevision = state._uiRevision;
+                    PModificator.applyFinalUiState(state);
+                }, UI_STABILIZATION_TIMEOUT_MS);
             }
 
             return state._uiRevision;

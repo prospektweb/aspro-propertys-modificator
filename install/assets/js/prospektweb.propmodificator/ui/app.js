@@ -91,6 +91,7 @@
                 _pendingUiUpdate: false,
                 _uiRevision: 0,
                 _activeUiRevision: 0,
+                _uiStabilizationTimer: null,
             };
 
             // Регистрируем container в state для последующего re-apply после onFinalActionSKUInfo

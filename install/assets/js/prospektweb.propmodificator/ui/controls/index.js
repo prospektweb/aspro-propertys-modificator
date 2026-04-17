@@ -462,6 +462,10 @@
                 PModificator.setPriceLoading(false);
             }
 
+            if (state._uiStabilizationTimer) {
+                clearTimeout(state._uiStabilizationTimer);
+                state._uiStabilizationTimer = null;
+            }
             state._pendingUiUpdate = false;
             PModificator.setTitleLoading(false);
         },
