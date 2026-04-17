@@ -159,7 +159,7 @@ $resolvedWithEmptyAccess = $resolver->resolve(
     1
 );
 assertTrue(is_array($resolvedWithEmptyAccess), 'MainPriceResolver must not return null when accessible groups are empty');
-assertTrue((int)($resolvedWithEmptyAccess['groupId'] ?? 0) === 1, 'MainPriceResolver must honor preferred active group when access filter is empty');
+assertTrue((int)($resolvedWithEmptyAccess['groupId'] ?? 0) === 2, 'MainPriceResolver must select minimal visible price when access filter is empty');
 
 $resolvedWithNoBuyableMatch = $resolver->resolve(
     [1 => 100.0, 2 => 90.0],
@@ -171,7 +171,7 @@ $resolvedWithNoBuyableMatch = $resolver->resolve(
     1
 );
 assertTrue(is_array($resolvedWithNoBuyableMatch), 'MainPriceResolver must fallback to visible/active group when buyable groups are absent');
-assertTrue((int)($resolvedWithNoBuyableMatch['groupId'] ?? 0) === 1, 'MainPriceResolver must keep active group priority even without buyable matches');
+assertTrue((int)($resolvedWithNoBuyableMatch['groupId'] ?? 0) === 2, 'MainPriceResolver must keep minimal visible price even without buyable matches');
 
 $responseFactory = new ResponseFactory();
 $requestDto = new CalcPriceRequest(1, 100, null, null, 1, [1, 2], 1, null, false);

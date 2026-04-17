@@ -16,46 +16,13 @@ class MainPriceResolver
         $isAccessible = static function (int $gid) use ($accessibleGroupIds, $hasAccessFilter): bool {
             return !$hasAccessFilter || in_array($gid, $accessibleGroupIds, true);
         };
+        $visibleOrder = [];
+        foreach ($visibleGroups as $idx => $visibleGid) {
+            $visibleOrder[(int)$visibleGid] = $idx;
+        }
 
         if (!empty($rangePrices)) {
-            // 0) Явно активная группа из фронта (визуально выбранная в Aspro) — максимальный приоритет.
-            if ($activeGroupId !== null && isset($rangePrices[$activeGroupId])) {
-                $picked = $this->pickRange((array)$rangePrices[$activeGroupId], $basketQty);
-                if ($picked) {
-                    return ['groupId' => (int)$activeGroupId, 'price' => (float)$picked['price']];
-                }
-            }
-
-            // 1) Порядок видимых групп (как в popup Aspro):
-            //    1.1 первая buyable; 1.2 если buyable нет — первая с ценой.
-            if (!empty($visibleGroups)) {
-                foreach ($visibleGroups as $visibleGid) {
-                    $gid = (int)$visibleGid;
-                    if (!isset($rangePrices[$gid]) || !$isAccessible($gid)) {
-                        continue;
-                    }
-                    $picked = $this->pickRange((array)$rangePrices[$gid], $basketQty);
-                    if ($picked) {
-                        return ['groupId' => $gid, 'price' => (float)$picked['price']];
-                    }
-                }
-
-                foreach ($visibleGroups as $visibleGid) {
-                    $gid = (int)$visibleGid;
-                    if (!isset($rangePrices[$gid])) {
-                        continue;
-                    }
-                    $picked = $this->pickRange((array)$rangePrices[$gid], $basketQty);
-                    if ($picked) {
-                        return ['groupId' => $gid, 'price' => (float)$picked['price']];
-                    }
-                }
-            }
-
-            // 2) Глобальный fallback по всем группам:
-            //    2.1 минимальная buyable; 2.2 если buyable нет — минимальная из всех.
-            $best = null;
-            $bestAny = null;
+            $candidates = [];
             foreach ($rangePrices as $gid => $rows) {
                 $gid = (int)$gid;
                 if (!empty($visibleGroups) && !in_array($gid, $visibleGroups, true)) {
@@ -65,70 +32,36 @@ class MainPriceResolver
                 if (!$picked) {
                     continue;
                 }
-                $cand = ['groupId' => $gid, 'price' => (float)$picked['price']];
-                if ($bestAny === null || $cand['price'] < $bestAny['price']) {
-                    $bestAny = $cand;
-                }
-                if (!$isAccessible($gid)) {
-                    continue;
-                }
-                if ($best === null || $cand['price'] < $best['price']) {
-                    $best = $cand;
-                }
+                $candidates[] = [
+                    'groupId' => $gid,
+                    'price' => (float)$picked['price'],
+                    'canBuy' => $isAccessible($gid),
+                    'active' => $activeGroupId !== null && $gid === (int)$activeGroupId,
+                    'visibleOrder' => $visibleOrder[$gid] ?? PHP_INT_MAX,
+                    'base' => !empty($catalogGroups[$gid]['base']),
+                ];
             }
-            if ($best !== null) {
-                return $best;
-            }
-            if ($bestAny !== null) {
-                return $bestAny;
-            }
+            return $this->pickBestCandidate($candidates);
         }
 
-        $best = null;
-        $bestAny = null;
-
-        // 0) Явно активная группа — приоритет.
-        if ($activeGroupId !== null && isset($rawPrices[$activeGroupId])) {
-            return ['groupId' => (int)$activeGroupId, 'price' => (float)$rawPrices[$activeGroupId]];
-        }
-
-        // 1) Порядок видимых групп (как в Aspro): сначала buyable, затем любая с ценой.
-        if (!empty($visibleGroups)) {
-            foreach ($visibleGroups as $visibleGid) {
-                $gid = (int)$visibleGid;
-                if (!isset($rawPrices[$gid]) || !$isAccessible($gid)) {
-                    continue;
-                }
-                return ['groupId' => $gid, 'price' => (float)$rawPrices[$gid]];
-            }
-            foreach ($visibleGroups as $visibleGid) {
-                $gid = (int)$visibleGid;
-                if (!isset($rawPrices[$gid])) {
-                    continue;
-                }
-                return ['groupId' => $gid, 'price' => (float)$rawPrices[$gid]];
-            }
-        }
-
-        // 2) Глобальный fallback: минимальная buyable; если buyable нет — минимальная из всех.
+        $candidates = [];
         foreach ($rawPrices as $gid => $price) {
             $gid = (int)$gid;
             $price = (float)$price;
             if (!empty($visibleGroups) && !in_array($gid, $visibleGroups, true)) {
                 continue;
             }
-            if ($bestAny === null || $price < $bestAny['price']) {
-                $bestAny = ['groupId' => $gid, 'price' => $price];
-            }
-            if (!$isAccessible($gid)) {
-                continue;
-            }
-            if ($best === null || $price < $best['price']) {
-                $best = ['groupId' => $gid, 'price' => $price];
-            }
+            $candidates[] = [
+                'groupId' => $gid,
+                'price' => $price,
+                'canBuy' => $isAccessible($gid),
+                'active' => $activeGroupId !== null && $gid === (int)$activeGroupId,
+                'visibleOrder' => $visibleOrder[$gid] ?? PHP_INT_MAX,
+                'base' => !empty($catalogGroups[$gid]['base']),
+            ];
         }
 
-        return $best ?? $bestAny;
+        return $this->pickBestCandidate($candidates);
     }
 
     private function pickRange(array $rows, int $basketQty): ?array
@@ -143,5 +76,34 @@ class MainPriceResolver
             }
         }
         return $rows[0] ?? null;
+    }
+
+    private function pickBestCandidate(array $candidates): ?array
+    {
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $buyable = array_values(array_filter($candidates, static fn(array $cand): bool => (bool)$cand['canBuy']));
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, static function (array $a, array $b): int {
+            if ($a['price'] !== $b['price']) {
+                return $a['price'] <=> $b['price'];
+            }
+            if ($a['active'] !== $b['active']) {
+                return $a['active'] ? -1 : 1;
+            }
+            if ($a['visibleOrder'] !== $b['visibleOrder']) {
+                return $a['visibleOrder'] <=> $b['visibleOrder'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        });
+
+        $best = $pool[0];
+        return ['groupId' => (int)$best['groupId'], 'price' => (float)$best['price']];
     }
 }

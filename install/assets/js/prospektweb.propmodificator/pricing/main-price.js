@@ -185,6 +185,18 @@
             var activeGid = PModificator.detectActivePriceGroupIdFromDom(state);
             if (activeGid) {
                 state.mainPriceGroupId = activeGid;
+            } else {
+                // Если по title/price--current группу не удалось распознать,
+                // пробуем вывести её по текущей видимой "главной" цене в DOM.
+                var displayedMain = PModificator.getDisplayedMainPriceValue(state);
+                var inferredByPrice = PModificator.inferGroupIdByDisplayedPrice(
+                    interpolated,
+                    basketQty,
+                    displayedMain
+                );
+                if (inferredByPrice) {
+                    state.mainPriceGroupId = String(inferredByPrice);
+                }
             }
 
             // Если AJAX-URL настроен — уточняем цену на сервере

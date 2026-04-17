@@ -612,16 +612,28 @@
                 }
             }
 
-            // Fallback: берём первую видимую группу из PRICE_CODE (как порядок Aspro).
-            var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
-            return visibleGroupIds.length ? String(visibleGroupIds[0]) : null;
+            // Жёсткий fallback по "первой видимой" группе может закрепить неверный active_group_id.
+            // Если надёжно определить активную группу не удалось — возвращаем null.
+            return null;
         },
 
         applyServerPricesToDom: function (container, interpolated, state, uiRevision) {
             if (!PModificator.isRevisionActual(state, uiRevision)) return;
             var popupPrice = PModificator.getVisiblePopupPriceElement(state);
+            var popupTargets = [];
+            if (popupPrice) {
+                popupTargets.push(popupPrice);
+            }
 
-            if (!popupPrice) {
+            // Дополнительно обновляем все видимые popup-блоки цены (например, основной + фиксированный хедер),
+            // чтобы избежать рассинхрона, когда Aspro рендерит несколько зеркал цены.
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if ((el.offsetParent !== null || el.offsetHeight > 0) && popupTargets.indexOf(el) === -1) {
+                    popupTargets.push(el);
+                }
+            });
+
+            if (!popupTargets.length) {
                 // Fallback: обновляем собственный элемент модуля
                 var basketQty = PModificator.getBasketQuantity(state.productId);
                 var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
@@ -641,12 +653,14 @@
                 return;
             }
 
-            // Отменяем ожидающий клиентский апдейт и сразу применяем серверные данные
-            PModificator.cancelPendingPriceUpdate(popupPrice);
-            popupPrice._pmodUpdating = true;
-            PModificator.applyPricesToDom(popupPrice, interpolated, state);
-            popupPrice._pmodUpdating = false;
-            popupPrice.classList.remove('pmod-price-loading');
+            popupTargets.forEach(function (target) {
+                // Отменяем ожидающий клиентский апдейт и сразу применяем серверные данные
+                PModificator.cancelPendingPriceUpdate(target);
+                target._pmodUpdating = true;
+                PModificator.applyPricesToDom(target, interpolated, state);
+                target._pmodUpdating = false;
+                target.classList.remove('pmod-price-loading');
+            });
         }
 
     };
