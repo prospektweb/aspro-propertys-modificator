@@ -12,8 +12,13 @@ class MainPriceResolver
 {
     public function resolve(array $rawPrices, array $rangePrices, array $catalogGroups, array $accessibleGroupIds, int $basketQty, array $visibleGroups, ?int $activeGroupId): ?array
     {
+        $hasAccessFilter = !empty($accessibleGroupIds);
+        $isAccessible = static function (int $gid) use ($accessibleGroupIds, $hasAccessFilter): bool {
+            return !$hasAccessFilter || in_array($gid, $accessibleGroupIds, true);
+        };
+
         if (!empty($rangePrices)) {
-            if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rangePrices[$activeGroupId])) {
+            if ($activeGroupId !== null && $isAccessible((int)$activeGroupId) && isset($rangePrices[$activeGroupId])) {
                 $picked = $this->pickRange((array)$rangePrices[$activeGroupId], $basketQty);
                 if ($picked) {
                     return ['groupId' => (int)$activeGroupId, 'price' => (float)$picked['price']];
@@ -23,7 +28,7 @@ class MainPriceResolver
             if (!empty($visibleGroups)) {
                 foreach ($visibleGroups as $visibleGid) {
                     $gid = (int)$visibleGid;
-                    if (!in_array($gid, $accessibleGroupIds, true)) {
+                    if (!$isAccessible($gid)) {
                         continue;
                     }
                     if (!isset($rangePrices[$gid])) {
@@ -38,7 +43,7 @@ class MainPriceResolver
 
             $best = null;
             foreach ($rangePrices as $gid => $rows) {
-                if (!in_array((int)$gid, $accessibleGroupIds, true)) {
+                if (!$isAccessible((int)$gid)) {
                     continue;
                 }
                 if (!empty($visibleGroups) && !in_array((int)$gid, $visibleGroups, true)) {
@@ -59,13 +64,13 @@ class MainPriceResolver
         }
 
         $best = null;
-        if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rawPrices[$activeGroupId])) {
+        if ($activeGroupId !== null && $isAccessible((int)$activeGroupId) && isset($rawPrices[$activeGroupId])) {
             return ['groupId' => (int)$activeGroupId, 'price' => (float)$rawPrices[$activeGroupId]];
         }
         if (!empty($visibleGroups)) {
             foreach ($visibleGroups as $visibleGid) {
                 $gid = (int)$visibleGid;
-                if (!in_array($gid, $accessibleGroupIds, true)) {
+                if (!$isAccessible($gid)) {
                     continue;
                 }
                 if (!isset($rawPrices[$gid])) {
@@ -76,7 +81,7 @@ class MainPriceResolver
         }
 
         foreach ($rawPrices as $gid => $price) {
-            if (!in_array((int)$gid, $accessibleGroupIds, true)) {
+            if (!$isAccessible((int)$gid)) {
                 continue;
             }
             if (!empty($visibleGroups) && !in_array((int)$gid, $visibleGroups, true)) {
