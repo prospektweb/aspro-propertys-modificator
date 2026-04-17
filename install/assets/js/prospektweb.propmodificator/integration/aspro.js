@@ -10,6 +10,7 @@
     var hasNumberValue = (window.PModUtils && window.PModUtils.hasNumberValue)
         ? window.PModUtils.hasNumberValue
         : function (value) { return value !== null && value !== undefined; };
+    var UI_STABILIZATION_TIMEOUT_MS = 1200;
 
     window.PModIntegration = {
         hookAsproSkuFinalAction: function () {
@@ -43,6 +44,10 @@
                     }
 
                     if (!state._pendingUiUpdate) return;
+                    if (state._uiStabilizationTimer) {
+                        clearTimeout(state._uiStabilizationTimer);
+                        state._uiStabilizationTimer = null;
+                    }
 
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
@@ -91,6 +96,10 @@
 
         beginUiStabilization: function (state, waitForAsproEvent) {
             if (!state) return 0;
+            if (state._uiStabilizationTimer) {
+                clearTimeout(state._uiStabilizationTimer);
+                state._uiStabilizationTimer = null;
+            }
             state._uiRevision = (state._uiRevision || 0) + 1;
             state._pendingUiUpdate = true;
             PModificator.setTitleLoading(true);
@@ -99,7 +108,12 @@
             // Если фактической смены SKU не было (и onFinalActionSKUInfo не придёт),
             // завершаем цикл сразу по текущему состоянию DOM.
             if (waitForAsproEvent === false) {
-                state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                // Важно: не перезаписываем "сырой" заголовок текущим custom-текстом.
+                // Иначе после первого ввода пропадают replace-ключи и последующие
+                // изменения значений не отражаются в h1/title.
+                if (!state.rawBaseTitleFromAspro) {
+                    state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                }
                 state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                     state.containerEl,
                     state,
@@ -107,6 +121,24 @@
                 );
                 state._activeUiRevision = state._uiRevision;
                 PModificator.applyFinalUiState(state);
+            }
+            // Страховка: если Aspro не вызовет onFinalActionSKUInfo, не оставляем UI в "loading".
+            if (waitForAsproEvent === true) {
+                var localRevision = state._uiRevision;
+                state._uiStabilizationTimer = setTimeout(function () {
+                    if (!PModificator.isRevisionActual(state, localRevision)) return;
+                    if (!state._pendingUiUpdate) return;
+                    if (!state.rawBaseTitleFromAspro) {
+                        state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                    }
+                    state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                        state.containerEl,
+                        state,
+                        state.rawBaseTitleFromAspro
+                    );
+                    state._activeUiRevision = state._uiRevision;
+                    PModificator.applyFinalUiState(state);
+                }, UI_STABILIZATION_TIMEOUT_MS);
             }
 
             return state._uiRevision;
@@ -327,7 +359,13 @@
                 .catch(function (e) {
                     if (e && e.name === 'AbortError') return;
                     if (!PModificator.isRevisionActual(state, uiRevision)) return;
-                    console.warn('[pmod] Server price fetch error:', e);
+                    console.warn('[pmod] Server price fetch error:', {
+                        message: e && e.message ? e.message : String(e),
+                        status: e && e.status ? e.status : null,
+                        response: e && e.response ? e.response : null,
+                        responseText: e && typeof e.responseText === 'string' ? e.responseText.slice(0, 500) : null,
+                        url: e && e.url ? e.url : ajaxUrl,
+                    });
                     callback(null);
                 });
         },
@@ -457,11 +495,15 @@
 
             if (!popupPrice) {
                 // Fallback: обновляем собственный элемент модуля
+                var basketQty = PModificator.getBasketQuantity(state.productId);
+                var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
                 var mainPrice = PModificator.getMainPrice(
                     interpolated,
                     state.catalogGroups,
                     state.canBuyGroups,
-                    state.mainPriceGroupId
+                    state.mainPriceGroupId,
+                    basketQty,
+                    visibleGroupIds
                 );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');

@@ -462,6 +462,10 @@
                 PModificator.setPriceLoading(false);
             }
 
+            if (state._uiStabilizationTimer) {
+                clearTimeout(state._uiStabilizationTimer);
+                state._uiStabilizationTimer = null;
+            }
             state._pendingUiUpdate = false;
             PModificator.setTitleLoading(false);
         },
@@ -552,7 +556,10 @@
                         state.customVolume = null;
                         PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
-                        clearVolumeLabelTimer();
+                        if (state._volumeLabelTimer) {
+                            clearTimeout(state._volumeLabelTimer);
+                            state._volumeLabelTimer = null;
+                        }
                         syncUrlPmodVolume(null);
 
                         // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
