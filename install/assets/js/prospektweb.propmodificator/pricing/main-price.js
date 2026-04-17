@@ -159,11 +159,15 @@
             state.lastInterpolatedPrices = interpolated;
 
             // Определяем «главную» цену (базовая группа → первый диапазон)
+            var basketQty = PModificator.getBasketQuantity(state.productId);
+            var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
             var mainPrice = PModificator.getMainPrice(
                 interpolated,
                 state.catalogGroups,
                 state.canBuyGroups,
-                state.mainPriceGroupId
+                state.mainPriceGroupId,
+                basketQty,
+                visibleGroupIds
             );
             if (mainPrice !== null) {
                 state.lastCalculatedPrice = mainPrice;
@@ -249,18 +253,22 @@
                         state.lastCalculatedPrice = data.mainPrice.raw;
                         state.mainPriceGroupId = String(data.mainPrice.groupId);
                     } else {
+                        var currentBasketQty = PModificator.getBasketQuantity(state.productId);
+                        var visibleGroups = PModificator.getVisiblePriceGroupIds(state);
                         var srvMain = PModificator.getMainPrice(
                             serverInterpolated,
                             state.catalogGroups,
                             state.canBuyGroups,
-                            state.mainPriceGroupId
+                            state.mainPriceGroupId,
+                            currentBasketQty,
+                            visibleGroups
                         );
                         // Если сервер не вернул mainPrice (legacy/старый backend),
                         // выбираем минимальную цену по текущему диапазону из server-ranges.
                         if (srvMain === null) {
                             srvMain = PModificator.getMinPriceFromRanges(
                                 serverInterpolated,
-                                PModificator.getBasketQuantity(state.productId)
+                                currentBasketQty
                             );
                         }
                         if (srvMain !== null) {
@@ -401,14 +409,14 @@
             return best;
         },
 
-        getMainPrice: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId) {
+        getMainPrice: function (interpolated, catalogGroups, canBuyGroups, preferredGroupId, basketQty, allowedGroupIds) {
             var desc = PModificator.getMainPriceDescriptor(
                 interpolated,
                 catalogGroups,
                 canBuyGroups,
                 preferredGroupId,
-                1,
-                null
+                basketQty,
+                allowedGroupIds || null
             );
             return desc ? desc.price : null;
         },
@@ -543,11 +551,15 @@
 
             if (!popupPrice) {
                 // Запасной вариант: собственный элемент модуля
+                var basketQty = PModificator.getBasketQuantity(state.productId);
+                var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
                 var mainPrice = PModificator.getMainPrice(
                     interpolated,
                     state.catalogGroups,
                     state.canBuyGroups,
-                    state.mainPriceGroupId
+                    state.mainPriceGroupId,
+                    basketQty,
+                    visibleGroupIds
                 );
                 if (mainPrice === null) return;
                 var priceEl = container.querySelector('.pmod-custom-price');

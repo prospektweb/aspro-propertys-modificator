@@ -13,6 +13,29 @@ class MainPriceResolver
     public function resolve(array $rawPrices, array $rangePrices, array $catalogGroups, array $accessibleGroupIds, int $basketQty, array $visibleGroups, ?int $activeGroupId): ?array
     {
         if (!empty($rangePrices)) {
+            if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rangePrices[$activeGroupId])) {
+                $picked = $this->pickRange((array)$rangePrices[$activeGroupId], $basketQty);
+                if ($picked) {
+                    return ['groupId' => (int)$activeGroupId, 'price' => (float)$picked['price']];
+                }
+            }
+
+            if (!empty($visibleGroups)) {
+                foreach ($visibleGroups as $visibleGid) {
+                    $gid = (int)$visibleGid;
+                    if (!in_array($gid, $accessibleGroupIds, true)) {
+                        continue;
+                    }
+                    if (!isset($rangePrices[$gid])) {
+                        continue;
+                    }
+                    $picked = $this->pickRange((array)$rangePrices[$gid], $basketQty);
+                    if ($picked) {
+                        return ['groupId' => $gid, 'price' => (float)$picked['price']];
+                    }
+                }
+            }
+
             $best = null;
             foreach ($rangePrices as $gid => $rows) {
                 if (!in_array((int)$gid, $accessibleGroupIds, true)) {
@@ -26,9 +49,6 @@ class MainPriceResolver
                     continue;
                 }
                 $cand = ['groupId' => (int)$gid, 'price' => (float)$picked['price']];
-                if ($activeGroupId !== null && (int)$gid === $activeGroupId) {
-                    return $cand;
-                }
                 if ($best === null || $cand['price'] < $best['price']) {
                     $best = $cand;
                 }
@@ -39,12 +59,25 @@ class MainPriceResolver
         }
 
         $best = null;
+        if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rawPrices[$activeGroupId])) {
+            return ['groupId' => (int)$activeGroupId, 'price' => (float)$rawPrices[$activeGroupId]];
+        }
+        if (!empty($visibleGroups)) {
+            foreach ($visibleGroups as $visibleGid) {
+                $gid = (int)$visibleGid;
+                if (!in_array($gid, $accessibleGroupIds, true)) {
+                    continue;
+                }
+                if (!isset($rawPrices[$gid])) {
+                    continue;
+                }
+                return ['groupId' => $gid, 'price' => (float)$rawPrices[$gid]];
+            }
+        }
+
         foreach ($rawPrices as $gid => $price) {
             if (!in_array((int)$gid, $accessibleGroupIds, true)) {
                 continue;
-            }
-            if ($activeGroupId !== null && (int)$gid === $activeGroupId) {
-                return ['groupId' => (int)$gid, 'price' => (float)$price];
             }
             if (!empty($visibleGroups) && !in_array((int)$gid, $visibleGroups, true)) {
                 continue;
