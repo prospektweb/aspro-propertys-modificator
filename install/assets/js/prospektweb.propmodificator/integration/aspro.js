@@ -99,7 +99,12 @@
             // Если фактической смены SKU не было (и onFinalActionSKUInfo не придёт),
             // завершаем цикл сразу по текущему состоянию DOM.
             if (waitForAsproEvent === false) {
-                state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                // Важно: не перезаписываем "сырой" заголовок текущим custom-текстом.
+                // Иначе после первого ввода пропадают replace-ключи и последующие
+                // изменения значений не отражаются в h1/title.
+                if (!state.rawBaseTitleFromAspro) {
+                    state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                }
                 state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                     state.containerEl,
                     state,
