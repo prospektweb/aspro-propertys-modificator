@@ -4,6 +4,14 @@
 ;(function () {
     'use strict';
 
+    function normalizePriceCodeName(value) {
+        return String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
     function applyBitrixRounding(price, rules) {
         if (!rules || !rules.length) return price;
         var rule = null;
@@ -177,6 +185,18 @@
             var activeGid = PModificator.detectActivePriceGroupIdFromDom(state);
             if (activeGid) {
                 state.mainPriceGroupId = activeGid;
+            } else {
+                // Если по title/price--current группу не удалось распознать,
+                // пробуем вывести её по текущей видимой "главной" цене в DOM.
+                var displayedMain = PModificator.getDisplayedMainPriceValue(state);
+                var inferredByPrice = PModificator.inferGroupIdByDisplayedPrice(
+                    interpolated,
+                    basketQty,
+                    displayedMain
+                );
+                if (inferredByPrice) {
+                    state.mainPriceGroupId = String(inferredByPrice);
+                }
             }
 
             // Если AJAX-URL настроен — уточняем цену на сервере
@@ -653,7 +673,11 @@
             var nameToGid = {};
             Object.keys(state.catalogGroups || {}).forEach(function (gid) {
                 var g = state.catalogGroups[gid];
-                if (g && g.name) nameToGid[g.name] = gid;
+                if (!g || !g.name) return;
+                var normalizedName = normalizePriceCodeName(g.name);
+                if (normalizedName) {
+                    nameToGid[normalizedName] = gid;
+                }
             });
 
             // Упорядоченный список group IDs
@@ -661,8 +685,8 @@
             if (priceCodeOrder && priceCodeOrder.length) {
                 orderedGids = [];
                 priceCodeOrder.forEach(function (name) {
-                    var gid = nameToGid[name];
-                    if (gid) orderedGids.push(gid);
+                    var gid = nameToGid[normalizePriceCodeName(name)];
+                    if (gid && orderedGids.indexOf(gid) === -1) orderedGids.push(gid);
                 });
             }
             if (!orderedGids || !orderedGids.length) {

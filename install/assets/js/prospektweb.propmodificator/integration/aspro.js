@@ -4,6 +4,14 @@
 ;(function () {
     'use strict';
 
+    function normalizePriceCodeName(value) {
+        return String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
     var formatPrice = (window.PModUtils && window.PModUtils.formatPrice)
         ? window.PModUtils.formatPrice
         : function (price) { return String(price); };
@@ -545,20 +553,23 @@
             var nameToGid = {};
             Object.keys(state.catalogGroups || {}).forEach(function (gid) {
                 var g = state.catalogGroups[gid];
-                if (g && g.name) nameToGid[g.name] = gid;
+                if (!g || !g.name) return;
+                var normalizedName = normalizePriceCodeName(g.name);
+                if (normalizedName) {
+                    nameToGid[normalizedName] = gid;
+                }
             });
 
             var gids = [];
             priceCodeOrder.forEach(function (name) {
-                var gid = nameToGid[name];
+                var gid = nameToGid[normalizePriceCodeName(name)];
                 if (gid) gids.push(String(gid));
             });
             return gids;
         },
 
         detectActivePriceGroupIdFromDom: function (state) {
-            var popupPrice = PModificator.getVisiblePopupPriceElement(state);
-            if (!popupPrice || !state || !state.catalogGroups) return null;
+            if (!state || !state.catalogGroups) return null;
 
             var nameToGid = {};
             Object.keys(state.catalogGroups).forEach(function (gid) {
@@ -566,9 +577,6 @@
                 var n = g && g.name ? String(g.name).trim().toLowerCase() : '';
                 if (n) nameToGid[n] = String(gid);
             });
-
-            var row = popupPrice.querySelector('.price--current');
-            if (!row) return null;
 
             function extractTitle(el) {
                 var cur = el;
@@ -583,16 +591,49 @@
                 return '';
             }
 
-            var title = extractTitle(row);
-            if (!title) return null;
-            return nameToGid[title] || null;
+            var preferredPopup = PModificator.getVisiblePopupPriceElement(state);
+            var candidates = [];
+            if (preferredPopup) {
+                candidates.push(preferredPopup);
+            }
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if ((el.offsetParent !== null || el.offsetHeight > 0) && candidates.indexOf(el) === -1) {
+                    candidates.push(el);
+                }
+            });
+
+            for (var i = 0; i < candidates.length; i++) {
+                var row = candidates[i].querySelector('.price--current');
+                if (!row) continue;
+                var title = extractTitle(row);
+                if (!title) continue;
+                if (nameToGid[title]) {
+                    return nameToGid[title];
+                }
+            }
+
+            // Жёсткий fallback по "первой видимой" группе может закрепить неверный active_group_id.
+            // Если надёжно определить активную группу не удалось — возвращаем null.
+            return null;
         },
 
         applyServerPricesToDom: function (container, interpolated, state, uiRevision) {
             if (!PModificator.isRevisionActual(state, uiRevision)) return;
             var popupPrice = PModificator.getVisiblePopupPriceElement(state);
+            var popupTargets = [];
+            if (popupPrice) {
+                popupTargets.push(popupPrice);
+            }
 
-            if (!popupPrice) {
+            // Дополнительно обновляем все видимые popup-блоки цены (например, основной + фиксированный хедер),
+            // чтобы избежать рассинхрона, когда Aspro рендерит несколько зеркал цены.
+            document.querySelectorAll('.js-popup-price').forEach(function (el) {
+                if ((el.offsetParent !== null || el.offsetHeight > 0) && popupTargets.indexOf(el) === -1) {
+                    popupTargets.push(el);
+                }
+            });
+
+            if (!popupTargets.length) {
                 // Fallback: обновляем собственный элемент модуля
                 var basketQty = PModificator.getBasketQuantity(state.productId);
                 var visibleGroupIds = PModificator.getVisiblePriceGroupIds(state);
@@ -612,12 +653,14 @@
                 return;
             }
 
-            // Отменяем ожидающий клиентский апдейт и сразу применяем серверные данные
-            PModificator.cancelPendingPriceUpdate(popupPrice);
-            popupPrice._pmodUpdating = true;
-            PModificator.applyPricesToDom(popupPrice, interpolated, state);
-            popupPrice._pmodUpdating = false;
-            popupPrice.classList.remove('pmod-price-loading');
+            popupTargets.forEach(function (target) {
+                // Отменяем ожидающий клиентский апдейт и сразу применяем серверные данные
+                PModificator.cancelPendingPriceUpdate(target);
+                target._pmodUpdating = true;
+                PModificator.applyPricesToDom(target, interpolated, state);
+                target._pmodUpdating = false;
+                target.classList.remove('pmod-price-loading');
+            });
         }
 
     };

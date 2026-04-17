@@ -12,82 +12,56 @@ class MainPriceResolver
 {
     public function resolve(array $rawPrices, array $rangePrices, array $catalogGroups, array $accessibleGroupIds, int $basketQty, array $visibleGroups, ?int $activeGroupId): ?array
     {
+        $hasAccessFilter = !empty($accessibleGroupIds);
+        $isAccessible = static function (int $gid) use ($accessibleGroupIds, $hasAccessFilter): bool {
+            return !$hasAccessFilter || in_array($gid, $accessibleGroupIds, true);
+        };
+        $visibleOrder = [];
+        foreach ($visibleGroups as $idx => $visibleGid) {
+            $visibleOrder[(int)$visibleGid] = $idx;
+        }
+
         if (!empty($rangePrices)) {
-            if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rangePrices[$activeGroupId])) {
-                $picked = $this->pickRange((array)$rangePrices[$activeGroupId], $basketQty);
-                if ($picked) {
-                    return ['groupId' => (int)$activeGroupId, 'price' => (float)$picked['price']];
-                }
-            }
-
-            if (!empty($visibleGroups)) {
-                foreach ($visibleGroups as $visibleGid) {
-                    $gid = (int)$visibleGid;
-                    if (!in_array($gid, $accessibleGroupIds, true)) {
-                        continue;
-                    }
-                    if (!isset($rangePrices[$gid])) {
-                        continue;
-                    }
-                    $picked = $this->pickRange((array)$rangePrices[$gid], $basketQty);
-                    if ($picked) {
-                        return ['groupId' => $gid, 'price' => (float)$picked['price']];
-                    }
-                }
-            }
-
-            $best = null;
+            $candidates = [];
             foreach ($rangePrices as $gid => $rows) {
-                if (!in_array((int)$gid, $accessibleGroupIds, true)) {
-                    continue;
-                }
-                if (!empty($visibleGroups) && !in_array((int)$gid, $visibleGroups, true)) {
+                $gid = (int)$gid;
+                if (!empty($visibleGroups) && !in_array($gid, $visibleGroups, true)) {
                     continue;
                 }
                 $picked = $this->pickRange($rows, $basketQty);
                 if (!$picked) {
                     continue;
                 }
-                $cand = ['groupId' => (int)$gid, 'price' => (float)$picked['price']];
-                if ($best === null || $cand['price'] < $best['price']) {
-                    $best = $cand;
-                }
+                $candidates[] = [
+                    'groupId' => $gid,
+                    'price' => (float)$picked['price'],
+                    'canBuy' => $isAccessible($gid),
+                    'active' => $activeGroupId !== null && $gid === (int)$activeGroupId,
+                    'visibleOrder' => $visibleOrder[$gid] ?? PHP_INT_MAX,
+                    'base' => !empty($catalogGroups[$gid]['base']),
+                ];
             }
-            if ($best !== null) {
-                return $best;
-            }
+            return $this->pickBestCandidate($candidates);
         }
 
-        $best = null;
-        if ($activeGroupId !== null && in_array((int)$activeGroupId, $accessibleGroupIds, true) && isset($rawPrices[$activeGroupId])) {
-            return ['groupId' => (int)$activeGroupId, 'price' => (float)$rawPrices[$activeGroupId]];
-        }
-        if (!empty($visibleGroups)) {
-            foreach ($visibleGroups as $visibleGid) {
-                $gid = (int)$visibleGid;
-                if (!in_array($gid, $accessibleGroupIds, true)) {
-                    continue;
-                }
-                if (!isset($rawPrices[$gid])) {
-                    continue;
-                }
-                return ['groupId' => $gid, 'price' => (float)$rawPrices[$gid]];
-            }
-        }
-
+        $candidates = [];
         foreach ($rawPrices as $gid => $price) {
-            if (!in_array((int)$gid, $accessibleGroupIds, true)) {
+            $gid = (int)$gid;
+            $price = (float)$price;
+            if (!empty($visibleGroups) && !in_array($gid, $visibleGroups, true)) {
                 continue;
             }
-            if (!empty($visibleGroups) && !in_array((int)$gid, $visibleGroups, true)) {
-                continue;
-            }
-            if ($best === null || (float)$price < $best['price']) {
-                $best = ['groupId' => (int)$gid, 'price' => (float)$price];
-            }
+            $candidates[] = [
+                'groupId' => $gid,
+                'price' => $price,
+                'canBuy' => $isAccessible($gid),
+                'active' => $activeGroupId !== null && $gid === (int)$activeGroupId,
+                'visibleOrder' => $visibleOrder[$gid] ?? PHP_INT_MAX,
+                'base' => !empty($catalogGroups[$gid]['base']),
+            ];
         }
 
-        return $best;
+        return $this->pickBestCandidate($candidates);
     }
 
     private function pickRange(array $rows, int $basketQty): ?array
@@ -102,5 +76,34 @@ class MainPriceResolver
             }
         }
         return $rows[0] ?? null;
+    }
+
+    private function pickBestCandidate(array $candidates): ?array
+    {
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $buyable = array_values(array_filter($candidates, static fn(array $cand): bool => (bool)$cand['canBuy']));
+        $pool = !empty($buyable) ? $buyable : $candidates;
+
+        usort($pool, static function (array $a, array $b): int {
+            if ($a['price'] !== $b['price']) {
+                return $a['price'] <=> $b['price'];
+            }
+            if ($a['active'] !== $b['active']) {
+                return $a['active'] ? -1 : 1;
+            }
+            if ($a['visibleOrder'] !== $b['visibleOrder']) {
+                return $a['visibleOrder'] <=> $b['visibleOrder'];
+            }
+            if ($a['base'] !== $b['base']) {
+                return $a['base'] ? -1 : 1;
+            }
+            return $a['groupId'] <=> $b['groupId'];
+        });
+
+        $best = $pool[0];
+        return ['groupId' => (int)$best['groupId'], 'price' => (float)$best['price']];
     }
 }

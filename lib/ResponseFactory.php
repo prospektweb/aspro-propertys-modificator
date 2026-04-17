@@ -9,6 +9,7 @@ class ResponseFactory
 {
     public function success(CalcPriceResult $pricing, ?array $mainPrice, CalcPriceRequest $request): array
     {
+        $hasAccessFilter = !empty($pricing->accessibleGroupIds);
         $pricesResult = [];
         foreach ($pricing->rawPrices as $gid => $price) {
             $group = $pricing->catalogGroups[$gid] ?? null;
@@ -16,7 +17,7 @@ class ResponseFactory
                 'raw' => round((float)$price, 2),
                 'formatted' => $this->formatPrice((float)$price),
                 'groupName' => $group ? (string)$group['name'] : '',
-                'canBuy' => in_array((int)$gid, $pricing->accessibleGroupIds, true),
+                'canBuy' => !$hasAccessFilter || in_array((int)$gid, $pricing->accessibleGroupIds, true),
             ];
         }
 

@@ -28,8 +28,12 @@ use Prospektweb\PropModificator\Domain\Offer\EnumValueResolver;
 use Prospektweb\PropModificator\Infrastructure\Http\RequestInput;
 use Prospektweb\PropModificator\OfferDataProvider;
 use Prospektweb\PropModificator\PriceInterpolator;
+use Prospektweb\PropModificator\ResponseFactory;
 use Prospektweb\PropModificator\RequestParser;
 use Prospektweb\PropModificator\ValidationRules;
+use Prospektweb\PropModificator\MainPriceResolver;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceRequest;
+use Prospektweb\PropModificator\Domain\DTO\CalcPriceResult;
 
 function assertTrue(bool $cond, string $message): void
 {
@@ -143,5 +147,45 @@ assertTrue(strpos($fieldModeHandlersCode, "format: createFormatHandler()") !== f
 assertTrue(strpos($fieldModeHandlersCode, "volume: createVolumeHandler()") !== false, 'Frontend mode handlers must expose volume handler');
 assertTrue(strpos($fieldModeHandlersCode, "skuPropertyCode: 'CALC_PROP_FORMAT'") !== false, 'Format handler must be bound to CALC_PROP_FORMAT');
 assertTrue(strpos($fieldModeHandlersCode, "skuPropertyCode: 'CALC_PROP_VOLUME'") !== false, 'Volume handler must be bound to CALC_PROP_VOLUME');
+
+$resolver = new MainPriceResolver();
+$resolvedWithEmptyAccess = $resolver->resolve(
+    [1 => 100.0, 2 => 90.0],
+    [1 => [['from' => null, 'to' => null, 'price' => 100.0]], 2 => [['from' => null, 'to' => null, 'price' => 90.0]]],
+    [1 => ['id' => 1, 'name' => 'BASE', 'base' => true], 2 => ['id' => 2, 'name' => 'OPT', 'base' => false]],
+    [],
+    1,
+    [1, 2],
+    1
+);
+assertTrue(is_array($resolvedWithEmptyAccess), 'MainPriceResolver must not return null when accessible groups are empty');
+assertTrue((int)($resolvedWithEmptyAccess['groupId'] ?? 0) === 2, 'MainPriceResolver must select minimal visible price when access filter is empty');
+
+$resolvedWithNoBuyableMatch = $resolver->resolve(
+    [1 => 100.0, 2 => 90.0],
+    [1 => [['from' => null, 'to' => null, 'price' => 100.0]], 2 => [['from' => null, 'to' => null, 'price' => 90.0]]],
+    [1 => ['id' => 1, 'name' => 'BASE', 'base' => true], 2 => ['id' => 2, 'name' => 'OPT', 'base' => false]],
+    [999], // фильтр задан, но не пересекается с ценовыми группами
+    1,
+    [1, 2],
+    1
+);
+assertTrue(is_array($resolvedWithNoBuyableMatch), 'MainPriceResolver must fallback to visible/active group when buyable groups are absent');
+assertTrue((int)($resolvedWithNoBuyableMatch['groupId'] ?? 0) === 2, 'MainPriceResolver must keep minimal visible price even without buyable matches');
+
+$responseFactory = new ResponseFactory();
+$requestDto = new CalcPriceRequest(1, 100, null, null, 1, [1, 2], 1, null, false);
+$pricingDto = new CalcPriceResult(
+    true,
+    null,
+    [1 => 100.0, 2 => 90.0],
+    [],
+    [1 => ['id' => 1, 'name' => 'BASE', 'base' => true], 2 => ['id' => 2, 'name' => 'OPT', 'base' => false]],
+    [],
+    []
+);
+$response = $responseFactory->success($pricingDto, ['groupId' => 1, 'price' => 100.0], $requestDto);
+assertTrue(($response['prices'][1]['canBuy'] ?? false) === true, 'ResponseFactory must treat empty accessible groups as unrestricted for canBuy flag');
+assertTrue(($response['prices'][2]['canBuy'] ?? false) === true, 'ResponseFactory must mark all groups as canBuy when access filter is empty');
 
 echo "OK\n";
