@@ -552,7 +552,10 @@
                         state.customVolume = null;
                         PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
-                        clearVolumeLabelTimer();
+                        if (state._volumeLabelTimer) {
+                            clearTimeout(state._volumeLabelTimer);
+                            state._volumeLabelTimer = null;
+                        }
                         syncUrlPmodVolume(null);
 
                         // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
