@@ -16,6 +16,19 @@ require_once $server->documentRoot() . '/bitrix/modules/main/include/prolog_befo
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
+$emitJson = static function (array $payload): void {
+    $json = json_encode(
+        $payload,
+        JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS | JSON_PARTIAL_OUTPUT_ON_ERROR
+    );
+
+    if ($json === false) {
+        $json = '{"success":false,"errorCode":"JSON_ENCODE_FAILED","error":"Failed to encode response"}';
+    }
+
+    echo $json;
+};
+
 $buildError = static function (string $message, string $errorCode, array $details = []): array {
     $response = ['success' => false, 'errorCode' => $errorCode, 'error' => $message];
     if ($details !== []) {
@@ -26,12 +39,12 @@ $buildError = static function (string $message, string $errorCode, array $detail
 };
 
 if ($server->requestMethod() !== 'POST') {
-    echo json_encode($buildError('POST required', 'METHOD_NOT_ALLOWED'), JSON_UNESCAPED_UNICODE);
+    $emitJson($buildError('POST required', 'METHOD_NOT_ALLOWED'));
     die();
 }
 
 if (!check_bitrix_sessid()) {
-    echo json_encode($buildError('CSRF check failed', 'INVALID_SESSID'), JSON_UNESCAPED_UNICODE);
+    $emitJson($buildError('CSRF check failed', 'INVALID_SESSID'));
     die();
 }
 
@@ -41,17 +54,19 @@ $throttler = new RequestThrottler(SessionStorage::fromGlobals(), 300);
 $throttleCheck = $throttler->allow($clientIp, $sessionId);
 if (!$throttleCheck['ok']) {
     header('Retry-After: ' . max(1, (int)ceil($throttleCheck['retryAfterMs'] / 1000)));
-    echo json_encode(
-        $buildError('Too many requests', 'THROTTLED', ['retryAfterMs' => $throttleCheck['retryAfterMs']]),
-        JSON_UNESCAPED_UNICODE
-    );
+    $emitJson($buildError('Too many requests', 'THROTTLED', ['retryAfterMs' => $throttleCheck['retryAfterMs']]));
     die();
 }
 
 if (!Loader::includeModule('prospektweb.propmodificator')) {
-    echo json_encode($buildError('Module not loaded', 'MODULE_NOT_LOADED'), JSON_UNESCAPED_UNICODE);
+    $emitJson($buildError('Module not loaded', 'MODULE_NOT_LOADED'));
     die();
 }
 
-echo json_encode(AjaxController::calcPrice(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_HEX_APOS);
+try {
+    $emitJson(AjaxController::calcPrice());
+} catch (\Throwable $e) {
+    http_response_code(500);
+    $emitJson($buildError('Internal server error', 'INTERNAL_ERROR', ['message' => (string)$e->getMessage()]));
+}
 die();
