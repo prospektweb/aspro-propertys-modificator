@@ -52,7 +52,18 @@
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
 
-                    state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                    var currentAsproTitle = PModificator.getCurrentRawH1Text() || '';
+                    var normalizedAsproTitle = PModificator.buildRawBaseTitleTemplate(
+                        state.containerEl,
+                        state,
+                        currentAsproTitle
+                    );
+                    if (
+                        !state.rawBaseTitleFromAspro ||
+                        PModificator.hasReplaceKeysInTitle(state, normalizedAsproTitle)
+                    ) {
+                        state.rawBaseTitleFromAspro = normalizedAsproTitle;
+                    }
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
                         state,
@@ -111,8 +122,19 @@
                 // Важно: не перезаписываем "сырой" заголовок текущим custom-текстом.
                 // Иначе после первого ввода пропадают replace-ключи и последующие
                 // изменения значений не отражаются в h1/title.
-                if (!state.rawBaseTitleFromAspro) {
-                    state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                var currentTitleNoWait = PModificator.getCurrentRawH1Text() || '';
+                var normalizedNoWait = PModificator.buildRawBaseTitleTemplate(
+                    state.containerEl,
+                    state,
+                    currentTitleNoWait
+                );
+                if (
+                    normalizedNoWait && (
+                        !state.rawBaseTitleFromAspro ||
+                        PModificator.hasReplaceKeysInTitle(state, normalizedNoWait)
+                    )
+                ) {
+                    state.rawBaseTitleFromAspro = normalizedNoWait;
                 }
                 state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                     state.containerEl,
@@ -128,8 +150,19 @@
                 state._uiStabilizationTimer = setTimeout(function () {
                     if (!PModificator.isRevisionActual(state, localRevision)) return;
                     if (!state._pendingUiUpdate) return;
-                    if (!state.rawBaseTitleFromAspro) {
-                        state.rawBaseTitleFromAspro = PModificator.getCurrentRawH1Text() || '';
+                    var currentTitleByTimer = PModificator.getCurrentRawH1Text() || '';
+                    var normalizedByTimer = PModificator.buildRawBaseTitleTemplate(
+                        state.containerEl,
+                        state,
+                        currentTitleByTimer
+                    );
+                    if (
+                        normalizedByTimer && (
+                            !state.rawBaseTitleFromAspro ||
+                            PModificator.hasReplaceKeysInTitle(state, normalizedByTimer)
+                        )
+                    ) {
+                        state.rawBaseTitleFromAspro = normalizedByTimer;
                     }
                     state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
@@ -193,6 +226,72 @@
             });
 
             return newText;
+        },
+
+        buildRawBaseTitleTemplate: function (container, state, currentTitle) {
+            var template = String(currentTitle || '').trim();
+            if (!template || !state || !state.customConfig || !Array.isArray(state.customConfig.fields)) {
+                return template;
+            }
+
+            var self = this;
+            state.customConfig.fields.forEach(function (field) {
+                var skuCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
+                if (!skuCode) return;
+                var replaceKeys = Array.isArray(field.replaceKeys) ? field.replaceKeys : [];
+                if (!replaceKeys.length) return;
+
+                var fallbackParts = self.getDisplayValueParts(container, state, skuCode, replaceKeys.length);
+                replaceKeys.forEach(function (rk, idx) {
+                    var key = String(rk && rk.key || '').trim();
+                    if (!key) return;
+
+                    var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
+                    var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
+                        ? parsedInputIndex
+                        : idx;
+                    var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
+                    var fallbackVal = fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '';
+                    var valueCandidates = [];
+                    if (customVal !== null && customVal !== undefined && customVal !== '') {
+                        valueCandidates.push(String(customVal));
+                    }
+                    if (fallbackVal) {
+                        valueCandidates.push(fallbackVal);
+                    }
+
+                    if (template.indexOf(key) !== -1) return;
+                    for (var c = 0; c < valueCandidates.length; c++) {
+                        var concreteVal = valueCandidates[c];
+                        if (!concreteVal || concreteVal === key) continue;
+                        if (template.indexOf(concreteVal) === -1) continue;
+                        template = template.split(concreteVal).join(key);
+                        break;
+                    }
+                });
+            });
+
+            return template;
+        },
+
+        hasReplaceKeysInTitle: function (state, title) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return false;
+            var text = String(title || '').trim();
+            if (!text) return false;
+
+            for (var f = 0; f < state.customConfig.fields.length; f++) {
+                var replaceKeys = Array.isArray(state.customConfig.fields[f] && state.customConfig.fields[f].replaceKeys)
+                    ? state.customConfig.fields[f].replaceKeys
+                    : [];
+                for (var r = 0; r < replaceKeys.length; r++) {
+                    var key = String(replaceKeys[r] && replaceKeys[r].key || '').trim();
+                    if (key && text.indexOf(key) !== -1) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         },
 
         getCustomValueByIndex: function (state, skuCode, inputIdx) {
