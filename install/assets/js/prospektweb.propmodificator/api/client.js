@@ -117,6 +117,8 @@
                         var error = new Error(message);
                         error.status = res.status;
                         error.response = data;
+                        error.responseText = text || '';
+                        error.url = res.url || '';
                         throw error;
                     }
 

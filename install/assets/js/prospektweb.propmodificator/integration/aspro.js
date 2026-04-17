@@ -327,7 +327,13 @@
                 .catch(function (e) {
                     if (e && e.name === 'AbortError') return;
                     if (!PModificator.isRevisionActual(state, uiRevision)) return;
-                    console.warn('[pmod] Server price fetch error:', e);
+                    console.warn('[pmod] Server price fetch error:', {
+                        message: e && e.message ? e.message : String(e),
+                        status: e && e.status ? e.status : null,
+                        response: e && e.response ? e.response : null,
+                        responseText: e && typeof e.responseText === 'string' ? e.responseText.slice(0, 500) : null,
+                        url: e && e.url ? e.url : ajaxUrl,
+                    });
                     callback(null);
                 });
         },
