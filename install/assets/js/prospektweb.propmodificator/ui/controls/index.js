@@ -447,12 +447,19 @@
             if (!state || !state.containerEl) return;
 
             var h1 = PModificator.getH1Element();
-            var title = (state.renderedCustomTitle || '').trim();
+            var title = state.customMode ? (state.renderedCustomTitle || '').trim() : '';
             if (h1 && title) {
                 h1._pmodUpdatingTitle = true;
                 h1.textContent = title;
                 h1.title = title;
                 h1._pmodUpdatingTitle = false;
+            } else if (h1 && !state.customMode) {
+                // Для опорных (некастомных) ТП не вмешиваемся в h1/textContent:
+                // штатное название должно приходить из Aspro без подмен со стороны pmod.
+                var nativeTitle = (h1.textContent || '').trim();
+                if (nativeTitle && h1.title !== nativeTitle) {
+                    h1.title = nativeTitle;
+                }
             }
 
             if (state.customMode) {
