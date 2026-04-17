@@ -4,6 +4,14 @@
 ;(function () {
     'use strict';
 
+    function normalizePriceCodeName(value) {
+        return String(value || '')
+            .replace(/\u00a0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
     function applyBitrixRounding(price, rules) {
         if (!rules || !rules.length) return price;
         var rule = null;
@@ -653,7 +661,11 @@
             var nameToGid = {};
             Object.keys(state.catalogGroups || {}).forEach(function (gid) {
                 var g = state.catalogGroups[gid];
-                if (g && g.name) nameToGid[g.name] = gid;
+                if (!g || !g.name) return;
+                var normalizedName = normalizePriceCodeName(g.name);
+                if (normalizedName) {
+                    nameToGid[normalizedName] = gid;
+                }
             });
 
             // Упорядоченный список group IDs
@@ -661,8 +673,8 @@
             if (priceCodeOrder && priceCodeOrder.length) {
                 orderedGids = [];
                 priceCodeOrder.forEach(function (name) {
-                    var gid = nameToGid[name];
-                    if (gid) orderedGids.push(gid);
+                    var gid = nameToGid[normalizePriceCodeName(name)];
+                    if (gid && orderedGids.indexOf(gid) === -1) orderedGids.push(gid);
                 });
             }
             if (!orderedGids || !orderedGids.length) {
