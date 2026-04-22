@@ -226,9 +226,11 @@
                         ? parsedInputIndex
                         : idx;
                     var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
+                    var formattedCustomVal = self.formatDisplayValueByInput(field, inputIndex, customVal);
+                    var formattedFallbackVal = self.formatDisplayValueByInput(field, inputIndex, fallbackParts[inputIndex]);
                     var replacement = customVal !== null && customVal !== undefined && customVal !== ''
-                        ? String(customVal)
-                        : (fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '');
+                        ? formattedCustomVal
+                        : formattedFallbackVal;
                     newText = newText.split(key).join(replacement);
                 });
             });
@@ -259,10 +261,10 @@
                         ? parsedInputIndex
                         : idx;
                     var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
-                    var fallbackVal = fallbackParts[inputIndex] !== undefined ? String(fallbackParts[inputIndex]) : '';
+                    var fallbackVal = self.formatDisplayValueByInput(field, inputIndex, fallbackParts[inputIndex]);
                     var valueCandidates = [];
                     if (customVal !== null && customVal !== undefined && customVal !== '') {
-                        valueCandidates.push(String(customVal));
+                        valueCandidates.push(self.formatDisplayValueByInput(field, inputIndex, customVal));
                     }
                     if (fallbackVal) {
                         valueCandidates.push(fallbackVal);
@@ -313,6 +315,24 @@
                 return null;
             }
             return inputIdx === 0 ? bucket : null;
+        },
+
+        formatDisplayValueByInput: function (field, inputIdx, rawValue) {
+            var value = String(rawValue == null ? '' : rawValue).trim();
+            if (!value) return '';
+            if (!field || !Array.isArray(field.inputs)) return value;
+
+            var input = field.inputs[inputIdx] || null;
+            if (!input || !input.showMeasure) return value;
+
+            var measure = String(input.measure || '').trim();
+            if (!measure) return value;
+
+            var escapedMeasure = measure.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var suffixRe = new RegExp('\\s*' + escapedMeasure + '$', 'i');
+            if (suffixRe.test(value)) return value;
+
+            return value + measure;
         },
 
         setCustomValuesForSkuCode: function (state, skuCode, values) {

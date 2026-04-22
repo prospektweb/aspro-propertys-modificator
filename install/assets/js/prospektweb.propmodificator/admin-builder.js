@@ -99,20 +99,43 @@
     }
 
 
-    function normalizeInput(input) {
+    function readLegacyFlag(source, keys, fallback) {
+        if (!source || typeof source !== 'object') return !!fallback;
+        for (var i = 0; i < keys.length; i++) {
+            if (!Object.prototype.hasOwnProperty.call(source, keys[i])) continue;
+            var value = source[keys[i]];
+            if (typeof value === 'string') {
+                var normalized = value.trim().toUpperCase();
+                if (normalized === 'Y' || normalized === 'YES' || normalized === 'TRUE') return true;
+                if (normalized === 'N' || normalized === 'NO' || normalized === 'FALSE') return false;
+            }
+            return !!value;
+        }
+        return !!fallback;
+    }
+
+    function normalizeInput(input, legacyDefaults) {
+        var defaults = legacyDefaults || {};
         return {
             label: input && input.label ? String(input.label) : '',
             min: input && input.min !== undefined ? input.min : '',
             step: input && input.step !== undefined ? input.step : '',
             max: input && input.max !== undefined ? input.max : '',
-            measure: input && input.measure ? String(input.measure) : '',
-            showMeasure: !!(input && input.showMeasure),
-            hidePresetButtons: !!(input && input.hidePresetButtons)
+            measure: input && input.measure ? String(input.measure) : String(defaults.measure || ''),
+            showMeasure: readLegacyFlag(input, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], defaults.showMeasure),
+            hidePresetButtons: readLegacyFlag(input, ['hidePresetButtons', 'hide_preset_buttons'], defaults.hidePresetButtons)
         };
     }
 
     function normalizeField(field) {
-        var inputs = Array.isArray(field && field.inputs) ? field.inputs.map(normalizeInput) : [normalizeInput({})];
+        var legacyDefaults = {
+            measure: field && field.measure ? String(field.measure) : '',
+            showMeasure: readLegacyFlag(field, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], false),
+            hidePresetButtons: readLegacyFlag(field, ['hidePresetButtons', 'hide_preset_buttons'], false)
+        };
+        var inputs = Array.isArray(field && field.inputs) ? field.inputs.map(function (input) {
+            return normalizeInput(input, legacyDefaults);
+        }) : [normalizeInput({}, legacyDefaults)];
         if (inputs.length > 4) {
             inputs = inputs.slice(0, 4);
         } else if (inputs.length === 0) {

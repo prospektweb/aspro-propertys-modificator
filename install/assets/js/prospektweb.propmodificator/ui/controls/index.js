@@ -25,9 +25,15 @@
             var step   = fmtCfg.STEP       || 1;
             var formatMeasure = fmtCfg.MEASURE || 'мм';
             var showFormatMeasure = fmtCfg.SHOW_MEASURE === 'Y';
+            var formatMeasures = Array.isArray(fmtCfg.FORMAT_INPUT_MEASURES) ? fmtCfg.FORMAT_INPUT_MEASURES : [];
+            var formatShowMeasures = Array.isArray(fmtCfg.FORMAT_SHOW_MEASURES) ? fmtCfg.FORMAT_SHOW_MEASURES : [];
             var rawInputLabels = Array.isArray(fmtCfg.FORMAT_INPUT_LABELS) ? fmtCfg.FORMAT_INPUT_LABELS : [];
             var widthLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
             var heightLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
+            var widthMeasure = String(formatMeasures[0] || formatMeasure || '').trim();
+            var heightMeasure = String(formatMeasures[1] || widthMeasure || formatMeasure || '').trim();
+            var showWidthMeasure = (formatShowMeasures[0] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
+            var showHeightMeasure = (formatShowMeasures[1] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
 
             // Начальное значение: активная кнопка или первая
             var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
@@ -52,7 +58,7 @@
             ui.innerHTML = [
                 '<div class="pmod-format-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + widthLabel + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + widthLabel + (showWidthMeasure && widthMeasure ? ', ' + widthMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 1">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-width"',
@@ -63,7 +69,7 @@
                   '</div>',
                   '<span class="pmod-format-x">&#215;</span>',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + heightLabel + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + heightLabel + (showHeightMeasure && heightMeasure ? ', ' + heightMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 2">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-height"',
