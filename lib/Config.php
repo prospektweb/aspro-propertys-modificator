@@ -114,6 +114,30 @@ class Config
     }
 
     /**
+     * Список ID значений свойств ТП, которые нужно скрывать в листингах.
+     *
+     * @return int[]
+     */
+    public static function getHiddenOfferValueIds(): array
+    {
+        $raw = self::get('HIDDEN_OFFER_VALUE_IDS', '');
+        if ($raw === '') {
+            return [];
+        }
+
+        $parts = preg_split('/[,\s;]+/', $raw) ?: [];
+        $ids = [];
+        foreach ($parts as $part) {
+            $id = (int)$part;
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    /**
      * Режим отладки: 'Y' — писать в лог, 'N' — тихий режим.
      */
     public static function isDebug(): bool

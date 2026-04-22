@@ -14,6 +14,8 @@ namespace Prospektweb\PropModificator;
 
 use Bitrix\Main\Application;
 use Bitrix\Main\Loader;
+use Bitrix\Main\Page\Asset;
+use Bitrix\Main\Page\AssetLocation;
 
 class PageHandler
 {
@@ -50,6 +52,16 @@ class PageHandler
             return;
         }
 
+        $isDetailPage = false;
+        if (Loader::includeModule('iblock') && Loader::includeModule('catalog')) {
+            $resolver = new ProductResolver(Config::getOffersIblockId(), Config::getProductsIblockId());
+            $isDetailPage = $resolver->resolve() > 0;
+        }
+
+        if (!$isDetailPage) {
+            self::injectListingHiddenValuesScript();
+        }
+
         $modulePath = Application::getDocumentRoot()
             . getLocalPath('modules/prospektweb.propmodificator/template_include.php');
 
@@ -59,6 +71,22 @@ class PageHandler
         }
 
         include_once $modulePath;
+    }
+
+    private static function injectListingHiddenValuesScript(): void
+    {
+        $ids = Config::getHiddenOfferValueIds();
+        if (!$ids) {
+            return;
+        }
+
+        $asset = Asset::getInstance();
+        $asset->addJs('/bitrix/js/prospektweb.propmodificator/listing/hide-technical-values.js');
+        $asset->addString(
+            '<script>window.pmodListingHiddenValueIds = ' . json_encode($ids) . ';</script>',
+            false,
+            AssetLocation::AFTER_CSS
+        );
     }
 
     /**
