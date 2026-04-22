@@ -605,6 +605,90 @@
             }, true); // capture — срабатывает до skuAction.js
         },
 
+        applyCustomFieldVariantRules: function (container, state) {
+            if (!container || !state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return;
+
+            var fieldsByPropId = {};
+            state.customConfig.fields.forEach(function (field) {
+                var binding = field && field.binding ? field.binding : {};
+                var propId = parseInt(binding.skuPropertyId, 10);
+                if (!propId || isNaN(propId)) {
+                    var code = String(binding.skuPropertyCode || '').trim();
+                    if (code && state.skuPropCodeToId && state.skuPropCodeToId[code]) {
+                        propId = parseInt(state.skuPropCodeToId[code], 10);
+                    }
+                }
+                if (!propId || isNaN(propId)) return;
+                fieldsByPropId[propId] = field;
+            });
+
+            Object.keys(fieldsByPropId).forEach(function (propIdRaw) {
+                var propId = parseInt(propIdRaw, 10);
+                if (!propId) return;
+
+                var field = fieldsByPropId[propId];
+                var innerEl = container.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+                if (!innerEl) return;
+                var valuesEl = innerEl.querySelector('.sku-props__values');
+                if (!valuesEl) return;
+
+                var allButtons = Array.prototype.slice.call(valuesEl.querySelectorAll('.sku-props__value'));
+                if (!allButtons.length) return;
+
+                // 1) собираем текущие допустимые варианты из DOM
+                var allowedButtons = allButtons.filter(function (btn) {
+                    return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
+                });
+
+                // 2) исключаем служебные/технические значения
+                var userButtons = allowedButtons.filter(function (btn) {
+                    if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
+                    btn.classList.add('pmod-hidden-technical-value');
+                    btn.style.display = 'none';
+                    btn.setAttribute('aria-hidden', 'true');
+                    return false;
+                });
+
+                // Если был активен технический вариант — переводим на пользовательский.
+                var activeBtn = valuesEl.querySelector('.sku-props__value--active');
+                if (activeBtn && activeBtn.classList.contains('pmod-hidden-technical-value')) {
+                    var fallbackBtn = userButtons[0] || null;
+                    if (fallbackBtn && !fallbackBtn.classList.contains('sku-props__value--active')) {
+                        innerEl._pmodProgrammaticChange = true;
+                        fallbackBtn.click();
+                    }
+                }
+
+                // 3) применяем hide_variants (hidePresetButtons) после фильтрации.
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+                var hideVariants = inputs.some(function (input) {
+                    return !!(input && input.hidePresetButtons);
+                });
+                if (hideVariants) {
+                    valuesEl.classList.add('pmod-preset-buttons--hidden');
+                }
+            });
+        },
+
+        isTechnicalCustomVariant: function (btn, field) {
+            if (!btn || !field) return false;
+
+            var marker = field.binding && field.binding.marker ? field.binding.marker : {};
+            var markerValue = String(marker.value || '').trim().toLowerCase();
+            var markerXmlId = String(marker.xmlId || '').trim().toLowerCase();
+            var title = String(btn.dataset.title || '').trim().toLowerCase();
+            var text = String(btn.textContent || '').trim().toLowerCase();
+
+            if (markerValue && (title === markerValue || text === markerValue)) {
+                return true;
+            }
+            if (markerXmlId && (title === markerXmlId || text === markerXmlId)) {
+                return true;
+            }
+
+            return false;
+        },
+
         findCustomButton: function (valuesEl, enumMap) {
             var found = null;
             valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {

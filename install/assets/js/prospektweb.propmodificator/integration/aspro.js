@@ -57,6 +57,10 @@
                         state._uiStabilizationTimer = null;
                     }
 
+                    // После перерисовки SKU повторно применяем фильтры вариантов
+                    // (технические значения + hidePresetButtons).
+                    PModificator.applyCustomFieldVariantRules(state.containerEl, state);
+
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
 
@@ -397,7 +401,8 @@
             if (!propId) return '';
             var inner = container.querySelector('.sku-props__inner[data-id="' + propId + '"]');
             if (!inner) return '';
-            var activeBtn = inner.querySelector('.sku-props__value--active') || inner.querySelector('.sku-props__value');
+            var activeBtn = inner.querySelector('.sku-props__value--active:not(.pmod-hidden-technical-value)')
+                || inner.querySelector('.sku-props__value:not(.pmod-hidden-technical-value)');
             if (!activeBtn) return '';
             return String(activeBtn.dataset.title || activeBtn.textContent || '').trim();
         },
@@ -420,7 +425,7 @@
                 if (isNaN(propId)) return;
                 var innerEl = state.containerEl.querySelector('.sku-props__inner[data-id="' + propId + '"]');
                 if (!innerEl) return;
-                var activeBtn = innerEl.querySelector('.sku-props__value--active');
+                var activeBtn = innerEl.querySelector('.sku-props__value--active:not(.pmod-hidden-technical-value)');
                 if (!activeBtn || !activeBtn.dataset.onevalue) return;
                 var enumId = parseInt(activeBtn.dataset.onevalue, 10);
                 if (!isNaN(enumId)) {
