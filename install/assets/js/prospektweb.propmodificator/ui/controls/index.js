@@ -86,6 +86,11 @@
 
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
+            var quickListEl = document.createElement('div');
+            quickListEl.className = 'pmod-quick-values';
+            quickListEl.style.display = 'none';
+            ui.appendChild(quickListEl);
+            var activeQuickInput = null;
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
