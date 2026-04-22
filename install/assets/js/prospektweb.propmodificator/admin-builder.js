@@ -119,6 +119,11 @@
             inputs = [normalizeInput({})];
         }
         var mode = inputs.length > 1 ? 'group' : 'single';
+        var rawInputLabels = Array.isArray(field && field.inputLabels) ? field.inputLabels : [];
+        var normalizedInputLabels = inputs.map(function (_, idx) {
+            var label = rawInputLabels[idx];
+            return label != null ? String(label) : '';
+        });
 
         var replaceKeys = Array.isArray(field && field.replaceKeys) ? field.replaceKeys : [];
         var normalizedReplace = inputs.map(function (_, idx) {
@@ -142,7 +147,8 @@
                 }
             },
             replaceKeys: normalizedReplace,
-            inputs: inputs
+            inputs: inputs,
+            inputLabels: normalizedInputLabels
         };
     }
 
@@ -310,6 +316,16 @@
         };
     }
 
+    function bindInputLabelEvents(root, field, textarea, state) {
+        qa('[data-k="input-label"]', root).forEach(function (node) {
+            node.oninput = function () {
+                var idx = Number(this.getAttribute('data-idx') || 0) || 0;
+                field.inputLabels[idx] = this.value;
+                saveJson(textarea, state);
+            };
+        });
+    }
+
     function renderEditor(root, textarea, rawState, props) {
         var state = normalizeState(rawState);
         root.innerHTML = '';
@@ -371,6 +387,20 @@
             };
             body.appendChild(binding);
 
+            if (field.inputs.length > 1) {
+                var labelsBox = el('div', 'pmod-admin-binding');
+                var labelsGrid = '<div class="pmod-admin-binding__grid">';
+                field.inputs.forEach(function (_, inputIdx) {
+                    labelsGrid += '<label>Лейбл инпута ' + (inputIdx + 1)
+                        + '<input class="pmod-inp" data-k="input-label" data-idx="' + inputIdx + '" value="'
+                        + escapeHtml((field.inputLabels && field.inputLabels[inputIdx]) || '') + '"></label>';
+                });
+                labelsGrid += '</div>';
+                labelsBox.innerHTML = labelsGrid;
+                bindInputLabelEvents(labelsBox, field, textarea, state);
+                body.appendChild(labelsBox);
+            }
+
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
                 row.innerHTML =
@@ -399,6 +429,7 @@
                 }
                 field.inputs.push(normalizeInput({ label: 'Поле ' + (field.inputs.length + 1) }));
                 field.replaceKeys.push({ key: '', inputIndex: field.inputs.length - 1 });
+                field.inputLabels.push('');
                 syncFieldMode(field);
                 saveJson(textarea, state);
                 rerender();
@@ -408,6 +439,7 @@
                 if (field.inputs.length <= 1) return;
                 field.inputs.pop();
                 field.replaceKeys.pop();
+                field.inputLabels.pop();
                 syncFieldMode(field);
                 saveJson(textarea, state);
                 rerender();

@@ -41,6 +41,7 @@ class CustomConfig
             $inputs = isset($field['inputs']) && is_array($field['inputs'])
                 ? array_values(array_filter($field['inputs'], 'is_array'))
                 : [];
+            $inputLabels = self::normalizeInputLabels($field['inputLabels'] ?? [], count($inputs));
 
             if ($mode === 'single' && count($inputs) !== 1) {
                 continue;
@@ -57,6 +58,7 @@ class CustomConfig
                 'binding'     => is_array($field['binding'] ?? null) ? $field['binding'] : [],
                 'replaceKeys' => isset($field['replaceKeys']) && is_array($field['replaceKeys']) ? $field['replaceKeys'] : [],
                 'inputs'      => array_map([self::class, 'normalizeInput'], $inputs),
+                'inputLabels' => $inputLabels,
             ];
         }
 
@@ -158,6 +160,33 @@ class CustomConfig
     }
 
     /**
+     * @param mixed $rawLabels
+     * @return string[]
+     */
+    private static function normalizeInputLabels($rawLabels, int $inputsCount): array
+    {
+        if ($inputsCount <= 0) {
+            return [];
+        }
+
+        $labels = array_fill(0, $inputsCount, '');
+        if (!is_array($rawLabels)) {
+            return $labels;
+        }
+
+        foreach ($rawLabels as $idx => $label) {
+            if (is_numeric($idx)) {
+                $index = (int)$idx;
+                if ($index >= 0 && $index < $inputsCount) {
+                    $labels[$index] = trim((string)$label);
+                }
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
      * Извлекает настройки формата/тиража для текущих CALC_PROP_* кодов
      * из нового JSON-конфига.
      */
@@ -177,6 +206,12 @@ class CustomConfig
             if ($bindingCode === $formatPropCode && !empty($inputs[1])) {
                 $w = $inputs[0];
                 $h = $inputs[1];
+                $inputLabels = self::normalizeInputLabels($field['inputLabels'] ?? [], count($inputs));
+                foreach ($inputs as $idx => $input) {
+                    if ($inputLabels[$idx] === '' && !empty($input['label'])) {
+                        $inputLabels[$idx] = trim((string)$input['label']);
+                    }
+                }
 
                 if ($w['min'] !== null) $formatSettings['MIN_WIDTH'] = $w['min'];
                 if ($w['max'] !== null) $formatSettings['MAX_WIDTH'] = $w['max'];
@@ -186,6 +221,7 @@ class CustomConfig
                 $formatSettings['MEASURE'] = $w['measure'] !== '' ? $w['measure'] : 'мм';
                 $formatSettings['SHOW_MEASURE'] = $w['showMeasure'] ? 'Y' : 'N';
                 $formatSettings['HIDE_PRESET_BUTTONS'] = $w['hidePresetButtons'] ? 'Y' : 'N';
+                $formatSettings['FORMAT_INPUT_LABELS'] = $inputLabels;
             }
 
             if ($bindingCode === $volumePropCode) {

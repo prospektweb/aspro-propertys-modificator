@@ -50,6 +50,7 @@ $payload = [
                 'id' => 'format',
                 'mode' => 'group',
                 'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT'],
+                'inputLabels' => ['Ширина макета', 'Высота макета'],
                 'inputs' => [
                     ['min' => 100, 'max' => 500, 'step' => 10, 'measure' => 'мм', 'showMeasure' => true],
                     ['min' => 100, 'max' => 700, 'step' => 10, 'measure' => 'мм', 'showMeasure' => true],
@@ -72,6 +73,7 @@ $configA = $reader->readFromPropertyPayload($payload, 'CALC_PROP_FORMAT', 'CALC_
 $configB = $reader->readFromPropertyPayload($payload, 'CALC_PROP_FORMAT', 'CALC_PROP_VOLUME');
 assertTrue($configA['formatSettings'] === $configB['formatSettings'], 'Format settings must be stable across entrypoints');
 assertTrue($configA['volumeSettings'] === $configB['volumeSettings'], 'Volume settings must be stable across entrypoints');
+assertTrue(($configA['formatSettings']['FORMAT_INPUT_LABELS'] ?? []) === ['Ширина макета', 'Высота макета'], 'Format settings must keep custom input labels from config');
 
 assertTrue(ValidationRules::validateInput(200, 300, 1000, $configA['formatSettings'], $configA['volumeSettings']), 'Valid input should pass unified validator');
 assertTrue(!ValidationRules::validateInput(10, 300, 1000, $configA['formatSettings'], $configA['volumeSettings']), 'Out-of-range format should fail unified validator');
@@ -133,6 +135,10 @@ $invalidModeConfig = CustomConfig::parseFromPropertyValue([
 $keptIds = array_column($invalidModeConfig['fields'] ?? [], 'id');
 sort($keptIds);
 assertTrue($keptIds === ['ok-group', 'ok-single'], 'CustomConfig must reject inconsistent mode handlers and keep only valid single/group definitions');
+assertTrue(
+    ($invalidModeConfig['fields'][0]['inputLabels'] ?? []) === ['', ''],
+    'CustomConfig must keep backward compatibility and initialize empty input labels for legacy group fields'
+);
 
 $ajaxEndpointPath = __DIR__ . '/../install/assets/ajax/prospektweb.propmodificator/calc_price.php';
 $ajaxEndpointCode = file_get_contents($ajaxEndpointPath);
