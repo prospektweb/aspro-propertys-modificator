@@ -123,7 +123,9 @@
             max: input && input.max !== undefined ? input.max : '',
             measure: input && input.measure ? String(input.measure) : String(defaults.measure || ''),
             showMeasure: readLegacyFlag(input, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], defaults.showMeasure),
-            hidePresetButtons: readLegacyFlag(input, ['hidePresetButtons', 'hide_preset_buttons'], defaults.hidePresetButtons)
+            hidePresetButtons: readLegacyFlag(input, ['hidePresetButtons', 'hide_preset_buttons'], defaults.hidePresetButtons),
+            hide_tp_value_if_min: readLegacyFlag(input, ['hide_tp_value_if_min', 'hideTpValueIfMin'], false),
+            hide_tp_value_if_max: readLegacyFlag(input, ['hide_tp_value_if_max', 'hideTpValueIfMax'], false)
         };
     }
 
@@ -332,6 +334,8 @@
         row.querySelector('[data-k="measure"]').oninput = function () { input.measure = this.value; saveJson(textarea, state); };
         row.querySelector('[data-k="show"]').onchange = function () { input.showMeasure = !!this.checked; saveJson(textarea, state); };
         row.querySelector('[data-k="hide"]').onchange = function () { input.hidePresetButtons = !!this.checked; saveJson(textarea, state); };
+        row.querySelector('[data-k="hide-min"]').onchange = function () { input.hide_tp_value_if_min = !!this.checked; saveJson(textarea, state); };
+        row.querySelector('[data-k="hide-max"]').onchange = function () { input.hide_tp_value_if_max = !!this.checked; saveJson(textarea, state); };
         row.querySelector('[data-k="replace"]').oninput = function () {
             field.replaceKeys[inputIdx] = field.replaceKeys[inputIdx] || { key: '', inputIndex: inputIdx };
             field.replaceKeys[inputIdx].key = this.value;
@@ -433,6 +437,8 @@
                     + '<input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '">'
                     + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед. изм.</label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать варианты</label>'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="hide-min" ' + (input.hide_tp_value_if_min ? 'checked' : '') + '>Скрыть ТП по свойству равное минимуму</label>'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="hide-max" ' + (input.hide_tp_value_if_max ? 'checked' : '') + '>Скрыть ТП по свойству равное максимуму</label>'
                     + '<input class="pmod-inp" data-k="replace" title="Ключ, по которому подставляется пользовательское значение в шаблон/замену." placeholder="Подстановка по ключу" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
 
                 bindRowEvents(row, field, input, inputIdx, textarea, state);
