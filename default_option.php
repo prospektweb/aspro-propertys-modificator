@@ -15,5 +15,6 @@ $prospektweb_propmodificator_default_option = [
     'CUSTOM_CONFIG_PROP_CODE' => 'PMOD_CUSTOM_CONFIG',
     'PRICE_TYPE_ID'         => '1',
     'CATALOG_PATH_FILTER'   => '/catalog/',
+    'HIDDEN_OFFER_VALUE_IDS' => '',
     'DEBUG'                 => 'N',
 ];
