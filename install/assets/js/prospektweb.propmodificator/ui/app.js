@@ -48,17 +48,6 @@
             var allPropIds   = productCfg.allPropIds || [];
             var catalogGroups = productCfg.catalogGroups || {};
 
-            // Считываем текущий активный выбор "прочих" свойств из DOM
-            var initialOtherProps = {};
-            allPropIds.forEach(function (pid) {
-                var innerEl = container.querySelector('.sku-props__inner[data-id="' + pid + '"]');
-                if (!innerEl) return;
-                var activeBtn = innerEl.querySelector('.sku-props__value--active');
-                if (activeBtn && activeBtn.dataset.onevalue) {
-                    initialOtherProps[pid] = parseInt(activeBtn.dataset.onevalue, 10);
-                }
-            });
-
             var state = {
                 productId:        productId,
                 offers:           productCfg.offers || [],
@@ -74,7 +63,7 @@
                 canBuyGroups:     productCfg.canBuyGroups || [],
                 allPropIds:       allPropIds,
                 roundingRules:    productCfg.roundingRules || {},
-                activeOtherProps: initialOtherProps,
+                activeOtherProps: {},
                 customWidth:      null,
                 customHeight:     null,
                 customVolume:     null,
@@ -125,6 +114,13 @@
 
             // Следим за кликами по стандартным кнопкам ТП
             PModificator.watchPresetClicks(container, state);
+
+            // Нормализуем варианты для произвольных полей:
+            // убираем технические значения и применяем hidePresetButtons.
+            PModificator.applyCustomFieldVariantRules(container, state);
+
+            // Считываем активный выбор "прочих" свойств после нормализации DOM.
+            PModificator.rebuildActiveOtherProps(state);
 
             // Фиксируем активную группу цены Аспро как baseline для custom-режима.
             var detectedMainGid = PModificator.detectActivePriceGroupIdFromDom(state);
