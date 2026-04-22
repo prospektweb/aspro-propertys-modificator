@@ -25,6 +25,9 @@
             var step   = fmtCfg.STEP       || 1;
             var formatMeasure = fmtCfg.MEASURE || 'мм';
             var showFormatMeasure = fmtCfg.SHOW_MEASURE === 'Y';
+            var rawInputLabels = Array.isArray(fmtCfg.FORMAT_INPUT_LABELS) ? fmtCfg.FORMAT_INPUT_LABELS : [];
+            var widthLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
+            var heightLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
 
             // Начальное значение: активная кнопка или первая
             var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
@@ -49,24 +52,24 @@
             ui.innerHTML = [
                 '<div class="pmod-format-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Ширина' + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + widthLabel + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить ширину">&#8722;</button>',
+                      '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 1">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-width"',
                              ' min="' + minW + '" max="' + maxW + '" step="' + step + '"',
-                             ' value="' + initW + '" autocomplete="off">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить ширину">+</button>',
+                             ' value="' + initW + '" autocomplete="off" aria-label="' + widthLabel + '">',
+                      '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 1">+</button>',
                     '</div>',
                   '</div>',
                   '<span class="pmod-format-x">&#215;</span>',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">Высота' + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + heightLabel + (showFormatMeasure ? ', ' + formatMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить высоту">&#8722;</button>',
+                      '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 2">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-height"',
                              ' min="' + minH + '" max="' + maxH + '" step="' + step + '"',
-                             ' value="' + initH + '" autocomplete="off">',
-                      '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить высоту">+</button>',
+                             ' value="' + initH + '" autocomplete="off" aria-label="' + heightLabel + '">',
+                      '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 2">+</button>',
                     '</div>',
                   '</div>',
                 '</div>',
