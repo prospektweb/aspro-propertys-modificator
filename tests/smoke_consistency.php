@@ -74,6 +74,8 @@ $configB = $reader->readFromPropertyPayload($payload, 'CALC_PROP_FORMAT', 'CALC_
 assertTrue($configA['formatSettings'] === $configB['formatSettings'], 'Format settings must be stable across entrypoints');
 assertTrue($configA['volumeSettings'] === $configB['volumeSettings'], 'Volume settings must be stable across entrypoints');
 assertTrue(($configA['formatSettings']['FORMAT_INPUT_LABELS'] ?? []) === ['Ширина макета', 'Высота макета'], 'Format settings must keep custom input labels from config');
+assertTrue(($configA['formatSettings']['FORMAT_SHOW_MEASURES'] ?? []) === ['Y', 'Y'], 'Format settings must keep SHOW_MEASURE flags per input');
+assertTrue(($configA['formatSettings']['FORMAT_INPUT_MEASURES'] ?? []) === ['мм', 'мм'], 'Format settings must keep MEASURE values per input');
 
 assertTrue(ValidationRules::validateInput(200, 300, 1000, $configA['formatSettings'], $configA['volumeSettings']), 'Valid input should pass unified validator');
 assertTrue(!ValidationRules::validateInput(10, 300, 1000, $configA['formatSettings'], $configA['volumeSettings']), 'Out-of-range format should fail unified validator');
@@ -138,6 +140,40 @@ assertTrue($keptIds === ['ok-group', 'ok-single'], 'CustomConfig must reject inc
 assertTrue(
     ($invalidModeConfig['fields'][0]['inputLabels'] ?? []) === ['', ''],
     'CustomConfig must keep backward compatibility and initialize empty input labels for legacy group fields'
+);
+assertTrue(
+    ($invalidModeConfig['fields'][0]['inputs'][0]['showMeasure'] ?? null) === false
+    && ($invalidModeConfig['fields'][0]['inputs'][1]['showMeasure'] ?? null) === false,
+    'CustomConfig must keep explicit per-input showMeasure defaults for legacy group fields'
+);
+
+$legacyGlobalFlagsConfig = CustomConfig::parseFromPropertyValue([
+    'VALUE' => json_encode([
+        'version' => 1,
+        'fields' => [
+            [
+                'id' => 'legacy-global',
+                'mode' => 'group',
+                'binding' => ['skuPropertyCode' => 'CALC_PROP_FORMAT'],
+                'showMeasure' => true,
+                'measure' => 'мм',
+                'inputs' => [
+                    ['min' => 100],
+                    ['min' => 200, 'showMeasure' => false],
+                ],
+            ],
+        ],
+    ], JSON_UNESCAPED_UNICODE),
+]);
+assertTrue(
+    ($legacyGlobalFlagsConfig['fields'][0]['inputs'][0]['showMeasure'] ?? null) === true
+    && ($legacyGlobalFlagsConfig['fields'][0]['inputs'][1]['showMeasure'] ?? null) === false,
+    'CustomConfig must map legacy global showMeasure into each input without overriding explicit input flags'
+);
+assertTrue(
+    ($legacyGlobalFlagsConfig['fields'][0]['inputs'][0]['measure'] ?? '') === 'мм'
+    && ($legacyGlobalFlagsConfig['fields'][0]['inputs'][1]['measure'] ?? '') === 'мм',
+    'CustomConfig must map legacy global measure into each input when input-level value is missing'
 );
 
 $ajaxEndpointPath = __DIR__ . '/../install/assets/ajax/prospektweb.propmodificator/calc_price.php';

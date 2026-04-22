@@ -51,13 +51,17 @@ class CustomConfig
                 continue;
             }
 
+            $legacyInputDefaults = self::extractLegacyInputDefaults($field);
+
             $result['fields'][] = [
                 'id'          => (string)($field['id'] ?? ''),
                 'name'        => (string)($field['name'] ?? ''),
                 'mode'        => $mode,
                 'binding'     => is_array($field['binding'] ?? null) ? $field['binding'] : [],
                 'replaceKeys' => isset($field['replaceKeys']) && is_array($field['replaceKeys']) ? $field['replaceKeys'] : [],
-                'inputs'      => array_map([self::class, 'normalizeInput'], $inputs),
+                'inputs'      => array_map(static function (array $input) use ($legacyInputDefaults): array {
+                    return self::normalizeInput($input, $legacyInputDefaults);
+                }, $inputs),
                 'inputLabels' => $inputLabels,
             ];
         }
@@ -133,17 +137,80 @@ class CustomConfig
         return null;
     }
 
-    private static function normalizeInput(array $input): array
+    private static function normalizeInput(array $input, array $legacyDefaults = []): array
     {
+        $legacyShowMeasure = $legacyDefaults['showMeasure'] ?? null;
+        $legacyHidePresetButtons = $legacyDefaults['hidePresetButtons'] ?? null;
+        $legacyMeasure = $legacyDefaults['measure'] ?? null;
+
         return [
             'label'             => (string)($input['label'] ?? ''),
             'min'               => self::toNullableInt($input['min'] ?? null),
             'step'              => self::toNullableInt($input['step'] ?? null),
             'max'               => self::toNullableInt($input['max'] ?? null),
-            'measure'           => trim((string)($input['measure'] ?? '')),
-            'showMeasure'       => !empty($input['showMeasure']),
-            'hidePresetButtons' => !empty($input['hidePresetButtons']),
+            'measure'           => trim((string)($input['measure'] ?? ($legacyMeasure ?? ''))),
+            'showMeasure'       => self::resolveBoolFlag($input, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], $legacyShowMeasure),
+            'hidePresetButtons' => self::resolveBoolFlag($input, ['hidePresetButtons', 'hide_preset_buttons'], $legacyHidePresetButtons),
         ];
+    }
+
+    private static function extractLegacyInputDefaults(array $field): array
+    {
+        return [
+            'measure' => self::resolveString($field, ['measure']),
+            'showMeasure' => self::resolveBoolFlag($field, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], null, true),
+            'hidePresetButtons' => self::resolveBoolFlag($field, ['hidePresetButtons', 'hide_preset_buttons'], null, true),
+        ];
+    }
+
+    private static function resolveString(array $payload, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $payload) && $payload[$key] !== null) {
+                return trim((string)$payload[$key]);
+            }
+        }
+
+        return null;
+    }
+
+    private static function resolveBoolFlag(array $payload, array $keys, ?bool $fallback = null, bool $strictPresence = false): bool
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $payload)) {
+                continue;
+            }
+
+            $value = $payload[$key];
+            if (is_bool($value)) {
+                return $value;
+            }
+
+            if (is_numeric($value)) {
+                return ((int)$value) !== 0;
+            }
+
+            if (is_string($value)) {
+                $normalized = strtoupper(trim($value));
+                if ($normalized === '') {
+                    return false;
+                }
+                if ($normalized === 'Y' || $normalized === 'YES' || $normalized === 'TRUE') {
+                    return true;
+                }
+                if ($normalized === 'N' || $normalized === 'NO' || $normalized === 'FALSE') {
+                    return false;
+                }
+            }
+
+            return !empty($value);
+        }
+
+        if ($strictPresence) {
+            return $fallback ?? false;
+        }
+
+        return $fallback ?? false;
     }
 
     private static function toNullableInt($value): ?int
@@ -221,6 +288,14 @@ class CustomConfig
                 $formatSettings['MEASURE'] = $w['measure'] !== '' ? $w['measure'] : 'мм';
                 $formatSettings['SHOW_MEASURE'] = $w['showMeasure'] ? 'Y' : 'N';
                 $formatSettings['HIDE_PRESET_BUTTONS'] = $w['hidePresetButtons'] ? 'Y' : 'N';
+                $formatSettings['FORMAT_INPUT_MEASURES'] = [
+                    $w['measure'] !== '' ? $w['measure'] : 'мм',
+                    $h['measure'] !== '' ? $h['measure'] : ($w['measure'] !== '' ? $w['measure'] : 'мм'),
+                ];
+                $formatSettings['FORMAT_SHOW_MEASURES'] = [
+                    $w['showMeasure'] ? 'Y' : 'N',
+                    $h['showMeasure'] ? 'Y' : 'N',
+                ];
                 $formatSettings['FORMAT_INPUT_LABELS'] = $inputLabels;
             }
 
