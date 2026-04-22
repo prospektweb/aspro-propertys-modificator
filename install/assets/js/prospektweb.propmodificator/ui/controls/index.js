@@ -86,6 +86,11 @@
 
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
+            var quickListEl = document.createElement('div');
+            quickListEl.className = 'pmod-quick-values';
+            quickListEl.style.display = 'none';
+            ui.appendChild(quickListEl);
+            var activeQuickInput = null;
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
@@ -190,6 +195,82 @@
                     inp.value   = clamp(newVal, parseInt(inp.min, 10), parseInt(inp.max, 10));
                     onFormatChange(true);
                 }, { passive: false });
+            });
+
+            function closeQuickValues() {
+                quickListEl.style.display = 'none';
+                quickListEl.innerHTML = '';
+                activeQuickInput = null;
+            }
+
+            function collectFormatQuickValues(inputIndex) {
+                var field = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
+                var propId = state.skuPropCodeToId ? state.skuPropCodeToId[state.formatPropCode] : null;
+                var filteredButtons = PModificator.getFilteredCustomVariantButtons(valuesEl, field, parseInt(propId, 10), state);
+                var values = [];
+                filteredButtons.forEach(function (btn) {
+                    var tuple = PModificator.extractComparableTuple(btn, propId, state);
+                    if (!tuple || tuple[inputIndex] === undefined || tuple[inputIndex] === null) return;
+                    values.push(String(tuple[inputIndex]));
+                });
+                return Array.from(new Set(values));
+            }
+
+            function openQuickValuesForInput(input, inputIndex) {
+                var values = collectFormatQuickValues(inputIndex);
+                var search = String(input.value || '').trim().toLowerCase();
+                var filtered = values.filter(function (val) {
+                    return !search || String(val).toLowerCase().indexOf(search) === 0;
+                });
+
+                quickListEl.innerHTML = '';
+                if (!filtered.length) {
+                    var emptyEl = document.createElement('div');
+                    emptyEl.className = 'pmod-quick-values__empty';
+                    emptyEl.textContent = 'Нет доступных вариантов';
+                    quickListEl.appendChild(emptyEl);
+                } else {
+                    filtered.forEach(function (val) {
+                        var item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'pmod-quick-values__item';
+                        item.textContent = val;
+                        item.addEventListener('click', function () {
+                            input.value = val;
+                            onFormatChange(true);
+                            closeQuickValues();
+                        });
+                        quickListEl.appendChild(item);
+                    });
+                }
+
+                var targetRect = input.getBoundingClientRect();
+                var uiRect = ui.getBoundingClientRect();
+                quickListEl.style.left = (targetRect.left - uiRect.left) + 'px';
+                quickListEl.style.top = (targetRect.bottom - uiRect.top + 6) + 'px';
+                quickListEl.style.width = targetRect.width + 'px';
+                quickListEl.style.display = 'block';
+                activeQuickInput = input;
+            }
+
+            [widthInput, heightInput].forEach(function (input, idx) {
+                input.addEventListener('focus', function () {
+                    openQuickValuesForInput(input, idx);
+                });
+                input.addEventListener('click', function () {
+                    openQuickValuesForInput(input, idx);
+                });
+                input.addEventListener('input', function () {
+                    if (activeQuickInput === input) {
+                        openQuickValuesForInput(input, idx);
+                    }
+                });
+            });
+
+            document.addEventListener('click', function (evt) {
+                if (!ui.contains(evt.target)) {
+                    closeQuickValues();
+                }
             });
 
             // Сохраняем ссылки для обновления из обработчика кликов
@@ -642,62 +723,7 @@
                     btn.removeAttribute('aria-hidden');
                 });
 
-                // 1) собираем текущие допустимые варианты из DOM
-                var allowedButtons = allButtons.filter(function (btn) {
-                    return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
-                });
-
-                // 2) исключаем служебные/технические значения
-                var userButtons = allowedButtons.filter(function (btn) {
-                    if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
-                    btn.classList.add('pmod-hidden-technical-value');
-                    btn.style.display = 'none';
-                    btn.setAttribute('aria-hidden', 'true');
-                    return false;
-                });
-
-                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
-                var hideTpValueIfMin = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
-                });
-                var hideTpValueIfMax = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
-                });
-
-                if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
-                    var comparableButtons = userButtons.map(function (btn) {
-                        return {
-                            btn: btn,
-                            tuple: PModificator.extractComparableTuple(btn, propId, state)
-                        };
-                    }).filter(function (item) {
-                        return item.tuple && item.tuple.length;
-                    });
-
-                    if (comparableButtons.length) {
-                        var minTuple = comparableButtons[0].tuple;
-                        var maxTuple = comparableButtons[0].tuple;
-                        comparableButtons.forEach(function (item) {
-                            if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
-                            if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
-                        });
-
-                        userButtons = userButtons.filter(function (btn) {
-                            var tuple = PModificator.extractComparableTuple(btn, propId, state);
-                            if (!tuple || !tuple.length) return true;
-                            var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
-                            var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
-                            var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
-                            if (shouldHide) {
-                                btn.classList.add('pmod-hidden-minmax-value');
-                                btn.style.display = 'none';
-                                btn.setAttribute('aria-hidden', 'true');
-                                return false;
-                            }
-                            return true;
-                        });
-                    }
-                }
+                var userButtons = PModificator.getFilteredCustomVariantButtons(allButtons, field, propId, state);
 
                 // Если был активен технический вариант — переводим на пользовательский.
                 var activeBtn = valuesEl.querySelector('.sku-props__value--active');
@@ -710,6 +736,7 @@
                 }
 
                 // 3) применяем hide_variants (hidePresetButtons) после фильтрации.
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
                 var hideVariants = inputs.some(function (input) {
                     return !!(input && input.hidePresetButtons);
                 });
@@ -719,6 +746,84 @@
                     valuesEl.classList.remove('pmod-preset-buttons--hidden');
                 }
             });
+        },
+
+        findCustomFieldByPropCode: function (state, propCode) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return null;
+            var target = String(propCode || '').trim();
+            if (!target) return null;
+            for (var i = 0; i < state.customConfig.fields.length; i++) {
+                var field = state.customConfig.fields[i] || {};
+                var bindingCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
+                if (bindingCode === target) {
+                    return field;
+                }
+            }
+            return null;
+        },
+
+        getFilteredCustomVariantButtons: function (buttons, field, propId, state) {
+            var allButtons = Array.isArray(buttons) ? buttons : [];
+
+            // 1) исключаем недоступные/disabled варианты
+            var allowedButtons = allButtons.filter(function (btn) {
+                return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
+            });
+
+            // 2) исключаем служебные/технические
+            var userButtons = allowedButtons.filter(function (btn) {
+                if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
+                btn.classList.add('pmod-hidden-technical-value');
+                btn.style.display = 'none';
+                btn.setAttribute('aria-hidden', 'true');
+                return false;
+            });
+
+            var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+
+            // 3) применяем скрытие минимум/максимум
+            var hideTpValueIfMin = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
+            });
+            var hideTpValueIfMax = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
+            });
+            if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
+                var comparableButtons = userButtons.map(function (btn) {
+                    return {
+                        btn: btn,
+                        tuple: PModificator.extractComparableTuple(btn, propId, state)
+                    };
+                }).filter(function (item) {
+                    return item.tuple && item.tuple.length;
+                });
+
+                if (comparableButtons.length) {
+                    var minTuple = comparableButtons[0].tuple;
+                    var maxTuple = comparableButtons[0].tuple;
+                    comparableButtons.forEach(function (item) {
+                        if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
+                        if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
+                    });
+                    userButtons = userButtons.filter(function (btn) {
+                        var tuple = PModificator.extractComparableTuple(btn, propId, state);
+                        if (!tuple || !tuple.length) return true;
+                        var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
+                        var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
+                        var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
+                        if (shouldHide) {
+                            btn.classList.add('pmod-hidden-minmax-value');
+                            btn.style.display = 'none';
+                            btn.setAttribute('aria-hidden', 'true');
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+
+            // 4) hidePresetButtons — не удаляет данные, но фиксирует единый pipeline
+            return userButtons;
         },
 
         extractComparableTuple: function (btn, propId, state) {
