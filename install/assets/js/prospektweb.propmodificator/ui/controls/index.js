@@ -94,6 +94,11 @@
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
+            var formatField = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
+            var formatInputs = Array.isArray(formatField && formatField.inputs) ? formatField.inputs : [];
+            var hidePresetButtons = formatInputs.some(function (input) {
+                return !!(input && input.hidePresetButtons);
+            });
 
             function onFormatChange(isImmediate) {
                 var rawW = parseInt(widthInput.value, 10);
@@ -197,81 +202,67 @@
                 }, { passive: false });
             });
 
-            function closeQuickValues() {
-                quickListEl.style.display = 'none';
-                quickListEl.innerHTML = '';
-                activeQuickInput = null;
-            }
+            if (hidePresetButtons) {
+                var focusedInput = null;
 
-            function collectFormatQuickValues(inputIndex) {
-                var field = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
-                var propId = state.skuPropCodeToId ? state.skuPropCodeToId[state.formatPropCode] : null;
-                var filteredButtons = PModificator.getFilteredCustomVariantButtons(valuesEl, field, parseInt(propId, 10), state);
-                var values = [];
-                filteredButtons.forEach(function (btn) {
-                    var tuple = PModificator.extractComparableTuple(btn, propId, state);
-                    if (!tuple || tuple[inputIndex] === undefined || tuple[inputIndex] === null) return;
-                    values.push(String(tuple[inputIndex]));
-                });
-                return Array.from(new Set(values));
-            }
-
-            function openQuickValuesForInput(input, inputIndex) {
-                var values = collectFormatQuickValues(inputIndex);
-                var search = String(input.value || '').trim().toLowerCase();
-                var filtered = values.filter(function (val) {
-                    return !search || String(val).toLowerCase().indexOf(search) === 0;
-                });
-
-                quickListEl.innerHTML = '';
-                if (!filtered.length) {
-                    var emptyEl = document.createElement('div');
-                    emptyEl.className = 'pmod-quick-values__empty';
-                    emptyEl.textContent = 'Нет доступных вариантов';
-                    quickListEl.appendChild(emptyEl);
-                } else {
-                    filtered.forEach(function (val) {
-                        var item = document.createElement('button');
-                        item.type = 'button';
-                        item.className = 'pmod-quick-values__item';
-                        item.textContent = val;
-                        item.addEventListener('click', function () {
-                            input.value = val;
-                            onFormatChange(true);
-                            closeQuickValues();
-                        });
-                        quickListEl.appendChild(item);
-                    });
-                }
-
-                var targetRect = input.getBoundingClientRect();
-                var uiRect = ui.getBoundingClientRect();
-                quickListEl.style.left = (targetRect.left - uiRect.left) + 'px';
-                quickListEl.style.top = (targetRect.bottom - uiRect.top + 6) + 'px';
-                quickListEl.style.width = targetRect.width + 'px';
-                quickListEl.style.display = 'block';
-                activeQuickInput = input;
-            }
-
-            [widthInput, heightInput].forEach(function (input, idx) {
-                input.addEventListener('focus', function () {
-                    openQuickValuesForInput(input, idx);
-                });
-                input.addEventListener('click', function () {
-                    openQuickValuesForInput(input, idx);
-                });
-                input.addEventListener('input', function () {
-                    if (activeQuickInput === input) {
-                        openQuickValuesForInput(input, idx);
+                function showPresetButtons() {
+                    PModificator.applyCustomFieldVariantRules(container, state);
+                    var hasVisibleButtons = !!valuesEl.querySelector('.sku-props__value:not(.pmod-hidden-technical-value):not(.pmod-hidden-minmax-value):not(.notallowed):not(.sku-props__value--disabled)');
+                    if (!hasVisibleButtons) {
+                        hidePresetButtonsList();
+                        return;
                     }
-                });
-            });
-
-            document.addEventListener('click', function (evt) {
-                if (!ui.contains(evt.target)) {
-                    closeQuickValues();
+                    valuesEl.classList.remove('pmod-preset-buttons--hidden');
+                    valuesEl.classList.add('pmod-preset-buttons--floating');
                 }
-            });
+
+                function hidePresetButtonsList() {
+                    valuesEl.classList.add('pmod-preset-buttons--hidden');
+                    valuesEl.classList.remove('pmod-preset-buttons--floating');
+                }
+
+                [widthInput, heightInput].forEach(function (input) {
+                    input.addEventListener('focus', function () {
+                        focusedInput = input;
+                        showPresetButtons();
+                    });
+                    input.addEventListener('click', function () {
+                        focusedInput = input;
+                        showPresetButtons();
+                    });
+                });
+
+                valuesEl.addEventListener('click', function (evt) {
+                    var btn = evt.target.closest('.sku-props__value');
+                    if (!btn) return;
+                    if (!focusedInput) return;
+                    if (btn.classList.contains('pmod-hidden-technical-value') || btn.classList.contains('pmod-hidden-minmax-value')) {
+                        return;
+                    }
+                    var enumId = String(btn.dataset.onevalue || '');
+                    var rawXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
+                        ? state.formatEnumMap[enumId]
+                        : String(btn.dataset.title || '');
+                    var tuple = String(rawXmlId).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
+                    if (!tuple || !tuple.length) return;
+                    if (focusedInput === widthInput && tuple[0] !== undefined) {
+                        widthInput.value = String(tuple[0]).replace(',', '.');
+                    }
+                    if (focusedInput === heightInput && tuple[1] !== undefined) {
+                        heightInput.value = String(tuple[1]).replace(',', '.');
+                    }
+                    onFormatChange(true);
+                }, true);
+
+                [widthInput, heightInput].forEach(function (input) {
+                    input.addEventListener('blur', function () {
+                        setTimeout(function () {
+                            if (document.activeElement === widthInput || document.activeElement === heightInput) return;
+                            hidePresetButtonsList();
+                        }, 200);
+                    });
+                });
+            }
 
             // Сохраняем ссылки для обновления из обработчика кликов
             inner._pmodWidthInput  = widthInput;
