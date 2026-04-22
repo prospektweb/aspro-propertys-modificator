@@ -635,6 +635,13 @@
                 var allButtons = Array.prototype.slice.call(valuesEl.querySelectorAll('.sku-props__value'));
                 if (!allButtons.length) return;
 
+                allButtons.forEach(function (btn) {
+                    btn.classList.remove('pmod-hidden-technical-value');
+                    btn.classList.remove('pmod-hidden-minmax-value');
+                    btn.style.display = '';
+                    btn.removeAttribute('aria-hidden');
+                });
+
                 // 1) собираем текущие допустимые варианты из DOM
                 var allowedButtons = allButtons.filter(function (btn) {
                     return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
@@ -649,6 +656,49 @@
                     return false;
                 });
 
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+                var hideTpValueIfMin = inputs.some(function (input) {
+                    return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
+                });
+                var hideTpValueIfMax = inputs.some(function (input) {
+                    return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
+                });
+
+                if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
+                    var comparableButtons = userButtons.map(function (btn) {
+                        return {
+                            btn: btn,
+                            tuple: PModificator.extractComparableTuple(btn, propId, state)
+                        };
+                    }).filter(function (item) {
+                        return item.tuple && item.tuple.length;
+                    });
+
+                    if (comparableButtons.length) {
+                        var minTuple = comparableButtons[0].tuple;
+                        var maxTuple = comparableButtons[0].tuple;
+                        comparableButtons.forEach(function (item) {
+                            if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
+                            if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
+                        });
+
+                        userButtons = userButtons.filter(function (btn) {
+                            var tuple = PModificator.extractComparableTuple(btn, propId, state);
+                            if (!tuple || !tuple.length) return true;
+                            var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
+                            var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
+                            var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
+                            if (shouldHide) {
+                                btn.classList.add('pmod-hidden-minmax-value');
+                                btn.style.display = 'none';
+                                btn.setAttribute('aria-hidden', 'true');
+                                return false;
+                            }
+                            return true;
+                        });
+                    }
+                }
+
                 // Если был активен технический вариант — переводим на пользовательский.
                 var activeBtn = valuesEl.querySelector('.sku-props__value--active');
                 if (activeBtn && activeBtn.classList.contains('pmod-hidden-technical-value')) {
@@ -660,14 +710,54 @@
                 }
 
                 // 3) применяем hide_variants (hidePresetButtons) после фильтрации.
-                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
                 var hideVariants = inputs.some(function (input) {
                     return !!(input && input.hidePresetButtons);
                 });
                 if (hideVariants) {
                     valuesEl.classList.add('pmod-preset-buttons--hidden');
+                } else {
+                    valuesEl.classList.remove('pmod-preset-buttons--hidden');
                 }
             });
+        },
+
+        extractComparableTuple: function (btn, propId, state) {
+            if (!btn) return null;
+            var enumId = String(btn.dataset.onevalue || '');
+            var title = String(btn.dataset.title || btn.textContent || '').trim();
+            var propIdNum = parseInt(propId, 10) || 0;
+            var xmlId = '';
+            if (propIdNum && state && state.skuPropsEnumMap && state.skuPropsEnumMap[propIdNum] && enumId) {
+                xmlId = String(state.skuPropsEnumMap[propIdNum][enumId] || '');
+            }
+            if (!xmlId && enumId) {
+                if (state && state.formatEnumMap && state.formatEnumMap[enumId] !== undefined) {
+                    xmlId = String(state.formatEnumMap[enumId]);
+                } else if (state && state.volumeEnumMap && state.volumeEnumMap[enumId] !== undefined) {
+                    xmlId = String(state.volumeEnumMap[enumId]);
+                }
+            }
+            var source = xmlId || title;
+            var matches = String(source).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
+            if (!matches || !matches.length) return null;
+            return matches.map(function (part) {
+                return Number(String(part).replace(',', '.'));
+            }).filter(function (num) {
+                return !isNaN(num);
+            });
+        },
+
+        compareComparableTuples: function (left, right) {
+            var l = Array.isArray(left) ? left : [];
+            var r = Array.isArray(right) ? right : [];
+            var maxLen = Math.max(l.length, r.length);
+            for (var i = 0; i < maxLen; i++) {
+                var lv = i < l.length ? Number(l[i]) : 0;
+                var rv = i < r.length ? Number(r[i]) : 0;
+                if (lv < rv) return -1;
+                if (lv > rv) return 1;
+            }
+            return 0;
         },
 
         isTechnicalCustomVariant: function (btn, field) {

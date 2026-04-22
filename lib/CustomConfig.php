@@ -151,6 +151,8 @@ class CustomConfig
             'measure'           => trim((string)($input['measure'] ?? ($legacyMeasure ?? ''))),
             'showMeasure'       => self::resolveBoolFlag($input, ['showMeasure', 'show_measure', 'showUnit', 'show_unit'], $legacyShowMeasure),
             'hidePresetButtons' => self::resolveBoolFlag($input, ['hidePresetButtons', 'hide_preset_buttons'], $legacyHidePresetButtons),
+            'hide_tp_value_if_min' => self::resolveBoolFlag($input, ['hide_tp_value_if_min', 'hideTpValueIfMin'], false),
+            'hide_tp_value_if_max' => self::resolveBoolFlag($input, ['hide_tp_value_if_max', 'hideTpValueIfMax'], false),
         ];
     }
 
