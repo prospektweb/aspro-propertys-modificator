@@ -155,12 +155,17 @@
 
             var debouncedChange = debounce(function () { onFormatChange(false); }, DEBOUNCE_MS);
 
-            widthInput.addEventListener('input',  debouncedChange);
-            heightInput.addEventListener('input', debouncedChange);
+            formatGroupInputs.forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    if (inner._pmodSuppressInputHandlers) return;
+                    debouncedChange();
+                });
+            });
 
             // Валидация при потере фокуса
             [widthInput, heightInput].forEach(function (inp) {
                 inp.addEventListener('blur', function () {
+                    if (inner._pmodSuppressInputHandlers) return;
                     var raw = parseInt(inp.value, 10);
                     var min = parseInt(inp.min, 10);
                     var max = parseInt(inp.max, 10);
@@ -176,6 +181,7 @@
             // +/- кнопки
             ui.querySelectorAll('.pmod-counter__minus, .pmod-counter__plus').forEach(function (btn) {
                 btn.addEventListener('click', function () {
+                    if (inner._pmodSuppressInputHandlers) return;
                     var inp     = btn.closest('.pmod-counter').querySelector('.pmod-counter__input');
                     var current = parseInt(inp.value, 10) || parseInt(inp.min, 10);
                     var s       = parseInt(inp.step, 10) || 1;
@@ -188,6 +194,7 @@
             // Колесико мыши
             [widthInput, heightInput].forEach(function (inp) {
                 inp.addEventListener('wheel', function (e) {
+                    if (inner._pmodSuppressInputHandlers) return;
                     if (document.activeElement !== inp) return;
                     e.preventDefault();
                     var current = parseInt(inp.value, 10) || parseInt(inp.min, 10);
@@ -234,13 +241,21 @@
                     var rawXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
                         ? state.formatEnumMap[enumId]
                         : String(btn.dataset.title || '');
-                    var tuple = String(rawXmlId).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
-                    if (!tuple || !tuple.length) return;
-                    formatGroupInputs.forEach(function (input, index) {
-                        if (tuple[index] === undefined) return;
-                        input.value = String(tuple[index]).replace(',', '.');
-                    });
-                    onFormatChange(true);
+                    var tuple = String(rawXmlId)
+                        .replace(/[×хХ]/g, 'x')
+                        .split('x')
+                        .map(function (part) { return String(part).trim(); })
+                        .filter(function (part) { return part !== ''; });
+                    if (!tuple.length) return;
+                    inner._pmodSuppressInputHandlers = true;
+                    try {
+                        formatGroupInputs.forEach(function (input, index) {
+                            if (tuple[index] === undefined) return;
+                            input.value = String(tuple[index]).replace(',', '.');
+                        });
+                    } finally {
+                        inner._pmodSuppressInputHandlers = false;
+                    }
                 }, true);
 
                 formatGroupInputs.forEach(function (input) {
@@ -256,6 +271,7 @@
             // Сохраняем ссылки для обновления из обработчика кликов
             inner._pmodWidthInput  = widthInput;
             inner._pmodHeightInput = heightInput;
+            inner._pmodFormatInputs = formatGroupInputs;
         },
 
         enhanceVolumeProp: function (inner, state, container) {
@@ -571,6 +587,9 @@
                     }
                     var wInput = innerEl._pmodWidthInput;
                     var hInput = innerEl._pmodHeightInput;
+                    var groupInputs = Array.isArray(innerEl._pmodFormatInputs) && innerEl._pmodFormatInputs.length
+                        ? innerEl._pmodFormatInputs
+                        : [wInput, hInput].filter(Boolean);
                     var enumId   = btn.dataset.onevalue || '';
                     var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
                         ? state.formatEnumMap[enumId]
@@ -587,13 +606,20 @@
                         state._pendingUiUpdate = true;
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     } else {
-                        // Клик по пресету FORMAT — обновляем поля ширины/высоты
-                        if (wInput && hInput) {
-                            var parts = fmtXmlId.toLowerCase().split('x');
-                            if (parts.length === 2) {
-                                wInput.value = parseInt(parts[0], 10) || wInput.value;
-                                hInput.value = parseInt(parts[1], 10) || hInput.value;
-                            }
+                        // Клик по пресету FORMAT — обновляем группу инпутов по VALUE_XML_ID
+                        var parts = String(fmtXmlId)
+                            .replace(/[×хХ]/g, 'x')
+                            .split('x')
+                            .map(function (part) { return String(part).trim(); })
+                            .filter(function (part) { return part !== ''; });
+                        innerEl._pmodSuppressInputHandlers = true;
+                        try {
+                            groupInputs.forEach(function (input, index) {
+                                if (!input || parts[index] === undefined) return;
+                                input.value = parts[index];
+                            });
+                        } finally {
+                            innerEl._pmodSuppressInputHandlers = false;
                         }
                         state.customWidth  = null;
                         state.customHeight = null;
