@@ -15,15 +15,6 @@
             var containers = document.querySelectorAll('.sku-props');
             if (!containers.length) return;
 
-            // Добавляем класс обрезки к h1 на детальной странице товара
-            var h1 = document.querySelector('h1');
-            if (h1) {
-                h1.classList.add('pmod-title-clamp');
-            }
-
-            // Синхронизируем title с textContent при любых изменениях h1
-            PModificator.setupH1TitleSync();
-
             containers.forEach(function (container) {
                 PModificator.initContainer(container, cfg);
             });
@@ -76,8 +67,6 @@
                 _volumeLabelTimer: null,
                 _otherPropRecalcTimer: null,
                 customValuesBySkuPropertyCode: {},
-                rawBaseTitleFromAspro: '',
-                renderedCustomTitle: '',
                 _pendingUiUpdate: false,
                 _uiRevision: 0,
                 _activeUiRevision: 0,
@@ -132,13 +121,6 @@
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
 
-            // Первичная фиксация базового заголовка и рендер кастомного заголовка.
-            state.rawBaseTitleFromAspro = PModificator.buildRawBaseTitleTemplate(
-                container,
-                state,
-                PModificator.getCurrentRawH1Text() || ''
-            );
-            state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(container, state, state.rawBaseTitleFromAspro);
             PModificator.applyFinalUiState(state);
 
             container._pmodState = state;
