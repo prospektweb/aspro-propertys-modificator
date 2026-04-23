@@ -146,6 +146,17 @@
     margin-bottom: 10px;
 }
 
+.pmod-admin-row__field {
+    display: grid;
+    gap: 4px;
+}
+
+.pmod-admin-mini-label {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.2;
+}
+
 .pmod-check {
     font-size: 13px;
     white-space: nowrap;

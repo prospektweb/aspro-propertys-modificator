@@ -173,13 +173,20 @@
             },
             replaceKeys: normalizedReplace,
             inputs: inputs,
-            inputLabels: normalizedInputLabels
+            inputLabels: normalizedInputLabels,
+            useUnifiedReplaceKey: readLegacyFlag(field, ['useUnifiedReplaceKey', 'use_unified_replace_key'], false),
+            unifiedReplaceKey: field && field.unifiedReplaceKey ? String(field.unifiedReplaceKey) : '',
+            unifiedSeparator: field && field.unifiedSeparator !== undefined ? String(field.unifiedSeparator) : 'x',
+            unifiedSuffix: field && field.unifiedSuffix !== undefined ? String(field.unifiedSuffix) : ''
         };
     }
 
     function syncFieldMode(field) {
         if (!field || !Array.isArray(field.inputs)) return;
         field.mode = field.inputs.length > 1 ? 'group' : 'single';
+        if (field.mode !== 'group') {
+            field.useUnifiedReplaceKey = false;
+        }
     }
 
     function normalizeState(rawState) {
@@ -353,6 +360,29 @@
         });
     }
 
+    function bindUnifiedReplaceEvents(root, field, textarea, state) {
+        var toggle = root.querySelector('[data-k="use-unified"]');
+        if (!toggle) return;
+        var optionsBox = root.querySelector('[data-role="unified-options"]');
+        function syncVisibility() {
+            if (optionsBox) {
+                optionsBox.style.display = field.useUnifiedReplaceKey ? '' : 'none';
+            }
+        }
+        toggle.onchange = function () {
+            field.useUnifiedReplaceKey = !!this.checked;
+            saveJson(textarea, state);
+            syncVisibility();
+        };
+        var keyInput = root.querySelector('[data-k="unified-key"]');
+        var sepInput = root.querySelector('[data-k="unified-sep"]');
+        var suffixInput = root.querySelector('[data-k="unified-suffix"]');
+        if (keyInput) keyInput.oninput = function () { field.unifiedReplaceKey = this.value; saveJson(textarea, state); };
+        if (sepInput) sepInput.oninput = function () { field.unifiedSeparator = this.value; saveJson(textarea, state); };
+        if (suffixInput) suffixInput.oninput = function () { field.unifiedSuffix = this.value; saveJson(textarea, state); };
+        syncVisibility();
+    }
+
     function renderEditor(root, textarea, rawState, props) {
         var state = normalizeState(rawState);
         root.innerHTML = '';
@@ -426,20 +456,35 @@
                 labelsBox.innerHTML = labelsGrid;
                 bindInputLabelEvents(labelsBox, field, textarea, state);
                 body.appendChild(labelsBox);
+
+                var unifiedBox = el('div', 'pmod-admin-binding');
+                unifiedBox.innerHTML =
+                    '<div class="pmod-admin-binding__grid">'
+                    + '<label><span class="pmod-admin-mini-label">Общий режим подстановки</span>'
+                    + '<label class="pmod-check"><input type="checkbox" data-k="use-unified" ' + (field.useUnifiedReplaceKey ? 'checked' : '') + '>Единый ключ для подстановки</label></label>'
+                    + '</div>'
+                    + '<div data-role="unified-options" style="' + (field.useUnifiedReplaceKey ? '' : 'display:none;') + '">'
+                    + '<div class="pmod-admin-binding__grid">'
+                    + '<label><span class="pmod-admin-mini-label">Ключ единой замены</span><input class="pmod-inp" data-k="unified-key" placeholder="Например: #FORMAT#" value="' + escapeHtml(field.unifiedReplaceKey || '') + '"></label>'
+                    + '<label><span class="pmod-admin-mini-label">Разделитель произвольных значений</span><input class="pmod-inp" data-k="unified-sep" placeholder="x" value="' + escapeHtml(field.unifiedSeparator || 'x') + '"></label>'
+                    + '<label><span class="pmod-admin-mini-label">Добавить подстроку в конец</span><input class="pmod-inp" data-k="unified-suffix" placeholder="мм" value="' + escapeHtml(field.unifiedSuffix || '') + '"></label>'
+                    + '</div></div>';
+                bindUnifiedReplaceEvents(unifiedBox, field, textarea, state);
+                body.appendChild(unifiedBox);
             }
 
             field.inputs.forEach(function (input, inputIdx) {
                 var row = el('div', 'pmod-admin-row');
                 row.innerHTML =
-                    '<input class="pmod-inp" data-k="min" placeholder="Минимум" value="' + escapeHtml(input.min) + '">'
-                    + '<input class="pmod-inp" data-k="step" placeholder="Шаг" value="' + escapeHtml(input.step) + '">'
-                    + '<input class="pmod-inp" data-k="max" placeholder="Максимум" value="' + escapeHtml(input.max) + '">'
-                    + '<input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '">'
+                    '<label class="pmod-admin-row__field"><span class="pmod-admin-mini-label">Минимум</span><input class="pmod-inp" data-k="min" placeholder="Минимум" value="' + escapeHtml(input.min) + '"></label>'
+                    + '<label class="pmod-admin-row__field"><span class="pmod-admin-mini-label">Шаг</span><input class="pmod-inp" data-k="step" placeholder="Шаг" value="' + escapeHtml(input.step) + '"></label>'
+                    + '<label class="pmod-admin-row__field"><span class="pmod-admin-mini-label">Максимум</span><input class="pmod-inp" data-k="max" placeholder="Максимум" value="' + escapeHtml(input.max) + '"></label>'
+                    + '<label class="pmod-admin-row__field"><span class="pmod-admin-mini-label">Единица измерения</span><input class="pmod-inp" data-k="measure" placeholder="Ед. изм." value="' + escapeHtml(input.measure || '') + '"></label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="show" ' + (input.showMeasure ? 'checked' : '') + '>Показывать ед. изм.</label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="hide" ' + (input.hidePresetButtons ? 'checked' : '') + '>Скрывать варианты</label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="hide-min" ' + (input.hide_tp_value_if_min ? 'checked' : '') + '>Скрыть ТП по свойству равное минимуму</label>'
                     + '<label class="pmod-check"><input type="checkbox" data-k="hide-max" ' + (input.hide_tp_value_if_max ? 'checked' : '') + '>Скрыть ТП по свойству равное максимуму</label>'
-                    + '<input class="pmod-inp" data-k="replace" title="Ключ, по которому подставляется пользовательское значение в шаблон/замену." placeholder="Подстановка по ключу" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '">';
+                    + '<label class="pmod-admin-row__field"><span class="pmod-admin-mini-label">Ключ подстановки</span><input class="pmod-inp" data-k="replace" title="Ключ, по которому подставляется пользовательское значение в шаблон/замену." placeholder="Подстановка по ключу" value="' + escapeHtml((field.replaceKeys[inputIdx] && field.replaceKeys[inputIdx].key) || '') + '"></label>';
 
                 bindRowEvents(row, field, input, inputIdx, textarea, state);
                 body.appendChild(row);

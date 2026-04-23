@@ -218,13 +218,38 @@
             state.customConfig.fields.forEach(function (field) {
                 var skuCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
                 if (!skuCode) return;
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+                var isUnifiedGroup = field && field.mode === 'group' && !!field.useUnifiedReplaceKey;
+                if (isUnifiedGroup) {
+                    var unifiedKey = String(field.unifiedReplaceKey || '').trim();
+                    if (!unifiedKey || newText.indexOf(unifiedKey) === -1) return;
+                    var fallbackUnifiedParts = self.getDisplayValueParts(container, state, skuCode, inputs.length || 1);
+                    var unifiedValues = [];
+                    for (var u = 0; u < (inputs.length || 1); u++) {
+                        var customUnified = self.getCustomValueByIndex(state, skuCode, u);
+                        var valueUnified = customUnified !== null && customUnified !== undefined && customUnified !== ''
+                            ? customUnified
+                            : fallbackUnifiedParts[u];
+                        var normalizedUnified = String(valueUnified == null ? '' : valueUnified).trim();
+                        if (normalizedUnified !== '') {
+                            unifiedValues.push(normalizedUnified);
+                        }
+                    }
+                    if (!unifiedValues.length) return;
+                    var separator = field.unifiedSeparator !== undefined ? String(field.unifiedSeparator) : 'x';
+                    var suffix = field.unifiedSuffix !== undefined ? String(field.unifiedSuffix) : '';
+                    var replacementUnified = unifiedValues.join(separator) + suffix;
+                    newText = newText.split(unifiedKey).join(replacementUnified);
+                    return;
+                }
+
                 var replaceKeys = Array.isArray(field.replaceKeys) ? field.replaceKeys : [];
                 if (!replaceKeys.length) return;
 
                 var fallbackParts = self.getDisplayValueParts(container, state, skuCode, replaceKeys.length);
                 replaceKeys.forEach(function (rk, idx) {
                     var key = String(rk && rk.key || '').trim();
-                    if (!key) return;
+                    if (!key || newText.indexOf(key) === -1) return;
                     var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
                     var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
                         ? parsedInputIndex
@@ -244,47 +269,6 @@
 
         buildRawBaseTitleTemplate: function (container, state, currentTitle) {
             var template = String(currentTitle || '').trim();
-            if (!template || !state || !state.customConfig || !Array.isArray(state.customConfig.fields)) {
-                return template;
-            }
-
-            var self = this;
-            state.customConfig.fields.forEach(function (field) {
-                var skuCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
-                if (!skuCode) return;
-                var replaceKeys = Array.isArray(field.replaceKeys) ? field.replaceKeys : [];
-                if (!replaceKeys.length) return;
-
-                var fallbackParts = self.getDisplayValueParts(container, state, skuCode, replaceKeys.length);
-                replaceKeys.forEach(function (rk, idx) {
-                    var key = String(rk && rk.key || '').trim();
-                    if (!key) return;
-
-                    var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
-                    var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
-                        ? parsedInputIndex
-                        : idx;
-                    var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
-                    var fallbackVal = self.formatDisplayValueByInput(field, inputIndex, fallbackParts[inputIndex]);
-                    var valueCandidates = [];
-                    if (customVal !== null && customVal !== undefined && customVal !== '') {
-                        valueCandidates.push(self.formatDisplayValueByInput(field, inputIndex, customVal));
-                    }
-                    if (fallbackVal) {
-                        valueCandidates.push(fallbackVal);
-                    }
-
-                    if (template.indexOf(key) !== -1) return;
-                    for (var c = 0; c < valueCandidates.length; c++) {
-                        var concreteVal = valueCandidates[c];
-                        if (!concreteVal || concreteVal === key) continue;
-                        if (template.indexOf(concreteVal) === -1) continue;
-                        template = template.split(concreteVal).join(key);
-                        break;
-                    }
-                });
-            });
-
             return template;
         },
 
