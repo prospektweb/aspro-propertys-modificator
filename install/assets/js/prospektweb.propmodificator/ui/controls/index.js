@@ -99,9 +99,10 @@
                 }, 0);
             });
 
-            // Найти кнопку «Произвольный формат» (XML_ID="X")
-            var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
             var formatField = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
+            // Техническая кнопка для custom-режима (приоритет: marker.xmlId из карты сопоставлений).
+            var technicalFormatBtn = PModificator.findTechnicalButton(valuesEl, state, formatPropId, formatField)
+                || PModificator.findCustomButton(valuesEl, state.formatEnumMap);
             var formatInputs = Array.isArray(formatField && formatField.inputs) ? formatField.inputs : [];
             var hidePresetButtons = formatInputs.some(function (input) {
                 return !!(input && input.hidePresetButtons);
@@ -126,7 +127,7 @@
                 }
 
                 // Ищем точное совпадение с пресетом
-                var matched = PModificator.findFormatPreset(valuesEl, w, h, state.formatEnumMap);
+                var matched = PModificator.findFormatPreset(valuesEl, state, formatPropId, w, h);
                 if (matched) {
                     // Кликаем на пресет — стандартная логика Аспро
                     if (!matched.classList.contains('sku-props__value--active')) {
@@ -144,15 +145,15 @@
                     PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [w, h]);
                     PModificator.recomputeCustomMode(state);
 
-                    // Выбираем кнопку «Произвольный формат» или ближайший пресет
-                    if (customBtn) {
-                        if (!customBtn.classList.contains('sku-props__value--active')) {
+                    // Выбираем технический ТП custom-режима (по marker.xmlId / XML_ID карте).
+                    if (technicalFormatBtn) {
+                        if (!technicalFormatBtn.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
-                            customBtn.click();
+                            technicalFormatBtn.click();
                             didTriggerSkuSwitch = true;
                         }
                     } else {
-                        var nearest = PModificator.findNearestFormatPreset(valuesEl, w, h, state.formatEnumMap);
+                        var nearest = PModificator.findNearestFormatPreset(valuesEl, state, formatPropId, w, h);
                         if (nearest && !nearest.classList.contains('sku-props__value--active')) {
                             inner._pmodProgrammaticChange = true;
                             nearest.click();
@@ -886,34 +887,61 @@
             return found;
         },
 
-        findFormatPreset: function (valuesEl, w, h, formatEnumMap) {
-            var target = w + 'x' + h;
+        findTechnicalButton: function (valuesEl, state, propId, field) {
+            if (!valuesEl) return null;
+            var marker = field && field.binding && field.binding.marker ? field.binding.marker : {};
+            var markerXmlId = String(marker.xmlId || '').trim().toLowerCase();
+            var markerValue = String(marker.value || '').trim().toLowerCase();
+            var btns = valuesEl.querySelectorAll('.sku-props__value');
+
+            for (var i = 0; i < btns.length; i++) {
+                var btn = btns[i];
+                var enumId = String(btn.dataset.onevalue || '');
+                var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, enumId);
+                var normalizedXmlId = String(xmlId || '').trim().toLowerCase();
+                var title = String(btn.dataset.title || '').trim().toLowerCase();
+                var text = String(btn.textContent || '').trim().toLowerCase();
+
+                if (markerXmlId && normalizedXmlId === markerXmlId) {
+                    return btn;
+                }
+                if (markerValue && (title === markerValue || text === markerValue)) {
+                    return btn;
+                }
+            }
+            return null;
+        },
+
+        findFormatPreset: function (valuesEl, state, propId, w, h) {
+            var targetW = Number(w);
+            var targetH = Number(h);
             var btns = valuesEl.querySelectorAll('.sku-props__value');
             for (var i = 0; i < btns.length; i++) {
-                var eid    = btns[i].dataset.onevalue || '';
-                var xmlId  = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
-                    ? String(formatEnumMap[eid])
-                    : '';
-                if (xmlId && xmlId.toLowerCase() === target.toLowerCase()) {
+                var eid = btns[i].dataset.onevalue || '';
+                var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, eid);
+                if (!xmlId) continue;
+                var tuple = PModificator.parseXmlIdTuple(xmlId);
+                if (tuple.length < 2) continue;
+                var bw = Number(tuple[0]);
+                var bh = Number(tuple[1]);
+                if (!isNaN(bw) && !isNaN(bh) && bw === targetW && bh === targetH) {
                     return btns[i];
                 }
             }
             return null;
         },
 
-        findNearestFormatPreset: function (valuesEl, w, h, formatEnumMap) {
+        findNearestFormatPreset: function (valuesEl, state, propId, w, h) {
             var area = w * h;
             var best = null, bestDist = Infinity;
             valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {
-                var eid   = btn.dataset.onevalue || '';
-                var xmlId = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
-                    ? String(formatEnumMap[eid])
-                    : '';
+                var eid = btn.dataset.onevalue || '';
+                var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, eid);
                 if (!xmlId) return;
-                var parts = xmlId.toLowerCase().split('x');
-                if (parts.length !== 2) return;
-                var bw = parseInt(parts[0], 10);
-                var bh = parseInt(parts[1], 10);
+                var tuple = PModificator.parseXmlIdTuple(xmlId);
+                if (tuple.length < 2) return;
+                var bw = Number(tuple[0]);
+                var bh = Number(tuple[1]);
                 if (isNaN(bw) || isNaN(bh)) return;
                 var d = Math.abs(bw * bh - area);
                 if (d < bestDist) { bestDist = d; best = btn; }
