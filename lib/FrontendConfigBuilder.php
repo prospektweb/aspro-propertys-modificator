@@ -45,6 +45,7 @@ class FrontendConfigBuilder
                     'offers' => $productData['offers'],
                     'volumeEnumMap' => $productData['volumeEnumMap'],
                     'formatEnumMap' => $productData['formatEnumMap'],
+                    'skuPropsEnumMap' => $productData['skuPropsEnumMap'],
                     'catalogGroups' => $productData['catalogGroups'],
                     'canBuyGroups' => $productData['canBuyGroups'],
                     'allPropIds' => $productData['allPropIds'],
