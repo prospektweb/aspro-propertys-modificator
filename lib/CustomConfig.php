@@ -63,6 +63,10 @@ class CustomConfig
                     return self::normalizeInput($input, $legacyInputDefaults);
                 }, $inputs),
                 'inputLabels' => $inputLabels,
+                'useUnifiedReplaceKey' => self::resolveBoolFlag($field, ['useUnifiedReplaceKey', 'use_unified_replace_key'], false),
+                'unifiedReplaceKey' => trim((string)($field['unifiedReplaceKey'] ?? '')),
+                'unifiedSeparator' => (string)($field['unifiedSeparator'] ?? 'x'),
+                'unifiedSuffix' => (string)($field['unifiedSuffix'] ?? ''),
             ];
         }
 
