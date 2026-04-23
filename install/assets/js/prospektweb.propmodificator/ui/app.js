@@ -57,6 +57,7 @@
                 volumePropCode:   productCfg.volumePropCode || '',
                 volumeEnumMap:    productCfg.volumeEnumMap || {},
                 formatEnumMap:    productCfg.formatEnumMap || {},
+                skuPropsEnumMap:  productCfg.skuPropsEnumMap || {},
                 customConfig:     productCfg.customConfig || {},
                 skuPropCodeToId:  productCfg.skuPropCodeToId || {},
                 catalogGroups:    catalogGroups,

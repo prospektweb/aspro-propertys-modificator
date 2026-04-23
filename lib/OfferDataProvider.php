@@ -53,6 +53,7 @@ class OfferDataProvider
         $volumeEnumMap = $this->loadVolumeEnumMap($volumePropId);
         $formatEnumMap = $this->propertyBindingResolver->loadEnumXmlMap($formatPropId);
         $otherProps = $this->loadOtherListProps($offersIblockId, $formatPropCode, $volumePropCode);
+        $skuPropsEnumMap = $this->loadSkuPropsEnumMap($formatPropId, $volumePropId, $otherProps);
 
         $offersData = $this->loadOffers($productId, $offersIblockId, $formatPropCode, $volumePropCode, $formatEnumMap, $volumeEnumMap, $otherProps);
         $offers = $offersData['offers'];
@@ -88,6 +89,7 @@ class OfferDataProvider
             'offers' => array_values($offers),
             'volumeEnumMap' => $volumeEnumMap,
             'formatEnumMap' => $formatEnumMap,
+            'skuPropsEnumMap' => $skuPropsEnumMap,
             'catalogGroups' => $this->loadCatalogGroups(),
             'canBuyGroups' => $this->loadCanBuyGroups(),
             'allPropIds' => array_keys($otherProps),
@@ -124,6 +126,32 @@ class OfferDataProvider
             }
         }
         return $otherProps;
+    }
+
+    /**
+     * @param array<int,string> $otherProps
+     * @return array<int,array<int,string>>
+     */
+    private function loadSkuPropsEnumMap(?int $formatPropId, ?int $volumePropId, array $otherProps): array
+    {
+        $result = [];
+        $propIds = array_unique(array_filter(array_merge(
+            [$formatPropId, $volumePropId],
+            array_keys($otherProps)
+        )));
+
+        foreach ($propIds as $propIdRaw) {
+            $propId = (int)$propIdRaw;
+            if ($propId <= 0) {
+                continue;
+            }
+            $enumMap = $this->propertyBindingResolver->loadEnumXmlMap($propId);
+            if (!empty($enumMap)) {
+                $result[$propId] = $enumMap;
+            }
+        }
+
+        return $result;
     }
 
     private function loadOffers(int $productId, int $offersIblockId, string $formatPropCode, string $volumePropCode, array $formatEnumMap, array $volumeEnumMap, array $otherProps): array

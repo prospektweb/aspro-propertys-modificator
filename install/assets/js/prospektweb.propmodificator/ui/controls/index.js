@@ -16,6 +16,7 @@
         enhanceFormatProp: function (inner, state, container) {
             var valuesEl  = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
+            var formatPropId = parseInt(inner.dataset.id, 10) || 0;
 
             var groupCfg = state.formatCfg;
             var minFirstInput   = groupCfg.MIN_WIDTH  || 10;
@@ -42,11 +43,9 @@
             var initialSecondInputValue = minSecondInput;
 
             if (activeBtn) {
-                // Предпочитаем VALUE_XML_ID из formatEnumMap (вида "210x297"), fallback — data-title
+                // Предпочитаем VALUE_XML_ID из enum map, подготовленной на backend.
                 var afmtEnumId = activeBtn.dataset.onevalue || '';
-                var afmtXmlId  = (state.formatEnumMap && afmtEnumId && state.formatEnumMap[afmtEnumId] !== undefined)
-                    ? state.formatEnumMap[afmtEnumId]
-                    : (activeBtn.dataset.title || '');
+                var afmtXmlId = PModificator.getEnumXmlIdByPropId(state, formatPropId, afmtEnumId);
                 var tuple = PModificator.parseXmlIdTuple(afmtXmlId);
                 if (tuple.length >= 2) {
                     initialFirstInputValue = parseInt(tuple[0], 10) || minFirstInput;
@@ -268,6 +267,7 @@
         enhanceVolumeProp: function (inner, state, container) {
             var valuesEl = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
+            var volumePropId = parseInt(inner.dataset.id, 10) || 0;
 
             var volCfg        = state.volumeCfg;
             var volumeEnumMap = state.volumeEnumMap; // enumId → xmlIdNumber
@@ -292,12 +292,10 @@
             var initXmlId = minV;
             if (activeBtn) {
                 var ae = activeBtn.dataset.onevalue;
-                var aeXmlId = (volumeEnumMap && ae && volumeEnumMap[ae] !== undefined)
-                    ? volumeEnumMap[ae]
-                    : null;
+                var aeXmlId = PModificator.getEnumXmlIdByPropId(state, volumePropId, ae);
                 initXmlId = (aeXmlId !== null && aeXmlId !== 'X')
                     ? (parseInt(aeXmlId, 10) || minV)
-                    : (parseInt(activeBtn.dataset.title, 10) || minV);
+                    : minV;
             }
 
             var ui = document.createElement('div');
@@ -332,9 +330,8 @@
             var xmlIdToBtnMap = {};
             presetBtns.forEach(function (btn) {
                 var eid = btn.dataset.onevalue || '';
-                var xmlId = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
-                    ? parseInt(volumeEnumMap[eid], 10)
-                    : (parseInt(btn.dataset.title, 10) || 0);
+                var rawXmlId = PModificator.getEnumXmlIdByPropId(state, volumePropId, eid);
+                var xmlId = parseInt(rawXmlId, 10) || 0;
                 if (xmlId) xmlIdToBtnMap[xmlId] = btn;
             });
 
@@ -583,9 +580,11 @@
                         ? innerEl._pmodFormatInputs
                         : [firstInput, secondInput].filter(Boolean);
                     var enumId   = btn.dataset.onevalue || '';
-                    var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
-                        ? state.formatEnumMap[enumId]
-                        : (btn.dataset.title || '');
+                    var fmtXmlId = PModificator.getEnumXmlIdByPropId(state, parseInt(propId, 10), enumId);
+                    if (!fmtXmlId) {
+                        innerEl._pmodPresetSelectionInProgress = false;
+                        return;
+                    }
 
                     if (fmtXmlId === 'X') {
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
@@ -628,9 +627,8 @@
                     }
                     var vInput = innerEl._pmodVolumeInput;
                     var enumId     = btn.dataset.onevalue || '';
-                    var rawVolXmlId = (state.volumeEnumMap && enumId && state.volumeEnumMap[enumId] !== undefined)
-                        ? state.volumeEnumMap[enumId]
-                        : (btn.dataset.title || '');
+                    var rawVolXmlId = PModificator.getEnumXmlIdByPropId(state, parseInt(propId, 10), enumId);
+                    if (!rawVolXmlId) return;
 
                     if (rawVolXmlId === 'X') {
                         // Клик по «Произвольный тираж» — включить custom mode
@@ -830,30 +828,31 @@
                 .map(function (part) {
                     var cleaned = String(part || '').trim();
                     if (!cleaned) return '';
-                    var match = cleaned.match(/-?\d+(?:[.,]\d+)?/);
-                    return match && match[0] ? String(match[0]).replace(',', '.') : '';
+                    var matches = cleaned.match(/-?\d+(?:[.,]\d+)?/g);
+                    if (!matches || !matches.length) return '';
+                    var token = matches[matches.length - 1];
+                    return String(token).replace(',', '.');
                 })
                 .filter(function (part) { return part !== ''; });
+        },
+
+        getEnumXmlIdByPropId: function (state, propId, enumId) {
+            var pid = parseInt(propId, 10) || 0;
+            var eid = String(enumId || '');
+            if (!pid || !eid || !state || !state.skuPropsEnumMap || !state.skuPropsEnumMap[pid]) {
+                return '';
+            }
+            var map = state.skuPropsEnumMap[pid] || {};
+            if (map[eid] === undefined || map[eid] === null) return '';
+            return String(map[eid]);
         },
 
         extractComparableTuple: function (btn, propId, state) {
             if (!btn) return null;
             var enumId = String(btn.dataset.onevalue || '');
-            var title = String(btn.dataset.title || btn.textContent || '').trim();
-            var propIdNum = parseInt(propId, 10) || 0;
-            var xmlId = '';
-            if (propIdNum && state && state.skuPropsEnumMap && state.skuPropsEnumMap[propIdNum] && enumId) {
-                xmlId = String(state.skuPropsEnumMap[propIdNum][enumId] || '');
-            }
-            if (!xmlId && enumId) {
-                if (state && state.formatEnumMap && state.formatEnumMap[enumId] !== undefined) {
-                    xmlId = String(state.formatEnumMap[enumId]);
-                } else if (state && state.volumeEnumMap && state.volumeEnumMap[enumId] !== undefined) {
-                    xmlId = String(state.volumeEnumMap[enumId]);
-                }
-            }
-            var source = xmlId || title;
-            var matches = String(source).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
+            var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, enumId);
+            if (!xmlId) return null;
+            var matches = String(xmlId).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
             if (!matches || !matches.length) return null;
             return matches.map(function (part) {
                 return Number(String(part).replace(',', '.'));
@@ -911,10 +910,9 @@
             for (var i = 0; i < btns.length; i++) {
                 var eid    = btns[i].dataset.onevalue || '';
                 var xmlId  = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
-                    ? formatEnumMap[eid]
-                    : (btns[i].dataset.onevalue || btns[i].dataset.title || '');
-                var title  = (btns[i].dataset.title || '').toLowerCase().replace(/[^0-9x]/g, '');
-                if (xmlId.toLowerCase() === target.toLowerCase() || title === target.toLowerCase()) {
+                    ? String(formatEnumMap[eid])
+                    : '';
+                if (xmlId && xmlId.toLowerCase() === target.toLowerCase()) {
                     return btns[i];
                 }
             }
@@ -927,8 +925,9 @@
             valuesEl.querySelectorAll('.sku-props__value').forEach(function (btn) {
                 var eid   = btn.dataset.onevalue || '';
                 var xmlId = (formatEnumMap && eid && formatEnumMap[eid] !== undefined)
-                    ? formatEnumMap[eid]
-                    : (btn.dataset.title || '');
+                    ? String(formatEnumMap[eid])
+                    : '';
+                if (!xmlId) return;
                 var parts = xmlId.toLowerCase().split('x');
                 if (parts.length !== 2) return;
                 var bw = parseInt(parts[0], 10);
@@ -946,7 +945,7 @@
                 var eid = btns[i].dataset.onevalue || '';
                 var xmlId = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
                     ? parseInt(volumeEnumMap[eid], 10)
-                    : parseInt(btns[i].dataset.title, 10);
+                    : NaN;
                 if (xmlId === v) return btns[i];
             }
             return null;
@@ -958,7 +957,7 @@
                 var eid = btn.dataset.onevalue || '';
                 var t = (volumeEnumMap && eid && volumeEnumMap[eid] !== undefined)
                     ? parseInt(volumeEnumMap[eid], 10)
-                    : parseInt((btn.dataset.title || '').replace(/[^0-9]/g, ''), 10);
+                    : NaN;
                 if (isNaN(t)) return;
                 var d = Math.abs(t - v);
                 if (d < bestDist) { bestDist = d; best = btn; }
