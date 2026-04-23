@@ -521,15 +521,10 @@
             if (!state || !state.containerEl) return;
 
             var h1 = PModificator.getH1Element();
-            var title = state.customMode ? (state.renderedCustomTitle || '').trim() : '';
-            if (h1 && title) {
-                h1._pmodUpdatingTitle = true;
-                h1.textContent = title;
-                h1.title = title;
-                h1._pmodUpdatingTitle = false;
-            } else if (h1 && !state.customMode) {
-                // Для опорных (некастомных) ТП не вмешиваемся в h1/textContent:
+            if (h1) {
+                // Не вмешиваемся в h1/textContent:
                 // штатное название должно приходить из Aspro без подмен со стороны pmod.
+                // Разрешена только безопасная синхронизация атрибута title с текущим текстом.
                 var nativeTitle = (h1.textContent || '').trim();
                 if (nativeTitle && h1.title !== nativeTitle) {
                     h1.title = nativeTitle;

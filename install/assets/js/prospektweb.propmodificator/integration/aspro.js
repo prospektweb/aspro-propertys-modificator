@@ -76,7 +76,7 @@
                     ) {
                         state.rawBaseTitleFromAspro = normalizedAsproTitle;
                     }
-                    state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                    state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
                         state,
                         state.rawBaseTitleFromAspro
@@ -148,7 +148,7 @@
                 ) {
                     state.rawBaseTitleFromAspro = normalizedNoWait;
                 }
-                state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
                     state.containerEl,
                     state,
                     state.rawBaseTitleFromAspro
@@ -176,7 +176,7 @@
                     ) {
                         state.rawBaseTitleFromAspro = normalizedByTimer;
                     }
-                    state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(
+                    state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
                         state.containerEl,
                         state,
                         state.rawBaseTitleFromAspro
