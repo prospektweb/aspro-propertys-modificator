@@ -8,6 +8,7 @@
     var clamp = utils.clamp || function (val, min, max) { return Math.max(min, Math.min(max, val)); };
     var debounce = utils.debounce || function (fn) { return fn; };
     var syncUrlPmodVolume = utils.syncUrlPmodVolume || function () {};
+    var syncUrlPmodPropertyValue = utils.syncUrlPmodPropertyValue || function () {};
     var hasNumberValue = utils.hasNumberValue || function (value) { return value !== null && value !== undefined; };
     var DEBOUNCE_MS = 300;
     var PRICE_UPDATE_TIMEOUT_MS = 400;
@@ -139,11 +140,13 @@
                     state.customHeight = null;
                     PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, null);
                     PModificator.recomputeCustomMode(state);
+                    syncUrlPmodPropertyValue(state.formatPropCode, null);
                 } else {
                     state.customWidth  = w;
                     state.customHeight = h;
                     PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [w, h]);
                     PModificator.recomputeCustomMode(state);
+                    syncUrlPmodPropertyValue(state.formatPropCode, [w, h]);
 
                     // Выбираем технический ТП custom-режима (по marker.xmlId / XML_ID карте).
                     if (technicalFormatBtn) {
@@ -437,6 +440,7 @@
                     PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
+                    syncUrlPmodPropertyValue(state.volumePropCode, null);
 
                     // Обновляем лейбл тиража с реальным числом
                     var presetStr = v.toLocaleString('ru-RU');
@@ -449,6 +453,7 @@
                     PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, [v]);
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(v);
+                    syncUrlPmodPropertyValue(state.volumePropCode, [v]);
 
                     if (customBtn) {
                         if (!customBtn.classList.contains('sku-props__value--active')) {
@@ -576,6 +581,7 @@
                         state.customHeight = secondInput ? (parseInt(secondInput.value, 10) || null) : null;
                         if (hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight)) {
                             PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [state.customWidth, state.customHeight]);
+                            syncUrlPmodPropertyValue(state.formatPropCode, [state.customWidth, state.customHeight]);
                         }
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
@@ -595,6 +601,7 @@
                         state.customWidth  = null;
                         state.customHeight = null;
                         PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, null);
+                        syncUrlPmodPropertyValue(state.formatPropCode, null);
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
@@ -619,6 +626,7 @@
                         state.customVolume = vInput ? (parseInt(vInput.value, 10) || null) : null;
                         if (hasNumberValue(state.customVolume)) {
                             PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, [state.customVolume]);
+                            syncUrlPmodPropertyValue(state.volumePropCode, [state.customVolume]);
                         }
                         PModificator.recomputeCustomMode(state);
                         state._pendingUiUpdate = true;
@@ -631,6 +639,7 @@
                         }
                         state.customVolume = null;
                         PModificator.setCustomValuesForSkuCode(state, state.volumePropCode, null);
+                        syncUrlPmodPropertyValue(state.volumePropCode, null);
                         PModificator.recomputeCustomMode(state);
                         if (state._volumeLabelTimer) {
                             clearTimeout(state._volumeLabelTimer);
@@ -962,6 +971,36 @@
                 if (d < bestDist) { bestDist = d; best = btn; }
             });
             return best;
+        },
+
+        reapplyTechnicalButtonsForCustomValues: function (state) {
+            if (!state || !state.containerEl || !state.customValuesBySkuPropertyCode) return false;
+
+            var hasReapplied = false;
+            Object.keys(state.customValuesBySkuPropertyCode).forEach(function (skuCode) {
+                var propId = state.skuPropCodeToId && state.skuPropCodeToId[skuCode]
+                    ? parseInt(state.skuPropCodeToId[skuCode], 10)
+                    : 0;
+                if (!propId) return;
+
+                var innerEl = state.containerEl.querySelector('.sku-props__inner[data-id="' + propId + '"]');
+                if (!innerEl) return;
+                var valuesEl = innerEl.querySelector('.sku-props__values');
+                if (!valuesEl) return;
+
+                var field = PModificator.findCustomFieldByPropCode(state, skuCode);
+                var enumMap = state.skuPropsEnumMap && state.skuPropsEnumMap[propId] ? state.skuPropsEnumMap[propId] : null;
+                var technicalBtn = PModificator.findTechnicalButton(valuesEl, state, propId, field)
+                    || PModificator.findCustomButton(valuesEl, enumMap);
+
+                if (technicalBtn && !technicalBtn.classList.contains('sku-props__value--active')) {
+                    innerEl._pmodProgrammaticChange = true;
+                    technicalBtn.click();
+                    hasReapplied = true;
+                }
+            });
+
+            return hasReapplied;
         }
 
     };

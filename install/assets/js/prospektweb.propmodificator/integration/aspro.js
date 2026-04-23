@@ -60,6 +60,9 @@
                     // После перерисовки SKU повторно применяем фильтры вариантов
                     // (технические значения + hidePresetButtons).
                     PModificator.applyCustomFieldVariantRules(state.containerEl, state);
+                    // Если есть произвольные значения в инпутах, после SKU-перерисовки
+                    // повторно активируем технические значения соответствующих свойств.
+                    PModificator.reapplyTechnicalButtonsForCustomValues(state);
 
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
