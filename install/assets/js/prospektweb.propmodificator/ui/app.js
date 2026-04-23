@@ -77,7 +77,7 @@
                 _otherPropRecalcTimer: null,
                 customValuesBySkuPropertyCode: {},
                 rawBaseTitleFromAspro: '',
-                renderedCustomTitle: '',
+                previewCustomTitle: '',
                 _pendingUiUpdate: false,
                 _uiRevision: 0,
                 _activeUiRevision: 0,
@@ -132,13 +132,17 @@
             // Перехватываем отправку корзины
             PModificator.hookBasket(container, state);
 
-            // Первичная фиксация базового заголовка и рендер кастомного заголовка.
+            // Первичная фиксация базового заголовка и расчёт preview-версии.
             state.rawBaseTitleFromAspro = PModificator.buildRawBaseTitleTemplate(
                 container,
                 state,
                 PModificator.getCurrentRawH1Text() || ''
             );
-            state.renderedCustomTitle = PModificator.refreshH1ByCustomConfig(container, state, state.rawBaseTitleFromAspro);
+            state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
+                container,
+                state,
+                state.rawBaseTitleFromAspro
+            );
             PModificator.applyFinalUiState(state);
 
             container._pmodState = state;
