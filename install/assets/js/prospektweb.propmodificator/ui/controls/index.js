@@ -86,11 +86,7 @@
 
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
-            var quickListEl = document.createElement('div');
-            quickListEl.className = 'pmod-quick-values';
-            quickListEl.style.display = 'none';
-            ui.appendChild(quickListEl);
-            var activeQuickInput = null;
+            var formatGroupInputs = Array.prototype.slice.call(ui.querySelectorAll('.pmod-counter__input'));
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
@@ -203,8 +199,6 @@
             });
 
             if (hidePresetButtons) {
-                var focusedInput = null;
-
                 function showPresetButtons() {
                     PModificator.applyCustomFieldVariantRules(container, state);
                     var hasVisibleButtons = !!valuesEl.querySelector('.sku-props__value:not(.pmod-hidden-technical-value):not(.pmod-hidden-minmax-value):not(.notallowed):not(.sku-props__value--disabled)');
@@ -221,13 +215,11 @@
                     valuesEl.classList.remove('pmod-preset-buttons--floating');
                 }
 
-                [widthInput, heightInput].forEach(function (input) {
+                formatGroupInputs.forEach(function (input) {
                     input.addEventListener('focus', function () {
-                        focusedInput = input;
                         showPresetButtons();
                     });
                     input.addEventListener('click', function () {
-                        focusedInput = input;
                         showPresetButtons();
                     });
                 });
@@ -235,7 +227,6 @@
                 valuesEl.addEventListener('click', function (evt) {
                     var btn = evt.target.closest('.sku-props__value');
                     if (!btn) return;
-                    if (!focusedInput) return;
                     if (btn.classList.contains('pmod-hidden-technical-value') || btn.classList.contains('pmod-hidden-minmax-value')) {
                         return;
                     }
@@ -245,19 +236,17 @@
                         : String(btn.dataset.title || '');
                     var tuple = String(rawXmlId).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
                     if (!tuple || !tuple.length) return;
-                    if (focusedInput === widthInput && tuple[0] !== undefined) {
-                        widthInput.value = String(tuple[0]).replace(',', '.');
-                    }
-                    if (focusedInput === heightInput && tuple[1] !== undefined) {
-                        heightInput.value = String(tuple[1]).replace(',', '.');
-                    }
+                    formatGroupInputs.forEach(function (input, index) {
+                        if (tuple[index] === undefined) return;
+                        input.value = String(tuple[index]).replace(',', '.');
+                    });
                     onFormatChange(true);
                 }, true);
 
-                [widthInput, heightInput].forEach(function (input) {
+                formatGroupInputs.forEach(function (input) {
                     input.addEventListener('blur', function () {
                         setTimeout(function () {
-                            if (document.activeElement === widthInput || document.activeElement === heightInput) return;
+                            if (formatGroupInputs.indexOf(document.activeElement) !== -1) return;
                             hidePresetButtonsList();
                         }, 200);
                     });
