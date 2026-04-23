@@ -14,6 +14,7 @@
 
 .pmod-format-ui {
     margin-bottom: 12px;
+    position: relative;
 }
 
 .pmod-volume-ui {
@@ -172,6 +173,38 @@
     border-left-color: var(--input_border_color-focus, var(--secondary, #8D8D8D));
     border-right-color: var(--input_border_color-focus, var(--secondary, #8D8D8D));
     background: var(--input_bg_color-focus, var(--black_bg_black, #fff));
+}
+
+.pmod-quick-values {
+    position: absolute;
+    z-index: 40;
+    background: var(--black_bg_black, #fff);
+    border: 1px solid var(--stroke_input, #d7d8da);
+    border-radius: 4px;
+    box-shadow: 0 8px 24px rgba(34, 34, 40, 0.12);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.pmod-quick-values__item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: var(--input_color, var(--white_text_black, #222228));
+    cursor: pointer;
+}
+
+.pmod-quick-values__item:hover {
+    background: var(--grey_bg, #F3F4F7);
+}
+
+.pmod-quick-values__empty {
+    padding: 8px 10px;
+    color: var(--secondary, #8D8D8D);
+    font-size: 13px;
 }
 
 /* ── Отображение расчётной цены ──────────────────────────────────────────── */
