@@ -27,14 +27,39 @@
     }
 
     function syncUrlPmodVolume(volume) {
+        syncUrlPmodPropertyValue('volume', volume != null && volume !== '' ? [volume] : null);
+    }
+
+    function syncUrlPmodPropertyValue(propertyCode, values) {
         if (!window.history || !window.history.replaceState) return;
-        var url    = new URL(window.location.href);
+        var code = String(propertyCode || '').trim().toLowerCase();
+        if (!code) return;
+
+        var url = new URL(window.location.href);
         var params = url.searchParams;
-        if (volume != null && volume !== 0 && volume !== '') {
-            params.set('pmod_volume', volume);
+        var key = 'pmod_' + code;
+        var normalized = [];
+
+        if (Array.isArray(values)) {
+            normalized = values.map(function (value) {
+                if (value === null || value === undefined) return '';
+                return String(value).trim();
+            }).filter(function (value) {
+                return value !== '';
+            });
         } else {
-            params.delete('pmod_volume');
+            var single = values === null || values === undefined ? '' : String(values).trim();
+            if (single !== '') {
+                normalized = [single];
+            }
         }
+
+        if (normalized.length) {
+            params.set(key, normalized.join('x'));
+        } else {
+            params.delete(key);
+        }
+
         window.history.replaceState(null, '', url.toString());
     }
 
@@ -57,6 +82,7 @@
         clamp: clamp,
         formatPrice: formatPrice,
         syncUrlPmodVolume: syncUrlPmodVolume,
+        syncUrlPmodPropertyValue: syncUrlPmodPropertyValue,
         hasNumberValue: hasNumberValue,
     };
 })();
