@@ -437,7 +437,7 @@
                     PModificator.recomputeCustomMode(state);
                     syncUrlPmodVolume(null);
 
-                    // Обновляем лейбл тиража и заголовок h1 с реальным числом
+                    // Обновляем лейбл тиража с реальным числом
                     var presetStr = v.toLocaleString('ru-RU');
                     if (volumeLabelSpan) {
                         volumeLabelSpan.textContent = presetStr;
@@ -464,7 +464,7 @@
                         }
                     }
 
-                    // Обновляем лейбл и h1 с реальным числом (переопределяем "Произвольный тираж").
+                    // Обновляем лейбл с реальным числом (переопределяем "Произвольный тираж").
                     // Immediate set — переопределяет синхронное обновление Аспро после click();
                     // setTimeout — гарантирует сброс при любых async-обновлениях Аспро.
                     var customStr = v.toLocaleString('ru-RU');
@@ -520,17 +520,6 @@
         applyFinalUiState: function (state) {
             if (!state || !state.containerEl) return;
 
-            var h1 = PModificator.getH1Element();
-            if (h1) {
-                // Не вмешиваемся в h1/textContent:
-                // штатное название должно приходить из Aspro без подмен со стороны pmod.
-                // Разрешена только безопасная синхронизация атрибута title с текущим текстом.
-                var nativeTitle = (h1.textContent || '').trim();
-                if (nativeTitle && h1.title !== nativeTitle) {
-                    h1.title = nativeTitle;
-                }
-            }
-
             if (state.customMode) {
                 PModificator.updatePriceDisplay(state.containerEl, state, state._activeUiRevision);
             } else {
@@ -543,7 +532,6 @@
                 state._uiStabilizationTimer = null;
             }
             state._pendingUiUpdate = false;
-            PModificator.setTitleLoading(false);
         },
 
         watchPresetClicks: function (container, state) {
@@ -649,8 +637,7 @@
                         }
                         syncUrlPmodVolume(null);
 
-                        // Обновляем лейбл тиража и h1 (Аспро обновит textContent,
-                        // MutationObserver синхронизирует title; но также страхуемся явной установкой)
+                        // Обновляем лейбл тиража.
                         if (!isNaN(volXmlId)) {
                             var presetLabelStr = volXmlId.toLocaleString('ru-RU');
                             var volumeInnerEl  = innerEl;

@@ -239,21 +239,6 @@
     font-style: italic;
 }
 
-/* ── Обрезка заголовка h1 на детальной странице товара ────────────────────── */
-
-.pmod-title-clamp {
-    height: 64px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.pmod-title-loading {
-    opacity: 0.65;
-    transition: opacity 0.2s ease;
-}
-
 /* ── Адаптивность ────────────────────────────────────────────────────────── */
 
 @media (max-width: 480px) {

@@ -64,57 +64,10 @@
                     // После onFinalActionSKUInfo перечитываем активные "прочие" свойства из DOM.
                     PModificator.rebuildActiveOtherProps(state);
 
-                    var currentAsproTitle = PModificator.getCurrentRawH1Text() || '';
-                    var normalizedAsproTitle = PModificator.buildRawBaseTitleTemplate(
-                        state.containerEl,
-                        state,
-                        currentAsproTitle
-                    );
-                    if (
-                        !state.rawBaseTitleFromAspro ||
-                        PModificator.hasReplaceKeysInTitle(state, normalizedAsproTitle)
-                    ) {
-                        state.rawBaseTitleFromAspro = normalizedAsproTitle;
-                    }
-                    state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
-                        state.containerEl,
-                        state,
-                        state.rawBaseTitleFromAspro
-                    );
                     state._activeUiRevision = state._uiRevision;
                     PModificator.applyFinalUiState(state);
                 });
             });
-        },
-
-        setupH1TitleSync: function () {
-            var h1 = PModificator.getH1Element();
-            if (!h1) return;
-
-            // Первичная синхронизация
-            if (h1.textContent.trim()) {
-                h1.title = h1.textContent.trim();
-            }
-
-            var obs = new MutationObserver(function () {
-                if (h1._pmodUpdatingTitle) return;
-                var text = h1.textContent.trim();
-                if (text && h1.title !== text) {
-                    h1.title = text;
-                }
-            });
-            obs.observe(h1, { childList: true, characterData: true, subtree: true });
-        },
-
-        getH1Element: function () {
-            var h1 = document.querySelector('h1.pmod-title-clamp');
-            if (!h1) h1 = document.querySelector('h1');
-            return h1;
-        },
-
-        getCurrentRawH1Text: function () {
-            var h1 = PModificator.getH1Element();
-            return h1 ? h1.textContent.trim() : '';
         },
 
         beginUiStabilization: function (state, waitForAsproEvent) {
@@ -125,34 +78,11 @@
             }
             state._uiRevision = (state._uiRevision || 0) + 1;
             state._pendingUiUpdate = true;
-            PModificator.setTitleLoading(true);
             PModificator.setPriceLoading(true, state);
 
             // Если фактической смены SKU не было (и onFinalActionSKUInfo не придёт),
             // завершаем цикл сразу по текущему состоянию DOM.
             if (waitForAsproEvent === false) {
-                // Важно: не перезаписываем "сырой" заголовок текущим custom-текстом.
-                // Иначе после первого ввода пропадают replace-ключи и последующие
-                // изменения значений не отражаются в h1/title.
-                var currentTitleNoWait = PModificator.getCurrentRawH1Text() || '';
-                var normalizedNoWait = PModificator.buildRawBaseTitleTemplate(
-                    state.containerEl,
-                    state,
-                    currentTitleNoWait
-                );
-                if (
-                    normalizedNoWait && (
-                        !state.rawBaseTitleFromAspro ||
-                        PModificator.hasReplaceKeysInTitle(state, normalizedNoWait)
-                    )
-                ) {
-                    state.rawBaseTitleFromAspro = normalizedNoWait;
-                }
-                state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
-                    state.containerEl,
-                    state,
-                    state.rawBaseTitleFromAspro
-                );
                 state._activeUiRevision = state._uiRevision;
                 PModificator.applyFinalUiState(state);
             }
@@ -162,25 +92,6 @@
                 state._uiStabilizationTimer = setTimeout(function () {
                     if (!PModificator.isRevisionActual(state, localRevision)) return;
                     if (!state._pendingUiUpdate) return;
-                    var currentTitleByTimer = PModificator.getCurrentRawH1Text() || '';
-                    var normalizedByTimer = PModificator.buildRawBaseTitleTemplate(
-                        state.containerEl,
-                        state,
-                        currentTitleByTimer
-                    );
-                    if (
-                        normalizedByTimer && (
-                            !state.rawBaseTitleFromAspro ||
-                            PModificator.hasReplaceKeysInTitle(state, normalizedByTimer)
-                        )
-                    ) {
-                        state.rawBaseTitleFromAspro = normalizedByTimer;
-                    }
-                    state.previewCustomTitle = PModificator.refreshH1ByCustomConfig(
-                        state.containerEl,
-                        state,
-                        state.rawBaseTitleFromAspro
-                    );
                     state._activeUiRevision = state._uiRevision;
                     PModificator.applyFinalUiState(state);
                 }, UI_STABILIZATION_TIMEOUT_MS);
@@ -197,130 +108,10 @@
             return !!state && revision === state._uiRevision;
         },
 
-        setTitleLoading: function (isLoading) {
-            var h1 = PModificator.getH1Element();
-            if (!h1) return;
-            h1.classList.toggle('pmod-title-loading', !!isLoading);
-        },
-
         setPriceLoading: function (isLoading, state) {
             var popup = PModificator.getVisiblePopupPriceElement(state);
             if (!popup) return;
             popup.classList.toggle('pmod-price-loading', !!isLoading);
-        },
-
-        refreshH1ByCustomConfig: function (container, state, rawBaseTitleFromAspro) {
-            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return;
-            var newText = String(rawBaseTitleFromAspro || '').trim();
-            if (!newText) return '';
-            var self = this;
-
-            state.customConfig.fields.forEach(function (field) {
-                var skuCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
-                if (!skuCode) return;
-                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
-                var isUnifiedGroup = field && field.mode === 'group' && !!field.useUnifiedReplaceKey;
-                if (isUnifiedGroup) {
-                    var unifiedKey = String(field.unifiedReplaceKey || '').trim();
-                    if (!unifiedKey || newText.indexOf(unifiedKey) === -1) return;
-                    var fallbackUnifiedParts = self.getDisplayValueParts(container, state, skuCode, inputs.length || 1);
-                    var unifiedValues = [];
-                    for (var u = 0; u < (inputs.length || 1); u++) {
-                        var customUnified = self.getCustomValueByIndex(state, skuCode, u);
-                        var valueUnified = customUnified !== null && customUnified !== undefined && customUnified !== ''
-                            ? customUnified
-                            : fallbackUnifiedParts[u];
-                        var normalizedUnified = String(valueUnified == null ? '' : valueUnified).trim();
-                        if (normalizedUnified !== '') {
-                            unifiedValues.push(normalizedUnified);
-                        }
-                    }
-                    if (!unifiedValues.length) return;
-                    var separator = field.unifiedSeparator !== undefined ? String(field.unifiedSeparator) : 'x';
-                    var suffix = field.unifiedSuffix !== undefined ? String(field.unifiedSuffix) : '';
-                    var replacementUnified = unifiedValues.join(separator) + suffix;
-                    newText = newText.split(unifiedKey).join(replacementUnified);
-                    return;
-                }
-
-                var replaceKeys = Array.isArray(field.replaceKeys) ? field.replaceKeys : [];
-                if (!replaceKeys.length) return;
-
-                var fallbackParts = self.getDisplayValueParts(container, state, skuCode, replaceKeys.length);
-                replaceKeys.forEach(function (rk, idx) {
-                    var key = String(rk && rk.key || '').trim();
-                    if (!key || newText.indexOf(key) === -1) return;
-                    var parsedInputIndex = parseInt(rk && rk.inputIndex, 10);
-                    var inputIndex = Number.isFinite(parsedInputIndex) && parsedInputIndex >= 0
-                        ? parsedInputIndex
-                        : idx;
-                    var customVal = self.getCustomValueByIndex(state, skuCode, inputIndex);
-                    var formattedCustomVal = self.formatDisplayValueByInput(field, inputIndex, customVal);
-                    var formattedFallbackVal = self.formatDisplayValueByInput(field, inputIndex, fallbackParts[inputIndex]);
-                    var replacement = customVal !== null && customVal !== undefined && customVal !== ''
-                        ? formattedCustomVal
-                        : formattedFallbackVal;
-                    newText = newText.split(key).join(replacement);
-                });
-            });
-
-            return newText;
-        },
-
-        buildRawBaseTitleTemplate: function (container, state, currentTitle) {
-            var template = String(currentTitle || '').trim();
-            return template;
-        },
-
-        hasReplaceKeysInTitle: function (state, title) {
-            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return false;
-            var text = String(title || '').trim();
-            if (!text) return false;
-
-            for (var f = 0; f < state.customConfig.fields.length; f++) {
-                var replaceKeys = Array.isArray(state.customConfig.fields[f] && state.customConfig.fields[f].replaceKeys)
-                    ? state.customConfig.fields[f].replaceKeys
-                    : [];
-                for (var r = 0; r < replaceKeys.length; r++) {
-                    var key = String(replaceKeys[r] && replaceKeys[r].key || '').trim();
-                    if (key && text.indexOf(key) !== -1) {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        },
-
-        getCustomValueByIndex: function (state, skuCode, inputIdx) {
-            var map = state.customValuesBySkuPropertyCode || {};
-            var bucket = map[skuCode];
-            if (bucket === null || bucket === undefined) return null;
-            if (typeof bucket === 'object') {
-                if (bucket[inputIdx] !== undefined && bucket[inputIdx] !== null && bucket[inputIdx] !== '') {
-                    return bucket[inputIdx];
-                }
-                return null;
-            }
-            return inputIdx === 0 ? bucket : null;
-        },
-
-        formatDisplayValueByInput: function (field, inputIdx, rawValue) {
-            var value = String(rawValue == null ? '' : rawValue).trim();
-            if (!value) return '';
-            if (!field || !Array.isArray(field.inputs)) return value;
-
-            var input = field.inputs[inputIdx] || null;
-            if (!input || !input.showMeasure) return value;
-
-            var measure = String(input.measure || '').trim();
-            if (!measure) return value;
-
-            var escapedMeasure = measure.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            var suffixRe = new RegExp('\\s*' + escapedMeasure + '$', 'i');
-            if (suffixRe.test(value)) return value;
-
-            return value + measure;
         },
 
         setCustomValuesForSkuCode: function (state, skuCode, values) {
@@ -342,53 +133,6 @@
                 return;
             }
             state.customValuesBySkuPropertyCode[skuCode] = valueMap;
-        },
-
-        getDisplayValueParts: function (container, state, skuCode, count) {
-            // Для тиража приоритет отдаем текущему лейблу в заголовке свойства
-            // (он отражает реальное значение в инпуте даже если активная кнопка ТП — "X"/"Другое количество").
-            if (state && state.volumePropCode && String(skuCode) === String(state.volumePropCode)) {
-                var volumePropId = state.skuPropCodeToId && state.skuPropCodeToId[skuCode];
-                if (volumePropId) {
-                    var volumeInner = container.querySelector('.sku-props__inner[data-id="' + volumePropId + '"]');
-                    if (volumeInner) {
-                        var volumeLabel = volumeInner.querySelector('.sku-props__title .sku-props__js-size');
-                        var volumeText = volumeLabel ? String(volumeLabel.textContent || '').trim() : '';
-                        if (volumeText) {
-                            return [volumeText];
-                        }
-                    }
-                }
-            }
-
-            var raw = PModificator.getCurrentSkuDisplayValue(container, state, skuCode);
-            if (!raw) return new Array(count).fill('');
-            var compact = String(raw).trim();
-            if (count <= 1) return [compact];
-
-            var parts = compact.split(/[xх×]/i).map(function (p) { return p.trim(); }).filter(Boolean);
-            if (parts.length >= count) return parts.slice(0, count);
-
-            var numbers = compact.match(/[\d]+(?:[.,]\d+)?/g);
-            if (numbers && numbers.length >= count) return numbers.slice(0, count);
-
-            var out = [];
-            for (var i = 0; i < count; i++) {
-                out[i] = parts[i] || ((numbers && numbers[i]) ? numbers[i] : compact);
-            }
-            return out;
-        },
-
-        getCurrentSkuDisplayValue: function (container, state, skuCode) {
-            var map = state.skuPropCodeToId || {};
-            var propId = map[skuCode];
-            if (!propId) return '';
-            var inner = container.querySelector('.sku-props__inner[data-id="' + propId + '"]');
-            if (!inner) return '';
-            var activeBtn = inner.querySelector('.sku-props__value--active:not(.pmod-hidden-technical-value)')
-                || inner.querySelector('.sku-props__value:not(.pmod-hidden-technical-value)');
-            if (!activeBtn) return '';
-            return String(activeBtn.dataset.title || activeBtn.textContent || '').trim();
         },
 
         recomputeCustomMode: function (state) {
