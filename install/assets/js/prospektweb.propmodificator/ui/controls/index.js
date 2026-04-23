@@ -17,28 +17,29 @@
             var valuesEl  = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
 
-            var fmtCfg = state.formatCfg;
-            var minW   = fmtCfg.MIN_WIDTH  || 10;
-            var maxW   = fmtCfg.MAX_WIDTH  || 1200;
-            var minH   = fmtCfg.MIN_HEIGHT || 10;
-            var maxH   = fmtCfg.MAX_HEIGHT || 1200;
-            var step   = fmtCfg.STEP       || 1;
-            var formatMeasure = fmtCfg.MEASURE || 'мм';
-            var showFormatMeasure = fmtCfg.SHOW_MEASURE === 'Y';
-            var formatMeasures = Array.isArray(fmtCfg.FORMAT_INPUT_MEASURES) ? fmtCfg.FORMAT_INPUT_MEASURES : [];
-            var formatShowMeasures = Array.isArray(fmtCfg.FORMAT_SHOW_MEASURES) ? fmtCfg.FORMAT_SHOW_MEASURES : [];
-            var rawInputLabels = Array.isArray(fmtCfg.FORMAT_INPUT_LABELS) ? fmtCfg.FORMAT_INPUT_LABELS : [];
-            var widthLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
-            var heightLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
-            var widthMeasure = String(formatMeasures[0] || formatMeasure || '').trim();
-            var heightMeasure = String(formatMeasures[1] || widthMeasure || formatMeasure || '').trim();
-            var showWidthMeasure = (formatShowMeasures[0] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
-            var showHeightMeasure = (formatShowMeasures[1] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
+            var groupCfg = state.formatCfg;
+            var minFirstInput   = groupCfg.MIN_WIDTH  || 10;
+            var maxFirstInput   = groupCfg.MAX_WIDTH  || 1200;
+            var minSecondInput  = groupCfg.MIN_HEIGHT || 10;
+            var maxSecondInput  = groupCfg.MAX_HEIGHT || 1200;
+            var inputStep       = groupCfg.STEP       || 1;
+            var defaultMeasure = groupCfg.MEASURE || 'мм';
+            var showDefaultMeasure = groupCfg.SHOW_MEASURE === 'Y';
+            var inputMeasures = Array.isArray(groupCfg.FORMAT_INPUT_MEASURES) ? groupCfg.FORMAT_INPUT_MEASURES : [];
+            var inputShowMeasures = Array.isArray(groupCfg.FORMAT_SHOW_MEASURES) ? groupCfg.FORMAT_SHOW_MEASURES : [];
+            var rawInputLabels = Array.isArray(groupCfg.FORMAT_INPUT_LABELS) ? groupCfg.FORMAT_INPUT_LABELS : [];
+            var firstInputLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
+            var secondInputLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
+            var firstInputMeasure = String(inputMeasures[0] || defaultMeasure || '').trim();
+            var secondInputMeasure = String(inputMeasures[1] || firstInputMeasure || defaultMeasure || '').trim();
+            var showFirstInputMeasure = (inputShowMeasures[0] || (showDefaultMeasure ? 'Y' : 'N')) === 'Y';
+            var showSecondInputMeasure = (inputShowMeasures[1] || (showDefaultMeasure ? 'Y' : 'N')) === 'Y';
 
             // Начальное значение: активная кнопка или первая
             var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
                             valuesEl.querySelector('.sku-props__value');
-            var initW = minW, initH = minH;
+            var initialFirstInputValue = minFirstInput;
+            var initialSecondInputValue = minSecondInput;
 
             if (activeBtn) {
                 // Предпочитаем VALUE_XML_ID из formatEnumMap (вида "210x297"), fallback — data-title
@@ -46,10 +47,10 @@
                 var afmtXmlId  = (state.formatEnumMap && afmtEnumId && state.formatEnumMap[afmtEnumId] !== undefined)
                     ? state.formatEnumMap[afmtEnumId]
                     : (activeBtn.dataset.title || '');
-                var parts = afmtXmlId.toLowerCase().split('x');
-                if (parts.length === 2) {
-                    initW = parseInt(parts[0], 10) || minW;
-                    initH = parseInt(parts[1], 10) || minH;
+                var tuple = PModificator.parseXmlIdTuple(afmtXmlId);
+                if (tuple.length >= 2) {
+                    initialFirstInputValue = parseInt(tuple[0], 10) || minFirstInput;
+                    initialSecondInputValue = parseInt(tuple[1], 10) || minSecondInput;
                 }
             }
 
@@ -58,23 +59,23 @@
             ui.innerHTML = [
                 '<div class="pmod-format-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + widthLabel + (showWidthMeasure && widthMeasure ? ', ' + widthMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + firstInputLabel + (showFirstInputMeasure && firstInputMeasure ? ', ' + firstInputMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 1">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-width"',
-                             ' min="' + minW + '" max="' + maxW + '" step="' + step + '"',
-                             ' value="' + initW + '" autocomplete="off" aria-label="' + widthLabel + '">',
+                             ' min="' + minFirstInput + '" max="' + maxFirstInput + '" step="' + inputStep + '"',
+                             ' value="' + initialFirstInputValue + '" autocomplete="off" aria-label="' + firstInputLabel + '">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 1">+</button>',
                     '</div>',
                   '</div>',
                   '<span class="pmod-format-x">&#215;</span>',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + heightLabel + (showHeightMeasure && heightMeasure ? ', ' + heightMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + secondInputLabel + (showSecondInputMeasure && secondInputMeasure ? ', ' + secondInputMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 2">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-height"',
-                             ' min="' + minH + '" max="' + maxH + '" step="' + step + '"',
-                             ' value="' + initH + '" autocomplete="off" aria-label="' + heightLabel + '">',
+                             ' min="' + minSecondInput + '" max="' + maxSecondInput + '" step="' + inputStep + '"',
+                             ' value="' + initialSecondInputValue + '" autocomplete="off" aria-label="' + secondInputLabel + '">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 2">+</button>',
                     '</div>',
                   '</div>',
@@ -84,28 +85,45 @@
             // Вставляем UI перед стандартными кнопками
             valuesEl.parentNode.insertBefore(ui, valuesEl);
 
-            var widthInput  = ui.querySelector('.pmod-input-width');
-            var heightInput = ui.querySelector('.pmod-input-height');
+            var firstInput  = ui.querySelector('.pmod-input-width');
+            var secondInput = ui.querySelector('.pmod-input-height');
+            var formatGroupInputs = Array.prototype.slice.call(ui.querySelectorAll('.pmod-counter__input'));
+            inner._pmodPresetMouseDown = false;
+            inner._pmodPresetSelectionInProgress = false;
+
+            valuesEl.addEventListener('mousedown', function () {
+                inner._pmodPresetMouseDown = true;
+            });
+            valuesEl.addEventListener('mouseup', function () {
+                setTimeout(function () {
+                    inner._pmodPresetMouseDown = false;
+                }, 0);
+            });
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
+            var formatField = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
+            var formatInputs = Array.isArray(formatField && formatField.inputs) ? formatField.inputs : [];
+            var hidePresetButtons = formatInputs.some(function (input) {
+                return !!(input && input.hidePresetButtons);
+            });
 
             function onFormatChange(isImmediate) {
-                var rawW = parseInt(widthInput.value, 10);
-                var rawH = parseInt(heightInput.value, 10);
+                var rawW = parseInt(firstInput.value, 10);
+                var rawH = parseInt(secondInput.value, 10);
                 var w, h;
                 var didTriggerSkuSwitch = false;
 
                 if (isImmediate) {
                     // Кнопки +/- или blur: применяем clamp сразу
-                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
-                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
-                    widthInput.value  = w;
-                    heightInput.value = h;
+                    w = clamp(isNaN(rawW) ? minFirstInput : rawW, minFirstInput, maxFirstInput);
+                    h = clamp(isNaN(rawH) ? minSecondInput : rawH, minSecondInput, maxSecondInput);
+                    firstInput.value  = w;
+                    secondInput.value = h;
                 } else {
                     // Ручной ввод: не перезаписываем инпут
-                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
-                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
+                    w = clamp(isNaN(rawW) ? minFirstInput : rawW, minFirstInput, maxFirstInput);
+                    h = clamp(isNaN(rawH) ? minSecondInput : rawH, minSecondInput, maxSecondInput);
                 }
 
                 // Ищем точное совпадение с пресетом
@@ -149,27 +167,39 @@
 
             var debouncedChange = debounce(function () { onFormatChange(false); }, DEBOUNCE_MS);
 
-            widthInput.addEventListener('input',  debouncedChange);
-            heightInput.addEventListener('input', debouncedChange);
+            formatGroupInputs.forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    if (inner._pmodSuppressInputHandlers) return;
+                    if (inner._pmodPresetSelectionInProgress) return;
+                    debouncedChange();
+                });
+            });
 
             // Валидация при потере фокуса
-            [widthInput, heightInput].forEach(function (inp) {
+            [firstInput, secondInput].forEach(function (inp) {
                 inp.addEventListener('blur', function () {
-                    var raw = parseInt(inp.value, 10);
-                    var min = parseInt(inp.min, 10);
-                    var max = parseInt(inp.max, 10);
-                    var s   = parseInt(inp.step, 10) || 1;
-                    var v   = clamp(isNaN(raw) ? min : raw, min, max);
-                    v = Math.round(v / s) * s;
-                    v = clamp(v, min, max);
-                    inp.value = v;
-                    onFormatChange(true);
+                    setTimeout(function () {
+                        if (inner._pmodSuppressInputHandlers) return;
+                        if (inner._pmodPresetSelectionInProgress) return;
+                        if (inner._pmodPresetMouseDown) return;
+                        if (valuesEl.contains(document.activeElement)) return;
+                        var raw = parseInt(inp.value, 10);
+                        var min = parseInt(inp.min, 10);
+                        var max = parseInt(inp.max, 10);
+                        var s   = parseInt(inp.step, 10) || 1;
+                        var v   = clamp(isNaN(raw) ? min : raw, min, max);
+                        v = Math.round(v / s) * s;
+                        v = clamp(v, min, max);
+                        inp.value = v;
+                        onFormatChange(true);
+                    }, 0);
                 });
             });
 
             // +/- кнопки
             ui.querySelectorAll('.pmod-counter__minus, .pmod-counter__plus').forEach(function (btn) {
                 btn.addEventListener('click', function () {
+                    if (inner._pmodSuppressInputHandlers) return;
                     var inp     = btn.closest('.pmod-counter').querySelector('.pmod-counter__input');
                     var current = parseInt(inp.value, 10) || parseInt(inp.min, 10);
                     var s       = parseInt(inp.step, 10) || 1;
@@ -180,8 +210,9 @@
             });
 
             // Колесико мыши
-            [widthInput, heightInput].forEach(function (inp) {
+            [firstInput, secondInput].forEach(function (inp) {
                 inp.addEventListener('wheel', function (e) {
+                    if (inner._pmodSuppressInputHandlers) return;
                     if (document.activeElement !== inp) return;
                     e.preventDefault();
                     var current = parseInt(inp.value, 10) || parseInt(inp.min, 10);
@@ -192,9 +223,46 @@
                 }, { passive: false });
             });
 
+            if (hidePresetButtons) {
+                function showPresetButtons() {
+                    PModificator.applyCustomFieldVariantRules(container, state);
+                    var hasVisibleButtons = !!valuesEl.querySelector('.sku-props__value:not(.pmod-hidden-technical-value):not(.pmod-hidden-minmax-value):not(.notallowed):not(.sku-props__value--disabled)');
+                    if (!hasVisibleButtons) {
+                        hidePresetButtonsList();
+                        return;
+                    }
+                    valuesEl.classList.remove('pmod-preset-buttons--hidden');
+                    valuesEl.classList.add('pmod-preset-buttons--floating');
+                }
+
+                function hidePresetButtonsList() {
+                    valuesEl.classList.add('pmod-preset-buttons--hidden');
+                    valuesEl.classList.remove('pmod-preset-buttons--floating');
+                }
+
+                formatGroupInputs.forEach(function (input) {
+                    input.addEventListener('focus', function () {
+                        showPresetButtons();
+                    });
+                    input.addEventListener('click', function () {
+                        showPresetButtons();
+                    });
+                });
+
+                formatGroupInputs.forEach(function (input) {
+                    input.addEventListener('blur', function () {
+                        setTimeout(function () {
+                            if (formatGroupInputs.indexOf(document.activeElement) !== -1) return;
+                            hidePresetButtonsList();
+                        }, 200);
+                    });
+                });
+            }
+
             // Сохраняем ссылки для обновления из обработчика кликов
-            inner._pmodWidthInput  = widthInput;
-            inner._pmodHeightInput = heightInput;
+            inner._pmodWidthInput  = firstInput;
+            inner._pmodHeightInput = secondInput;
+            inner._pmodFormatInputs = formatGroupInputs;
         },
 
         enhanceVolumeProp: function (inner, state, container) {
@@ -508,8 +576,12 @@
                         innerEl._pmodProgrammaticChange = false;
                         return;
                     }
-                    var wInput = innerEl._pmodWidthInput;
-                    var hInput = innerEl._pmodHeightInput;
+                    innerEl._pmodPresetSelectionInProgress = true;
+                    var firstInput = innerEl._pmodWidthInput;
+                    var secondInput = innerEl._pmodHeightInput;
+                    var groupInputs = Array.isArray(innerEl._pmodFormatInputs) && innerEl._pmodFormatInputs.length
+                        ? innerEl._pmodFormatInputs
+                        : [firstInput, secondInput].filter(Boolean);
                     var enumId   = btn.dataset.onevalue || '';
                     var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
                         ? state.formatEnumMap[enumId]
@@ -517,8 +589,8 @@
 
                     if (fmtXmlId === 'X') {
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
-                        state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
-                        state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
+                        state.customWidth  = firstInput ? (parseInt(firstInput.value, 10) || null) : null;
+                        state.customHeight = secondInput ? (parseInt(secondInput.value, 10) || null) : null;
                         if (hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight)) {
                             PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [state.customWidth, state.customHeight]);
                         }
@@ -526,13 +598,16 @@
                         state._pendingUiUpdate = true;
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     } else {
-                        // Клик по пресету FORMAT — обновляем поля ширины/высоты
-                        if (wInput && hInput) {
-                            var parts = fmtXmlId.toLowerCase().split('x');
-                            if (parts.length === 2) {
-                                wInput.value = parseInt(parts[0], 10) || wInput.value;
-                                hInput.value = parseInt(parts[1], 10) || hInput.value;
-                            }
+                        // Клик по пресету FORMAT — обновляем группу инпутов по VALUE_XML_ID
+                        var parts = PModificator.parseXmlIdTuple(fmtXmlId);
+                        innerEl._pmodSuppressInputHandlers = true;
+                        try {
+                            groupInputs.forEach(function (input, index) {
+                                if (!input || parts[index] === undefined) return;
+                                input.value = parts[index];
+                            });
+                        } finally {
+                            innerEl._pmodSuppressInputHandlers = false;
                         }
                         state.customWidth  = null;
                         state.customHeight = null;
@@ -541,6 +616,9 @@
                         state._pendingUiUpdate = true;
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     }
+                    setTimeout(function () {
+                        innerEl._pmodPresetSelectionInProgress = false;
+                    }, 0);
 
                 } else if (String(propId) === String(volumePropId)) {
                     // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
@@ -642,62 +720,7 @@
                     btn.removeAttribute('aria-hidden');
                 });
 
-                // 1) собираем текущие допустимые варианты из DOM
-                var allowedButtons = allButtons.filter(function (btn) {
-                    return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
-                });
-
-                // 2) исключаем служебные/технические значения
-                var userButtons = allowedButtons.filter(function (btn) {
-                    if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
-                    btn.classList.add('pmod-hidden-technical-value');
-                    btn.style.display = 'none';
-                    btn.setAttribute('aria-hidden', 'true');
-                    return false;
-                });
-
-                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
-                var hideTpValueIfMin = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
-                });
-                var hideTpValueIfMax = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
-                });
-
-                if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
-                    var comparableButtons = userButtons.map(function (btn) {
-                        return {
-                            btn: btn,
-                            tuple: PModificator.extractComparableTuple(btn, propId, state)
-                        };
-                    }).filter(function (item) {
-                        return item.tuple && item.tuple.length;
-                    });
-
-                    if (comparableButtons.length) {
-                        var minTuple = comparableButtons[0].tuple;
-                        var maxTuple = comparableButtons[0].tuple;
-                        comparableButtons.forEach(function (item) {
-                            if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
-                            if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
-                        });
-
-                        userButtons = userButtons.filter(function (btn) {
-                            var tuple = PModificator.extractComparableTuple(btn, propId, state);
-                            if (!tuple || !tuple.length) return true;
-                            var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
-                            var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
-                            var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
-                            if (shouldHide) {
-                                btn.classList.add('pmod-hidden-minmax-value');
-                                btn.style.display = 'none';
-                                btn.setAttribute('aria-hidden', 'true');
-                                return false;
-                            }
-                            return true;
-                        });
-                    }
-                }
+                var userButtons = PModificator.getFilteredCustomVariantButtons(allButtons, field, propId, state);
 
                 // Если был активен технический вариант — переводим на пользовательский.
                 var activeBtn = valuesEl.querySelector('.sku-props__value--active');
@@ -710,6 +733,7 @@
                 }
 
                 // 3) применяем hide_variants (hidePresetButtons) после фильтрации.
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
                 var hideVariants = inputs.some(function (input) {
                     return !!(input && input.hidePresetButtons);
                 });
@@ -719,6 +743,97 @@
                     valuesEl.classList.remove('pmod-preset-buttons--hidden');
                 }
             });
+        },
+
+        findCustomFieldByPropCode: function (state, propCode) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return null;
+            var target = String(propCode || '').trim();
+            if (!target) return null;
+            for (var i = 0; i < state.customConfig.fields.length; i++) {
+                var field = state.customConfig.fields[i] || {};
+                var bindingCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
+                if (bindingCode === target) {
+                    return field;
+                }
+            }
+            return null;
+        },
+
+        getFilteredCustomVariantButtons: function (buttons, field, propId, state) {
+            var allButtons = Array.isArray(buttons) ? buttons : [];
+
+            // 1) исключаем недоступные/disabled варианты
+            var allowedButtons = allButtons.filter(function (btn) {
+                return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
+            });
+
+            // 2) исключаем служебные/технические
+            var userButtons = allowedButtons.filter(function (btn) {
+                if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
+                btn.classList.add('pmod-hidden-technical-value');
+                btn.style.display = 'none';
+                btn.setAttribute('aria-hidden', 'true');
+                return false;
+            });
+
+            var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+
+            // 3) применяем скрытие минимум/максимум
+            var hideTpValueIfMin = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
+            });
+            var hideTpValueIfMax = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
+            });
+            if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
+                var comparableButtons = userButtons.map(function (btn) {
+                    return {
+                        btn: btn,
+                        tuple: PModificator.extractComparableTuple(btn, propId, state)
+                    };
+                }).filter(function (item) {
+                    return item.tuple && item.tuple.length;
+                });
+
+                if (comparableButtons.length) {
+                    var minTuple = comparableButtons[0].tuple;
+                    var maxTuple = comparableButtons[0].tuple;
+                    comparableButtons.forEach(function (item) {
+                        if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
+                        if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
+                    });
+                    userButtons = userButtons.filter(function (btn) {
+                        var tuple = PModificator.extractComparableTuple(btn, propId, state);
+                        if (!tuple || !tuple.length) return true;
+                        var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
+                        var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
+                        var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
+                        if (shouldHide) {
+                            btn.classList.add('pmod-hidden-minmax-value');
+                            btn.style.display = 'none';
+                            btn.setAttribute('aria-hidden', 'true');
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+
+            // 4) hidePresetButtons — не удаляет данные, но фиксирует единый pipeline
+            return userButtons;
+        },
+
+        parseXmlIdTuple: function (rawXmlId) {
+            return String(rawXmlId || '')
+                .replace(/[×хХ]/g, 'x')
+                .split('x')
+                .map(function (part) {
+                    var cleaned = String(part || '').trim();
+                    if (!cleaned) return '';
+                    var match = cleaned.match(/-?\d+(?:[.,]\d+)?/);
+                    return match && match[0] ? String(match[0]).replace(',', '.') : '';
+                })
+                .filter(function (part) { return part !== ''; });
         },
 
         extractComparableTuple: function (btn, propId, state) {
