@@ -88,6 +88,17 @@
             var firstInput  = ui.querySelector('.pmod-input-width');
             var secondInput = ui.querySelector('.pmod-input-height');
             var formatGroupInputs = Array.prototype.slice.call(ui.querySelectorAll('.pmod-counter__input'));
+            inner._pmodPresetMouseDown = false;
+            inner._pmodPresetSelectionInProgress = false;
+
+            valuesEl.addEventListener('mousedown', function () {
+                inner._pmodPresetMouseDown = true;
+            });
+            valuesEl.addEventListener('mouseup', function () {
+                setTimeout(function () {
+                    inner._pmodPresetMouseDown = false;
+                }, 0);
+            });
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
@@ -159,6 +170,7 @@
             formatGroupInputs.forEach(function (inp) {
                 inp.addEventListener('input', function () {
                     if (inner._pmodSuppressInputHandlers) return;
+                    if (inner._pmodPresetSelectionInProgress) return;
                     debouncedChange();
                 });
             });
@@ -166,16 +178,21 @@
             // Валидация при потере фокуса
             [firstInput, secondInput].forEach(function (inp) {
                 inp.addEventListener('blur', function () {
-                    if (inner._pmodSuppressInputHandlers) return;
-                    var raw = parseInt(inp.value, 10);
-                    var min = parseInt(inp.min, 10);
-                    var max = parseInt(inp.max, 10);
-                    var s   = parseInt(inp.step, 10) || 1;
-                    var v   = clamp(isNaN(raw) ? min : raw, min, max);
-                    v = Math.round(v / s) * s;
-                    v = clamp(v, min, max);
-                    inp.value = v;
-                    onFormatChange(true);
+                    setTimeout(function () {
+                        if (inner._pmodSuppressInputHandlers) return;
+                        if (inner._pmodPresetSelectionInProgress) return;
+                        if (inner._pmodPresetMouseDown) return;
+                        if (valuesEl.contains(document.activeElement)) return;
+                        var raw = parseInt(inp.value, 10);
+                        var min = parseInt(inp.min, 10);
+                        var max = parseInt(inp.max, 10);
+                        var s   = parseInt(inp.step, 10) || 1;
+                        var v   = clamp(isNaN(raw) ? min : raw, min, max);
+                        v = Math.round(v / s) * s;
+                        v = clamp(v, min, max);
+                        inp.value = v;
+                        onFormatChange(true);
+                    }, 0);
                 });
             });
 
@@ -559,6 +576,7 @@
                         innerEl._pmodProgrammaticChange = false;
                         return;
                     }
+                    innerEl._pmodPresetSelectionInProgress = true;
                     var firstInput = innerEl._pmodWidthInput;
                     var secondInput = innerEl._pmodHeightInput;
                     var groupInputs = Array.isArray(innerEl._pmodFormatInputs) && innerEl._pmodFormatInputs.length
@@ -598,6 +616,9 @@
                         state._pendingUiUpdate = true;
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     }
+                    setTimeout(function () {
+                        innerEl._pmodPresetSelectionInProgress = false;
+                    }, 0);
 
                 } else if (String(propId) === String(volumePropId)) {
                     // Если клик был вызван программно из onVolumeChange — не перезаписываем инпут и не трогаем state
