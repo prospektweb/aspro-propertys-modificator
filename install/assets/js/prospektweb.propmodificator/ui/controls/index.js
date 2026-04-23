@@ -17,28 +17,29 @@
             var valuesEl  = inner.querySelector('.sku-props__values');
             if (!valuesEl) return;
 
-            var fmtCfg = state.formatCfg;
-            var minW   = fmtCfg.MIN_WIDTH  || 10;
-            var maxW   = fmtCfg.MAX_WIDTH  || 1200;
-            var minH   = fmtCfg.MIN_HEIGHT || 10;
-            var maxH   = fmtCfg.MAX_HEIGHT || 1200;
-            var step   = fmtCfg.STEP       || 1;
-            var formatMeasure = fmtCfg.MEASURE || 'мм';
-            var showFormatMeasure = fmtCfg.SHOW_MEASURE === 'Y';
-            var formatMeasures = Array.isArray(fmtCfg.FORMAT_INPUT_MEASURES) ? fmtCfg.FORMAT_INPUT_MEASURES : [];
-            var formatShowMeasures = Array.isArray(fmtCfg.FORMAT_SHOW_MEASURES) ? fmtCfg.FORMAT_SHOW_MEASURES : [];
-            var rawInputLabels = Array.isArray(fmtCfg.FORMAT_INPUT_LABELS) ? fmtCfg.FORMAT_INPUT_LABELS : [];
-            var widthLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
-            var heightLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
-            var widthMeasure = String(formatMeasures[0] || formatMeasure || '').trim();
-            var heightMeasure = String(formatMeasures[1] || widthMeasure || formatMeasure || '').trim();
-            var showWidthMeasure = (formatShowMeasures[0] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
-            var showHeightMeasure = (formatShowMeasures[1] || (showFormatMeasure ? 'Y' : 'N')) === 'Y';
+            var groupCfg = state.formatCfg;
+            var minFirstInput   = groupCfg.MIN_WIDTH  || 10;
+            var maxFirstInput   = groupCfg.MAX_WIDTH  || 1200;
+            var minSecondInput  = groupCfg.MIN_HEIGHT || 10;
+            var maxSecondInput  = groupCfg.MAX_HEIGHT || 1200;
+            var inputStep       = groupCfg.STEP       || 1;
+            var defaultMeasure = groupCfg.MEASURE || 'мм';
+            var showDefaultMeasure = groupCfg.SHOW_MEASURE === 'Y';
+            var inputMeasures = Array.isArray(groupCfg.FORMAT_INPUT_MEASURES) ? groupCfg.FORMAT_INPUT_MEASURES : [];
+            var inputShowMeasures = Array.isArray(groupCfg.FORMAT_SHOW_MEASURES) ? groupCfg.FORMAT_SHOW_MEASURES : [];
+            var rawInputLabels = Array.isArray(groupCfg.FORMAT_INPUT_LABELS) ? groupCfg.FORMAT_INPUT_LABELS : [];
+            var firstInputLabel = String(rawInputLabels[0] || '').trim() || 'Параметр 1';
+            var secondInputLabel = String(rawInputLabels[1] || '').trim() || 'Параметр 2';
+            var firstInputMeasure = String(inputMeasures[0] || defaultMeasure || '').trim();
+            var secondInputMeasure = String(inputMeasures[1] || firstInputMeasure || defaultMeasure || '').trim();
+            var showFirstInputMeasure = (inputShowMeasures[0] || (showDefaultMeasure ? 'Y' : 'N')) === 'Y';
+            var showSecondInputMeasure = (inputShowMeasures[1] || (showDefaultMeasure ? 'Y' : 'N')) === 'Y';
 
             // Начальное значение: активная кнопка или первая
             var activeBtn = valuesEl.querySelector('.sku-props__value--active') ||
                             valuesEl.querySelector('.sku-props__value');
-            var initW = minW, initH = minH;
+            var initialFirstInputValue = minFirstInput;
+            var initialSecondInputValue = minSecondInput;
 
             if (activeBtn) {
                 // Предпочитаем VALUE_XML_ID из formatEnumMap (вида "210x297"), fallback — data-title
@@ -48,8 +49,8 @@
                     : (activeBtn.dataset.title || '');
                 var parts = afmtXmlId.toLowerCase().split('x');
                 if (parts.length === 2) {
-                    initW = parseInt(parts[0], 10) || minW;
-                    initH = parseInt(parts[1], 10) || minH;
+                    initialFirstInputValue = parseInt(parts[0], 10) || minFirstInput;
+                    initialSecondInputValue = parseInt(parts[1], 10) || minSecondInput;
                 }
             }
 
@@ -58,23 +59,23 @@
             ui.innerHTML = [
                 '<div class="pmod-format-inputs">',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + widthLabel + (showWidthMeasure && widthMeasure ? ', ' + widthMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + firstInputLabel + (showFirstInputMeasure && firstInputMeasure ? ', ' + firstInputMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 1">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-width"',
-                             ' min="' + minW + '" max="' + maxW + '" step="' + step + '"',
-                             ' value="' + initW + '" autocomplete="off" aria-label="' + widthLabel + '">',
+                             ' min="' + minFirstInput + '" max="' + maxFirstInput + '" step="' + inputStep + '"',
+                             ' value="' + initialFirstInputValue + '" autocomplete="off" aria-label="' + firstInputLabel + '">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 1">+</button>',
                     '</div>',
                   '</div>',
                   '<span class="pmod-format-x">&#215;</span>',
                   '<div class="pmod-input-group">',
-                    '<label class="pmod-label">' + heightLabel + (showHeightMeasure && heightMeasure ? ', ' + heightMeasure : '') + '</label>',
+                    '<label class="pmod-label">' + secondInputLabel + (showSecondInputMeasure && secondInputMeasure ? ', ' + secondInputMeasure : '') + '</label>',
                     '<div class="pmod-counter">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__minus" aria-label="Уменьшить параметр 2">&#8722;</button>',
                       '<input type="number" class="pmod-counter__input pmod-input-height"',
-                             ' min="' + minH + '" max="' + maxH + '" step="' + step + '"',
-                             ' value="' + initH + '" autocomplete="off" aria-label="' + heightLabel + '">',
+                             ' min="' + minSecondInput + '" max="' + maxSecondInput + '" step="' + inputStep + '"',
+                             ' value="' + initialSecondInputValue + '" autocomplete="off" aria-label="' + secondInputLabel + '">',
                       '<button type="button" class="pmod-counter__btn pmod-counter__plus" aria-label="Увеличить параметр 2">+</button>',
                     '</div>',
                   '</div>',
@@ -84,8 +85,8 @@
             // Вставляем UI перед стандартными кнопками
             valuesEl.parentNode.insertBefore(ui, valuesEl);
 
-            var widthInput  = ui.querySelector('.pmod-input-width');
-            var heightInput = ui.querySelector('.pmod-input-height');
+            var firstInput  = ui.querySelector('.pmod-input-width');
+            var secondInput = ui.querySelector('.pmod-input-height');
             var formatGroupInputs = Array.prototype.slice.call(ui.querySelectorAll('.pmod-counter__input'));
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
@@ -97,21 +98,21 @@
             });
 
             function onFormatChange(isImmediate) {
-                var rawW = parseInt(widthInput.value, 10);
-                var rawH = parseInt(heightInput.value, 10);
+                var rawW = parseInt(firstInput.value, 10);
+                var rawH = parseInt(secondInput.value, 10);
                 var w, h;
                 var didTriggerSkuSwitch = false;
 
                 if (isImmediate) {
                     // Кнопки +/- или blur: применяем clamp сразу
-                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
-                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
-                    widthInput.value  = w;
-                    heightInput.value = h;
+                    w = clamp(isNaN(rawW) ? minFirstInput : rawW, minFirstInput, maxFirstInput);
+                    h = clamp(isNaN(rawH) ? minSecondInput : rawH, minSecondInput, maxSecondInput);
+                    firstInput.value  = w;
+                    secondInput.value = h;
                 } else {
                     // Ручной ввод: не перезаписываем инпут
-                    w = clamp(isNaN(rawW) ? minW : rawW, minW, maxW);
-                    h = clamp(isNaN(rawH) ? minH : rawH, minH, maxH);
+                    w = clamp(isNaN(rawW) ? minFirstInput : rawW, minFirstInput, maxFirstInput);
+                    h = clamp(isNaN(rawH) ? minSecondInput : rawH, minSecondInput, maxSecondInput);
                 }
 
                 // Ищем точное совпадение с пресетом
@@ -163,7 +164,7 @@
             });
 
             // Валидация при потере фокуса
-            [widthInput, heightInput].forEach(function (inp) {
+            [firstInput, secondInput].forEach(function (inp) {
                 inp.addEventListener('blur', function () {
                     if (inner._pmodSuppressInputHandlers) return;
                     var raw = parseInt(inp.value, 10);
@@ -192,7 +193,7 @@
             });
 
             // Колесико мыши
-            [widthInput, heightInput].forEach(function (inp) {
+            [firstInput, secondInput].forEach(function (inp) {
                 inp.addEventListener('wheel', function (e) {
                     if (inner._pmodSuppressInputHandlers) return;
                     if (document.activeElement !== inp) return;
@@ -269,8 +270,8 @@
             }
 
             // Сохраняем ссылки для обновления из обработчика кликов
-            inner._pmodWidthInput  = widthInput;
-            inner._pmodHeightInput = heightInput;
+            inner._pmodWidthInput  = firstInput;
+            inner._pmodHeightInput = secondInput;
             inner._pmodFormatInputs = formatGroupInputs;
         },
 
@@ -585,11 +586,11 @@
                         innerEl._pmodProgrammaticChange = false;
                         return;
                     }
-                    var wInput = innerEl._pmodWidthInput;
-                    var hInput = innerEl._pmodHeightInput;
+                    var firstInput = innerEl._pmodWidthInput;
+                    var secondInput = innerEl._pmodHeightInput;
                     var groupInputs = Array.isArray(innerEl._pmodFormatInputs) && innerEl._pmodFormatInputs.length
                         ? innerEl._pmodFormatInputs
-                        : [wInput, hInput].filter(Boolean);
+                        : [firstInput, secondInput].filter(Boolean);
                     var enumId   = btn.dataset.onevalue || '';
                     var fmtXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
                         ? state.formatEnumMap[enumId]
@@ -597,8 +598,8 @@
 
                     if (fmtXmlId === 'X') {
                         // Клик по «Произвольный формат» — не обновлять инпуты, включить custom mode
-                        state.customWidth  = wInput ? (parseInt(wInput.value, 10) || null) : null;
-                        state.customHeight = hInput ? (parseInt(hInput.value, 10) || null) : null;
+                        state.customWidth  = firstInput ? (parseInt(firstInput.value, 10) || null) : null;
+                        state.customHeight = secondInput ? (parseInt(secondInput.value, 10) || null) : null;
                         if (hasNumberValue(state.customWidth) && hasNumberValue(state.customHeight)) {
                             PModificator.setCustomValuesForSkuCode(state, state.formatPropCode, [state.customWidth, state.customHeight]);
                         }
