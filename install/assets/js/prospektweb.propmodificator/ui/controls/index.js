@@ -750,7 +750,7 @@
 
             // 2) исключаем служебные/технические
             var userButtons = allowedButtons.filter(function (btn) {
-                if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
+                if (!PModificator.isTechnicalCustomVariant(btn, field, propId, state)) return true;
                 btn.classList.add('pmod-hidden-technical-value');
                 btn.style.display = 'none';
                 btn.setAttribute('aria-hidden', 'true');
@@ -857,23 +857,17 @@
             return 0;
         },
 
-        isTechnicalCustomVariant: function (btn, field) {
+        isTechnicalCustomVariant: function (btn, field, propId, state) {
             if (!btn || !field) return false;
 
             var marker = field.binding && field.binding.marker ? field.binding.marker : {};
-            var markerValue = String(marker.value || '').trim().toLowerCase();
             var markerXmlId = String(marker.xmlId || '').trim().toLowerCase();
-            var title = String(btn.dataset.title || '').trim().toLowerCase();
-            var text = String(btn.textContent || '').trim().toLowerCase();
+            if (!markerXmlId) return false;
 
-            if (markerValue && (title === markerValue || text === markerValue)) {
-                return true;
-            }
-            if (markerXmlId && (title === markerXmlId || text === markerXmlId)) {
-                return true;
-            }
-
-            return false;
+            var enumId = String(btn.dataset.onevalue || '');
+            var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, enumId);
+            if (!xmlId) return false;
+            return String(xmlId).trim().toLowerCase() === markerXmlId;
         },
 
         findCustomButton: function (valuesEl, enumMap) {
@@ -891,7 +885,7 @@
             if (!valuesEl) return null;
             var marker = field && field.binding && field.binding.marker ? field.binding.marker : {};
             var markerXmlId = String(marker.xmlId || '').trim().toLowerCase();
-            var markerValue = String(marker.value || '').trim().toLowerCase();
+            if (!markerXmlId) return null;
             var btns = valuesEl.querySelectorAll('.sku-props__value');
 
             for (var i = 0; i < btns.length; i++) {
@@ -899,13 +893,8 @@
                 var enumId = String(btn.dataset.onevalue || '');
                 var xmlId = PModificator.getEnumXmlIdByPropId(state, propId, enumId);
                 var normalizedXmlId = String(xmlId || '').trim().toLowerCase();
-                var title = String(btn.dataset.title || '').trim().toLowerCase();
-                var text = String(btn.textContent || '').trim().toLowerCase();
 
                 if (markerXmlId && normalizedXmlId === markerXmlId) {
-                    return btn;
-                }
-                if (markerValue && (title === markerValue || text === markerValue)) {
                     return btn;
                 }
             }
