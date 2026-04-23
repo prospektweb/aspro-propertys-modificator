@@ -47,10 +47,10 @@
                 var afmtXmlId  = (state.formatEnumMap && afmtEnumId && state.formatEnumMap[afmtEnumId] !== undefined)
                     ? state.formatEnumMap[afmtEnumId]
                     : (activeBtn.dataset.title || '');
-                var parts = afmtXmlId.toLowerCase().split('x');
-                if (parts.length === 2) {
-                    initialFirstInputValue = parseInt(parts[0], 10) || minFirstInput;
-                    initialSecondInputValue = parseInt(parts[1], 10) || minSecondInput;
+                var tuple = PModificator.parseXmlIdTuple(afmtXmlId);
+                if (tuple.length >= 2) {
+                    initialFirstInputValue = parseInt(tuple[0], 10) || minFirstInput;
+                    initialSecondInputValue = parseInt(tuple[1], 10) || minSecondInput;
                 }
             }
 
@@ -231,33 +231,6 @@
                         showPresetButtons();
                     });
                 });
-
-                valuesEl.addEventListener('click', function (evt) {
-                    var btn = evt.target.closest('.sku-props__value');
-                    if (!btn) return;
-                    if (btn.classList.contains('pmod-hidden-technical-value') || btn.classList.contains('pmod-hidden-minmax-value')) {
-                        return;
-                    }
-                    var enumId = String(btn.dataset.onevalue || '');
-                    var rawXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
-                        ? state.formatEnumMap[enumId]
-                        : String(btn.dataset.title || '');
-                    var tuple = String(rawXmlId)
-                        .replace(/[×хХ]/g, 'x')
-                        .split('x')
-                        .map(function (part) { return String(part).trim(); })
-                        .filter(function (part) { return part !== ''; });
-                    if (!tuple.length) return;
-                    inner._pmodSuppressInputHandlers = true;
-                    try {
-                        formatGroupInputs.forEach(function (input, index) {
-                            if (tuple[index] === undefined) return;
-                            input.value = String(tuple[index]).replace(',', '.');
-                        });
-                    } finally {
-                        inner._pmodSuppressInputHandlers = false;
-                    }
-                }, true);
 
                 formatGroupInputs.forEach(function (input) {
                     input.addEventListener('blur', function () {
@@ -608,11 +581,7 @@
                         PModificator.registerCustomPropertyChange(state, shouldWaitForAspro);
                     } else {
                         // Клик по пресету FORMAT — обновляем группу инпутов по VALUE_XML_ID
-                        var parts = String(fmtXmlId)
-                            .replace(/[×хХ]/g, 'x')
-                            .split('x')
-                            .map(function (part) { return String(part).trim(); })
-                            .filter(function (part) { return part !== ''; });
+                        var parts = PModificator.parseXmlIdTuple(fmtXmlId);
                         innerEl._pmodSuppressInputHandlers = true;
                         try {
                             groupInputs.forEach(function (input, index) {
@@ -831,6 +800,19 @@
 
             // 4) hidePresetButtons — не удаляет данные, но фиксирует единый pipeline
             return userButtons;
+        },
+
+        parseXmlIdTuple: function (rawXmlId) {
+            return String(rawXmlId || '')
+                .replace(/[×хХ]/g, 'x')
+                .split('x')
+                .map(function (part) {
+                    var cleaned = String(part || '').trim();
+                    if (!cleaned) return '';
+                    var match = cleaned.match(/-?\d+(?:[.,]\d+)?/);
+                    return match && match[0] ? String(match[0]).replace(',', '.') : '';
+                })
+                .filter(function (part) { return part !== ''; });
         },
 
         extractComparableTuple: function (btn, propId, state) {
