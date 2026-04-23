@@ -86,9 +86,15 @@
 
             var widthInput  = ui.querySelector('.pmod-input-width');
             var heightInput = ui.querySelector('.pmod-input-height');
+            var formatGroupInputs = Array.prototype.slice.call(ui.querySelectorAll('.pmod-counter__input'));
 
             // Найти кнопку «Произвольный формат» (XML_ID="X")
             var customBtn = PModificator.findCustomButton(valuesEl, state.formatEnumMap);
+            var formatField = PModificator.findCustomFieldByPropCode(state, state.formatPropCode);
+            var formatInputs = Array.isArray(formatField && formatField.inputs) ? formatField.inputs : [];
+            var hidePresetButtons = formatInputs.some(function (input) {
+                return !!(input && input.hidePresetButtons);
+            });
 
             function onFormatChange(isImmediate) {
                 var rawW = parseInt(widthInput.value, 10);
@@ -191,6 +197,61 @@
                     onFormatChange(true);
                 }, { passive: false });
             });
+
+            if (hidePresetButtons) {
+                function showPresetButtons() {
+                    PModificator.applyCustomFieldVariantRules(container, state);
+                    var hasVisibleButtons = !!valuesEl.querySelector('.sku-props__value:not(.pmod-hidden-technical-value):not(.pmod-hidden-minmax-value):not(.notallowed):not(.sku-props__value--disabled)');
+                    if (!hasVisibleButtons) {
+                        hidePresetButtonsList();
+                        return;
+                    }
+                    valuesEl.classList.remove('pmod-preset-buttons--hidden');
+                    valuesEl.classList.add('pmod-preset-buttons--floating');
+                }
+
+                function hidePresetButtonsList() {
+                    valuesEl.classList.add('pmod-preset-buttons--hidden');
+                    valuesEl.classList.remove('pmod-preset-buttons--floating');
+                }
+
+                formatGroupInputs.forEach(function (input) {
+                    input.addEventListener('focus', function () {
+                        showPresetButtons();
+                    });
+                    input.addEventListener('click', function () {
+                        showPresetButtons();
+                    });
+                });
+
+                valuesEl.addEventListener('click', function (evt) {
+                    var btn = evt.target.closest('.sku-props__value');
+                    if (!btn) return;
+                    if (btn.classList.contains('pmod-hidden-technical-value') || btn.classList.contains('pmod-hidden-minmax-value')) {
+                        return;
+                    }
+                    var enumId = String(btn.dataset.onevalue || '');
+                    var rawXmlId = (state.formatEnumMap && enumId && state.formatEnumMap[enumId] !== undefined)
+                        ? state.formatEnumMap[enumId]
+                        : String(btn.dataset.title || '');
+                    var tuple = String(rawXmlId).replace(/×/g, 'x').match(/-?\d+(?:[.,]\d+)?/g);
+                    if (!tuple || !tuple.length) return;
+                    formatGroupInputs.forEach(function (input, index) {
+                        if (tuple[index] === undefined) return;
+                        input.value = String(tuple[index]).replace(',', '.');
+                    });
+                    onFormatChange(true);
+                }, true);
+
+                formatGroupInputs.forEach(function (input) {
+                    input.addEventListener('blur', function () {
+                        setTimeout(function () {
+                            if (formatGroupInputs.indexOf(document.activeElement) !== -1) return;
+                            hidePresetButtonsList();
+                        }, 200);
+                    });
+                });
+            }
 
             // Сохраняем ссылки для обновления из обработчика кликов
             inner._pmodWidthInput  = widthInput;
@@ -642,62 +703,7 @@
                     btn.removeAttribute('aria-hidden');
                 });
 
-                // 1) собираем текущие допустимые варианты из DOM
-                var allowedButtons = allButtons.filter(function (btn) {
-                    return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
-                });
-
-                // 2) исключаем служебные/технические значения
-                var userButtons = allowedButtons.filter(function (btn) {
-                    if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
-                    btn.classList.add('pmod-hidden-technical-value');
-                    btn.style.display = 'none';
-                    btn.setAttribute('aria-hidden', 'true');
-                    return false;
-                });
-
-                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
-                var hideTpValueIfMin = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
-                });
-                var hideTpValueIfMax = inputs.some(function (input) {
-                    return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
-                });
-
-                if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
-                    var comparableButtons = userButtons.map(function (btn) {
-                        return {
-                            btn: btn,
-                            tuple: PModificator.extractComparableTuple(btn, propId, state)
-                        };
-                    }).filter(function (item) {
-                        return item.tuple && item.tuple.length;
-                    });
-
-                    if (comparableButtons.length) {
-                        var minTuple = comparableButtons[0].tuple;
-                        var maxTuple = comparableButtons[0].tuple;
-                        comparableButtons.forEach(function (item) {
-                            if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
-                            if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
-                        });
-
-                        userButtons = userButtons.filter(function (btn) {
-                            var tuple = PModificator.extractComparableTuple(btn, propId, state);
-                            if (!tuple || !tuple.length) return true;
-                            var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
-                            var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
-                            var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
-                            if (shouldHide) {
-                                btn.classList.add('pmod-hidden-minmax-value');
-                                btn.style.display = 'none';
-                                btn.setAttribute('aria-hidden', 'true');
-                                return false;
-                            }
-                            return true;
-                        });
-                    }
-                }
+                var userButtons = PModificator.getFilteredCustomVariantButtons(allButtons, field, propId, state);
 
                 // Если был активен технический вариант — переводим на пользовательский.
                 var activeBtn = valuesEl.querySelector('.sku-props__value--active');
@@ -710,6 +716,7 @@
                 }
 
                 // 3) применяем hide_variants (hidePresetButtons) после фильтрации.
+                var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
                 var hideVariants = inputs.some(function (input) {
                     return !!(input && input.hidePresetButtons);
                 });
@@ -719,6 +726,84 @@
                     valuesEl.classList.remove('pmod-preset-buttons--hidden');
                 }
             });
+        },
+
+        findCustomFieldByPropCode: function (state, propCode) {
+            if (!state || !state.customConfig || !Array.isArray(state.customConfig.fields)) return null;
+            var target = String(propCode || '').trim();
+            if (!target) return null;
+            for (var i = 0; i < state.customConfig.fields.length; i++) {
+                var field = state.customConfig.fields[i] || {};
+                var bindingCode = String(field && field.binding && field.binding.skuPropertyCode || '').trim();
+                if (bindingCode === target) {
+                    return field;
+                }
+            }
+            return null;
+        },
+
+        getFilteredCustomVariantButtons: function (buttons, field, propId, state) {
+            var allButtons = Array.isArray(buttons) ? buttons : [];
+
+            // 1) исключаем недоступные/disabled варианты
+            var allowedButtons = allButtons.filter(function (btn) {
+                return !btn.classList.contains('notallowed') && !btn.classList.contains('sku-props__value--disabled');
+            });
+
+            // 2) исключаем служебные/технические
+            var userButtons = allowedButtons.filter(function (btn) {
+                if (!PModificator.isTechnicalCustomVariant(btn, field)) return true;
+                btn.classList.add('pmod-hidden-technical-value');
+                btn.style.display = 'none';
+                btn.setAttribute('aria-hidden', 'true');
+                return false;
+            });
+
+            var inputs = Array.isArray(field && field.inputs) ? field.inputs : [];
+
+            // 3) применяем скрытие минимум/максимум
+            var hideTpValueIfMin = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_min || input.hideTpValueIfMin));
+            });
+            var hideTpValueIfMax = inputs.some(function (input) {
+                return !!(input && (input.hide_tp_value_if_max || input.hideTpValueIfMax));
+            });
+            if (userButtons.length && (hideTpValueIfMin || hideTpValueIfMax)) {
+                var comparableButtons = userButtons.map(function (btn) {
+                    return {
+                        btn: btn,
+                        tuple: PModificator.extractComparableTuple(btn, propId, state)
+                    };
+                }).filter(function (item) {
+                    return item.tuple && item.tuple.length;
+                });
+
+                if (comparableButtons.length) {
+                    var minTuple = comparableButtons[0].tuple;
+                    var maxTuple = comparableButtons[0].tuple;
+                    comparableButtons.forEach(function (item) {
+                        if (PModificator.compareComparableTuples(item.tuple, minTuple) < 0) minTuple = item.tuple;
+                        if (PModificator.compareComparableTuples(item.tuple, maxTuple) > 0) maxTuple = item.tuple;
+                    });
+                    userButtons = userButtons.filter(function (btn) {
+                        var tuple = PModificator.extractComparableTuple(btn, propId, state);
+                        if (!tuple || !tuple.length) return true;
+                        var isMin = PModificator.compareComparableTuples(tuple, minTuple) === 0;
+                        var isMax = PModificator.compareComparableTuples(tuple, maxTuple) === 0;
+                        var shouldHide = (hideTpValueIfMin && isMin) || (hideTpValueIfMax && isMax);
+                        if (shouldHide) {
+                            btn.classList.add('pmod-hidden-minmax-value');
+                            btn.style.display = 'none';
+                            btn.setAttribute('aria-hidden', 'true');
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+
+            // 4) hidePresetButtons — не удаляет данные, но фиксирует единый pipeline
+            return userButtons;
         },
 
         extractComparableTuple: function (btn, propId, state) {
